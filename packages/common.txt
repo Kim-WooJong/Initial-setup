@@ -1,0 +1,11 @@
+# Logical packages installed on all supported platforms.
+# One logical package name per line.
+
+ripgrep
+fd
+fzf
+bat
+zoxide
+direnv
+git-delta
+lazygit

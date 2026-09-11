@@ -5,7 +5,12 @@ param(
 
     [string]$DataDir = "",
 
+    [ValidateSet("", "workstation", "laptop", "server", "minimal")]
+    [string]$Profile = "",
+
     [switch]$NoAutoSync,
+
+    [switch]$DryRun,
 
     [switch]$SkipVSCode
 )
@@ -154,7 +159,7 @@ function Resolve-NuExecutable {
     throw "nu.exe could not be located."
 }
 
-Write-Section "Initial-setup 0.5.0 bootstrap"
+Write-Section "Initial-setup 0.7.1 bootstrap"
 
 if (-not (Test-Command "winget")) {
     throw "winget is required. Install or update Microsoft App Installer, then rerun this script."
@@ -189,8 +194,16 @@ if ($DataDir) {
     $nuArgs += @("--data-dir", $DataDir)
 }
 
+if ($Profile) {
+    $nuArgs += @("--profile", $Profile)
+}
+
 if ($NoAutoSync) {
     $nuArgs += "--no-auto-sync"
+}
+
+if ($DryRun) {
+    $nuArgs += "--dry-run"
 }
 
 & $nu @nuArgs

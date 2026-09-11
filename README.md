@@ -1,286 +1,398 @@
-# Initial-setup 0.5.0
+# Initial-setup 0.7.1
 
-`Initial-setup` bootstraps a development machine and keeps the same private
-configuration synchronized across all of your computers.
+Cross-platform workstation bootstrap, configuration synchronization, recovery,
+and maintenance for Windows, macOS, and Linux.
 
-The public Git repository contains only automation code and generic defaults.
-The actual configuration lives outside the repository, in the repository's
-parent directory by default, where a private cloud client such as Proton Drive
-can synchronize it.
+## Normal setup
 
-## Core synchronization model
-
-```text
-PC A local config
-      ↕
- conflict-safe auto-sync
-      ↕
-private cloud source
-      ↕ cloud client
-private cloud source on PC B
-      ↕
- conflict-safe auto-sync
-      ↕
-PC B local config
-```
-
-Every minute, each configured computer compares two SHA-256 fingerprints:
-
-- the actual local configuration
-- the private cloud source
-
-It also remembers the fingerprints from the last successful synchronization.
-
-The decision is:
-
-| Local since last sync | Cloud since last sync | Action |
-|---|---|---|
-| unchanged | unchanged | Nothing |
-| changed | unchanged | Automatically publish local config |
-| unchanged | changed | Automatically apply cloud config |
-| changed | changed | Stop and create a conflict |
-
-This means you can edit a managed configuration file normally:
+If the core prerequisites already exist:
 
 ```nu
-nvim ~/.config/nushell/config.nu
+nu setup.nu --mode initial
 ```
 
-You do not have to use `dotpush` after every edit. The next automatic cycle
-detects the local change and publishes it.
+Use `initial` for the first authoritative machine and `existing` for additional
+machines whose private cloud source already exists.
 
-After your cloud client transfers the changed source to the other computers,
-their next automatic cycle applies it.
-
-## Conflict handling
-
-If two computers independently modify configuration before receiving each
-other's changes, Initial-setup does **not** silently overwrite either side.
-
-It creates:
-
-```text
-~/.config/dotfiles/SYNC-CONFLICT.txt
-```
-
-Automatic synchronization for that cycle stops.
-
-Resolve it explicitly:
+Usually this is enough later:
 
 ```nu
-dotpush
+nu setup.nu
 ```
 
-means:
+## Nushell 0.109 parser compatibility
 
-```text
-LOCAL WINS
-local config -> private cloud source
-```
-
-or:
+The previous form:
 
 ```nu
-dotpull
+save-machine-config
+    $data_root
+    $no_auto_sync
 ```
 
-means:
+has been removed.
+
+0.7.1 builds the complete machine config as a record and calls:
+
+```nu
+save-machine-config $proposed_context
+```
+
+on one line. The same rule is now applied project-wide: a custom command is never left
+alone on one physical line with its required positional arguments beginning on
+the following line. Continuation-style custom calls in installers, sync
+fingerprinting, migration, VS Code capture/apply, and platform scheduling were
+normalized for Nushell 0.109 compatibility.
+
+## Profiles
+
+Profiles now actually select feature defaults:
+
+```nu
+nu setup.nu --profile workstation
+nu setup.nu --profile laptop
+nu setup.nu --profile server
+nu setup.nu --profile minimal
+```
+
+`workstation` and `laptop` enable the full GUI-oriented environment.
+
+`server` disables GUI applications such as VS Code and WezTerm while retaining
+CLI tools, Git/SSH, Rust, Julia, and Starship.
+
+`minimal` keeps the shell/editor-oriented core and disables the heavier
+language toolchains and GUI applications.
+
+You can preview the result without changing anything:
+
+```nu
+nu setup.nu --profile server --dry-run
+```
+
+## Automatic sync
+
+The existing conflict-safe SHA-256 synchronization remains in place.
+
+Recommended defaults:
+
+```nu
+sync: {
+    enabled: true
+    interval_minutes: 1
+    auto_push: true
+    auto_pull: true
+    conflict_policy: "stop"
+    stability_delay_seconds: 3
+}
+```
+
+## Snapshots and rollback
+
+Manual snapshot:
+
+```nu
+dotsnapshot
+```
+
+Named snapshot:
+
+```nu
+dotsnapshot --label before-nvim-change
+```
+
+List available snapshots:
+
+```nu
+dotrollback --list
+```
+
+Restore the newest snapshot:
+
+```nu
+dotrollback
+```
+
+Restore a selected snapshot:
+
+```nu
+dotrollback --snapshot 20260912-031500-before-nvim-change
+```
+
+`dotpush` automatically creates a `pre-push` snapshot before changing the
+private cloud source.
+
+Snapshots are stored locally under:
 
 ```text
-CLOUD WINS
-private cloud source -> local config
+~/.config/dotfiles/snapshots/
 ```
 
-Both commands write a new synchronization baseline and clear the conflict file
-after success.
+so snapshot history itself is not repeatedly synchronized between computers.
 
-## Layout
+## Doctor and repair
+
+Status check:
+
+```nu
+dotdoctor
+```
+
+Conservative automatic repair:
+
+```nu
+dotdoctor --fix
+```
+
+The repair pass restores/rechecks:
+
+- private source structure
+- platform Nushell/Neovim shims
+- Nushell management module
+- local Git/SSH override files
+- local secrets autoload
+- common CLI tools
+- Starship and WezTerm when enabled
+- sync baseline when missing
+- automatic sync scheduler
+
+## Environment update
+
+Update the normal environment:
+
+```nu
+dotupdate
+```
+
+With no flags, all update categories run.
+
+Or select:
+
+```nu
+dotupdate --repo
+dotupdate --tools
+dotupdate --config
+dotupdate --all
+```
+
+The update command takes a snapshot first.
+
+Depending on the platform it updates the Initial-setup Git checkout, managed
+package-manager tools, Rustup, Juliaup, and Lazy.nvim plugins when detected.
+
+## Sync log
+
+Automatic synchronization now records useful events under:
 
 ```text
-PRIVATE-CLOUD-FOLDER/
-├─ Initial-setup/              # public GitHub repository
-│  ├─ bootstrap.ps1
-│  ├─ bootstrap.sh
-│  ├─ setup.nu
-│  ├─ defaults/
-│  ├─ scripts/
-│  ├─ README.md
-│  ├─ CHANGELOG.md
-│  └─ VERSION
-│
-├─ .chezmoiroot               # private
-├─ home/                      # private chezmoi source
-│  ├─ dot_config/
-│  │  ├─ nvim/
-│  │  ├─ nushell/
-│  │  ├─ wezterm/
-│  │  └─ starship.toml
-│  ├─ dot_cargo/
-│  │  └─ config.toml
-│  ├─ dot_julia/
-│  │  └─ config/
-│  │     └─ startup.jl
-│  ├─ dot_gitconfig
-│  └─ private_dot_ssh/
-│
-└─ vscode/                    # private
-   ├─ extensions.txt
-   ├─ settings.json
-   ├─ keybindings.json
-   └─ snippets/
+~/.config/dotfiles/logs/sync.log
 ```
 
-Because `home/` and `vscode/` are siblings of `Initial-setup`, they are
-structurally outside the Git repository.
+Show the last 50 lines:
 
-## Fresh Windows machine
-
-Open PowerShell in the repository:
-
-```powershell
-.\bootstrap.ps1 -Mode initial
+```nu
+dotlog
 ```
 
-For another computer whose private cloud directory has already synchronized:
+Show more:
 
-```powershell
-.\bootstrap.ps1 -Mode existing
+```nu
+dotlog --lines 200
 ```
 
-Usually automatic mode is sufficient:
+Clear:
 
-```powershell
-.\bootstrap.ps1
+```nu
+dotlog --clear
 ```
 
-## Fresh macOS / Linux machine
+The log is machine-local and automatically truncated according to
+`maintenance.log_keep_lines`.
 
-```sh
-chmod +x bootstrap.sh
-./bootstrap.sh --mode initial
+## Environment report
+
+```nu
+dotreport
 ```
 
-Additional machine:
+Save a diagnostic report:
 
-```sh
-./bootstrap.sh --mode existing
+```nu
+dotreport --save
 ```
 
-## Installed environment
+Reports include installed tool versions and synchronization state.
 
-The bootstrap/setup process manages or attempts to install:
+## Machine-local secrets
 
-- Git
-- Nushell
-- Neovim
-- chezmoi
-- VS Code
-- Starship
-- WezTerm
-- Rust via rustup
-- Julia via Juliaup
-- ripgrep
-- fd
-- fzf
-- bat
-- zoxide
-- direnv
-
-Optional package installation failures do not prevent the private
-configuration from being applied.
-
-## Synchronized configuration
-
-### Nushell
-
-- `config.nu`
-- `env.nu`
-- `modules/`
-- `autoload/`
-
-### Neovim
-
-The complete Neovim config directory is synchronized, including `init.lua`,
-`lua/`, and plugin lock files such as `lazy-lock.json`.
-
-### Other development configuration
-
-- Git configuration
-- SSH `config` only
-- Cargo `~/.cargo/config.toml`
-- Julia `~/.julia/config/startup.jl`
-- WezTerm config
-- Starship config
-
-SSH private keys are intentionally excluded.
-
-### VS Code
-
-The synchronized private VS Code state includes:
-
-- exact extension set
-- `settings.json`
-- `keybindings.json`
-- `snippets/`
-
-Extension removal therefore propagates as well as extension installation.
-
-## Daily commands
-
-Normal editing no longer requires a manual sync command.
-
-Useful commands remain:
+Initial-setup creates:
 
 ```text
-dotstatus      show chezmoi + automatic sync status
-dotdiff        show chezmoi differences
-dotsync        run an automatic sync cycle immediately
-
-dotpush        force local -> cloud
-dotpull        force cloud -> local
-
-dotnvim        edit managed Neovim source
-dotnu          edit managed Nushell config
-dotenv         edit managed Nushell env
-dotwezterm     edit managed WezTerm config
-dotstarship    edit managed Starship config
-
-dotdata        open private cloud source
-dottools       open Initial-setup repository
+$nu.data-dir/vendor/autoload/dotfiles-secrets.nu
 ```
 
-## Automatic synchronization
+This is a machine-local Nushell autoload file and is intentionally outside the
+synchronized source.
 
-The scheduler runs every **1 minute**:
+Edit it with:
 
-- Windows: Task Scheduler
-- Linux: systemd user timer
-- macOS: LaunchAgent
+```nu
+dotsecrets
+```
 
-A local-only change waits briefly before publishing and checks that the cloud
-source did not change during that delay.
+Example contents:
 
-A cloud-only change also waits briefly and verifies that the cloud directory
-has stopped changing before applying it.
+```nu
+$env.MY_API_KEY = "..."
+```
 
-This reduces the chance of acting while the cloud client is in the middle of
-transferring files.
+Do not put secrets in shared `env.nu` unless cloud synchronization is intended.
 
-## Important limitation
+## Project bootstrap
 
-This system relies on your private cloud client to synchronize the parent
-directory between computers.
+Rust:
 
-The synchronization logic can detect that both the local and cloud state
-changed since the last successful baseline, but it cannot provide a
-distributed transaction across several independent cloud clients.
+```nu
+newproj rust my-tool
+```
 
-For that reason, simultaneous editing on multiple computers becomes an
-explicit conflict rather than an automatic last-writer-wins overwrite.
+Julia:
+
+```nu
+newproj julia detector-analysis
+```
+
+Python:
+
+```nu
+newproj python quick-analysis
+```
+
+Generic:
+
+```nu
+newproj generic notes-project
+```
+
+A target base directory can be supplied with `--path`.
+
+## Machine config
+
+Machine-local settings remain in:
+
+```text
+~/.config/dotfiles/config.nuon
+```
+
+0.7.0 adds maintenance settings:
+
+```nu
+maintenance: {
+    snapshots_enabled: true
+    snapshot_keep: 20
+    log_keep_lines: 2000
+}
+```
+
+The full config contains:
+
+```nu
+{
+    version: "0.7.1"
+
+    data_root: "..."
+    tools_root: "..."
+
+    machine: {
+        name: "MY-PC"
+        profile: "workstation"
+        install_gui_apps: true
+    }
+
+    sync: {
+        enabled: true
+        interval_minutes: 1
+        auto_push: true
+        auto_pull: true
+        conflict_policy: "stop"
+        stability_delay_seconds: 3
+    }
+
+    maintenance: {
+        snapshots_enabled: true
+        snapshot_keep: 20
+        log_keep_lines: 2000
+    }
+
+    features: {
+        cli_tools: true
+        vscode: true
+        wezterm: true
+        starship: true
+        rust: true
+        julia: true
+        git_config: true
+        ssh_config: true
+    }
+}
+```
+
+Edit with:
+
+```nu
+dotconfig
+```
+
+After changing profile/scheduler-related options, rerun:
+
+```nu
+nu setup.nu
+```
+
+## Main commands
+
+```text
+Synchronization
+  dotstatus
+  dotdiff
+  dotsync
+  dotpush
+  dotpull
+
+Recovery
+  dotsnapshot
+  dotrollback
+  dotdoctor
+
+Maintenance
+  dotupdate
+  dotreport
+  dotlog
+
+Machine-local
+  dotconfig
+  dotsecrets
+  dotgitlocal
+  dotsshlocal
+
+Managed config
+  dotnvim
+  dotnu
+  dotenv
+  dotwezterm
+  dotstarship
+
+Projects
+  newproj
+
+Locations
+  dotdata
+  dottools
+```
 
 ## Security
 
-The migration intentionally does not import SSH private keys.
+Private SSH keys remain excluded.
 
-Avoid placing passwords, tokens, or API keys directly into synchronized
-configuration unless you intentionally want them stored in your private cloud.
+`.gitconfig.local`, `.ssh/config.local`, machine config, logs, snapshots, saved
+reports, and the secrets autoload are all machine-local and are not imported
+into the chezmoi private source.

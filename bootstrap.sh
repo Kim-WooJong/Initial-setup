@@ -3,6 +3,8 @@ set -u
 
 MODE="auto"
 DATA_DIR=""
+PROFILE=""
+DRY_RUN=0
 NO_AUTO_SYNC=0
 SKIP_VSCODE=0
 
@@ -44,6 +46,14 @@ while [ "$#" -gt 0 ]; do
             DATA_DIR="$2"
             shift 2
             ;;
+        --profile)
+            PROFILE="$2"
+            shift 2
+            ;;
+        --dry-run)
+            DRY_RUN=1
+            shift
+            ;;
         --no-auto-sync)
             NO_AUTO_SYNC=1
             shift
@@ -57,7 +67,9 @@ while [ "$#" -gt 0 ]; do
 Usage:
   ./bootstrap.sh [--mode auto|initial|existing]
                  [--data-dir PATH]
+                 [--profile workstation|laptop|server|minimal]
                  [--no-auto-sync]
+                 [--dry-run]
                  [--skip-vscode]
 EOF
             exit 0
@@ -206,7 +218,7 @@ install_linux_core() {
     }
 }
 
-section "Initial-setup 0.5.0 bootstrap"
+section "Initial-setup 0.7.1 bootstrap"
 
 case "$(uname -s)" in
     Darwin)
@@ -240,8 +252,16 @@ if [ -n "$DATA_DIR" ]; then
     NU_ARGS+=("--data-dir" "$DATA_DIR")
 fi
 
+if [ -n "$PROFILE" ]; then
+    NU_ARGS+=("--profile" "$PROFILE")
+fi
+
 if [ "$NO_AUTO_SYNC" -eq 1 ]; then
     NU_ARGS+=("--no-auto-sync")
+fi
+
+if [ "$DRY_RUN" -eq 1 ]; then
+    NU_ARGS+=("--dry-run")
 fi
 
 nu "${NU_ARGS[@]}"

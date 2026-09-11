@@ -1,0 +1,9 @@
+# name|command|apt_package|dnf_package|pacman_package
+ripgrep|rg|ripgrep|ripgrep|ripgrep
+fd|fd|fd-find|fd-find|fd
+fzf|fzf|fzf|fzf|fzf
+bat|bat|bat|bat|bat
+zoxide|zoxide|zoxide|zoxide|zoxide
+direnv|direnv|direnv|direnv|direnv
+git-delta|delta|git-delta|git-delta|git-delta
+lazygit|lazygit|-|lazygit|lazygit

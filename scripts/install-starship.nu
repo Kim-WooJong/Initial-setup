@@ -58,12 +58,7 @@ def install-with-winget [] {
         "--accept-source-agreements"
     ]
 
-    let exit_code = (
-        run-program
-            "Install Starship with winget"
-            "winget"
-            $args
-    )
+    let exit_code = (run-program "Install Starship with winget" "winget" $args)
 
     $exit_code == 0
 }
@@ -79,12 +74,7 @@ def install-with-cargo [] {
         "--locked"
     ]
 
-    let exit_code = (
-        run-program
-            "Install Starship with Cargo"
-            "cargo"
-            $args
-    )
+    let exit_code = (run-program "Install Starship with Cargo" "cargo" $args)
 
     $exit_code == 0
 }
@@ -99,12 +89,7 @@ def install-with-brew [] {
         "starship"
     ]
 
-    let exit_code = (
-        run-program
-            "Install Starship with Homebrew"
-            "brew"
-            $args
-    )
+    let exit_code = (run-program "Install Starship with Homebrew" "brew" $args)
 
     $exit_code == 0
 }
@@ -124,12 +109,7 @@ def install-with-official-script [] {
         $command
     ]
 
-    let exit_code = (
-        run-program
-            "Install Starship with official installer"
-            "sh"
-            $args
-    )
+    let exit_code = (run-program "Install Starship with official installer" "sh" $args)
 
     $exit_code == 0
 }

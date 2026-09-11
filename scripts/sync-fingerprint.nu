@@ -1,30 +1,10 @@
 #!/usr/bin/env nu
 
-# ============================================================
-# sync-fingerprint.nu
-#
-# Compute a deterministic SHA-256 fingerprint for either:
-#   local - actual managed configuration on this machine
-#   cloud - private chezmoi/cloud source
-#
-# The fingerprint is compared only against an earlier
-# fingerprint of the same side.
-# ============================================================
-
 def machine-context [] {
     let file = (
         $nu.home-path
         | path join ".config" "dotfiles" "config.nuon"
     )
-
-    if not ($file | path exists) {
-        error make {
-            msg: (
-                "Machine config not found: "
-                + ($file | into string)
-            )
-        }
-    }
 
     open $file
 }
@@ -161,176 +141,135 @@ def vscode-user-dir [] {
     }
 }
 
+def append-target [
+    entries: list
+    label: string
+    path: path
+] {
+    mut result = $entries
+
+    let values = (target-entries $label $path)
+
+    for value in $values {
+        $result = (
+            $result
+            | append $value
+        )
+    }
+
+    $result
+}
+
 def local-entries [] {
+    let context = (
+        machine-context
+    )
+
+    let features = (
+        $context.features
+    )
+
     let config_root = (
         $nu.home-path
         | path join ".config"
     )
 
-    let targets = [
-        {
-            label: "nvim"
-            path: (
-                $config_root
-                | path join "nvim"
-            )
-        }
-        {
-            label: "nushell"
-            path: (
-                $config_root
-                | path join "nushell"
-            )
-        }
-        {
-            label: "wezterm"
-            path: (
-                $config_root
-                | path join "wezterm"
-            )
-        }
-        {
-            label: "starship"
-            path: (
-                $config_root
-                | path join "starship.toml"
-            )
-        }
-        {
-            label: "git-home"
-            path: (
-                $nu.home-path
-                | path join ".gitconfig"
-            )
-        }
-        {
-            label: "git-xdg"
-            path: (
-                $config_root
-                | path join "git" "config"
-            )
-        }
-        {
-            label: "ssh-config"
-            path: (
-                $nu.home-path
-                | path join ".ssh" "config"
-            )
-        }
-        {
-            label: "cargo"
-            path: (
-                $nu.home-path
-                | path join ".cargo" "config.toml"
-            )
-        }
-        {
-            label: "julia"
-            path: (
-                $nu.home-path
-                | path join ".julia" "config" "startup.jl"
-            )
-        }
-    ]
-
     mut entries = []
 
-    for target in $targets {
-        let target_values = (
-            target-entries
-                $target.label
-                $target.path
+    let nvim_path = ($config_root | path join "nvim")
+    $entries = (append-target $entries "nvim" $nvim_path)
+
+    let nushell_path = ($config_root | path join "nushell")
+    $entries = (append-target $entries "nushell" $nushell_path)
+
+    if $features.wezterm {
+        let wezterm_path = ($config_root | path join "wezterm")
+        $entries = (append-target $entries "wezterm" $wezterm_path)
+    }
+
+    if $features.starship {
+        let starship_path = ($config_root | path join "starship.toml")
+        $entries = (append-target $entries "starship" $starship_path)
+    }
+
+    if $features.git_config {
+        let git_home_path = ($nu.home-path | path join ".gitconfig")
+        $entries = (append-target $entries "git-home" $git_home_path)
+
+        let git_xdg_path = ($config_root | path join "git" "config")
+        $entries = (append-target $entries "git-xdg" $git_xdg_path)
+    }
+
+    if $features.ssh_config {
+        let ssh_config_path = ($nu.home-path | path join ".ssh" "config")
+        $entries = (append-target $entries "ssh-config" $ssh_config_path)
+    }
+
+    if $features.rust {
+        let cargo_path = ($nu.home-path | path join ".cargo" "config.toml")
+        $entries = (append-target $entries "cargo" $cargo_path)
+    }
+
+    if $features.julia {
+        let julia_path = ($nu.home-path | path join ".julia" "config" "startup.jl")
+        $entries = (append-target $entries "julia" $julia_path)
+    }
+
+    if $features.vscode {
+        let vscode_dir = (
+            vscode-user-dir
         )
 
-        for value in $target_values {
+        if $vscode_dir == null {
             $entries = (
                 $entries
-                | append $value
+                | append "vscode-config|UNAVAILABLE"
+            )
+        } else {
+            let vscode_settings_path = ($vscode_dir | path join "settings.json")
+            $entries = (append-target $entries "vscode-settings" $vscode_settings_path)
+
+            let vscode_keybindings_path = ($vscode_dir | path join "keybindings.json")
+            $entries = (append-target $entries "vscode-keybindings" $vscode_keybindings_path)
+
+            let vscode_snippets_path = ($vscode_dir | path join "snippets")
+            $entries = (append-target $entries "vscode-snippets" $vscode_snippets_path)
+        }
+
+        if (which code | is-empty) {
+            $entries = (
+                $entries
+                | append "vscode-extensions|UNAVAILABLE"
+            )
+        } else {
+            let args = [
+                "--list-extensions"
+            ]
+
+            let extension_text = (
+                ^code ...$args
+                | lines
+                | where { |item|
+                    not ($item | is-empty)
+                }
+                | sort
+                | uniq
+                | str join (char nl)
+            )
+
+            let extension_hash = (
+                $extension_text
+                | hash sha256
+            )
+
+            $entries = (
+                $entries
+                | append (
+                    "vscode-extensions|"
+                    + $extension_hash
+                )
             )
         }
-    }
-
-    let vscode_dir = (
-        vscode-user-dir
-    )
-
-    if $vscode_dir == null {
-        $entries = (
-            $entries
-            | append "vscode-config|UNAVAILABLE"
-        )
-    } else {
-        for item in [
-            {
-                label: "vscode-settings"
-                path: (
-                    $vscode_dir
-                    | path join "settings.json"
-                )
-            }
-            {
-                label: "vscode-keybindings"
-                path: (
-                    $vscode_dir
-                    | path join "keybindings.json"
-                )
-            }
-            {
-                label: "vscode-snippets"
-                path: (
-                    $vscode_dir
-                    | path join "snippets"
-                )
-            }
-        ] {
-            let target_values = (
-                target-entries
-                    $item.label
-                    $item.path
-            )
-
-            for value in $target_values {
-                $entries = (
-                    $entries
-                    | append $value
-                )
-            }
-        }
-    }
-
-    if (which code | is-empty) {
-        $entries = (
-            $entries
-            | append "vscode-extensions|UNAVAILABLE"
-        )
-    } else {
-        let args = [
-            "--list-extensions"
-        ]
-
-        let extension_text = (
-            ^code ...$args
-            | lines
-            | where { |item|
-                not ($item | is-empty)
-            }
-            | sort
-            | uniq
-            | str join (char nl)
-        )
-
-        let extension_hash = (
-            $extension_text
-            | hash sha256
-        )
-
-        $entries = (
-            $entries
-            | append (
-                "vscode-extensions|"
-                + $extension_hash
-            )
-        )
     }
 
     $entries
@@ -346,38 +285,14 @@ def cloud-entries [] {
         | path expand
     )
 
-    let targets = [
-        {
-            label: "cloud-home"
-            path: (
-                $data_root
-                | path join "home"
-            )
-        }
-        {
-            label: "cloud-vscode"
-            path: (
-                $data_root
-                | path join "vscode"
-            )
-        }
-    ]
-
     mut entries = []
 
-    for target in $targets {
-        let target_values = (
-            target-entries
-                $target.label
-                $target.path
-        )
+    let cloud_home_path = ($data_root | path join "home")
+    $entries = (append-target $entries "cloud-home" $cloud_home_path)
 
-        for value in $target_values {
-            $entries = (
-                $entries
-                | append $value
-            )
-        }
+    if $context.features.vscode {
+        let cloud_vscode_path = ($data_root | path join "vscode")
+        $entries = (append-target $entries "cloud-vscode" $cloud_vscode_path)
     }
 
     $entries

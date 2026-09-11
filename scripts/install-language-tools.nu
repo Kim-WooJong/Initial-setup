@@ -150,27 +150,55 @@ def install-julia-unix [] {
     }
 }
 
+def machine-context [] {
+    let file = (
+        $nu.home-path
+        | path join ".config" "dotfiles" "config.nuon"
+    )
+
+    open $file
+}
+
 def main [] {
+    let context = (
+        machine-context
+    )
+
     print "=== Language toolchains ==="
     print ""
 
     match $nu.os-info.name {
         "windows" => {
-            install-rust-windows
-            print ""
-            install-julia-windows
+            if $context.features.rust {
+                install-rust-windows
+            }
+
+            if $context.features.julia {
+                print ""
+                install-julia-windows
+            }
         }
 
         "macos" => {
-            install-rust-unix
-            print ""
-            install-julia-unix
+            if $context.features.rust {
+                install-rust-unix
+            }
+
+            if $context.features.julia {
+                print ""
+                install-julia-unix
+            }
         }
 
         "linux" => {
-            install-rust-unix
-            print ""
-            install-julia-unix
+            if $context.features.rust {
+                install-rust-unix
+            }
+
+            if $context.features.julia {
+                print ""
+                install-julia-unix
+            }
         }
 
         _ => {

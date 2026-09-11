@@ -1,13 +1,15 @@
 #!/usr/bin/env nu
 
-# ============================================================
-# update-sync-state.nu
-#
-# Save the current synchronized local/cloud baseline.
-# Called only after a successful setup, push, or pull.
-# ============================================================
-
 const TOOLS_ROOT = path self ..
+
+def machine-context [] {
+    let file = (
+        $nu.home-path
+        | path join ".config" "dotfiles" "config.nuon"
+    )
+
+    open $file
+}
 
 def state-file [] {
     $nu.home-path
@@ -36,12 +38,34 @@ def fingerprint [kind: string] {
 }
 
 def main [] {
+    let context = (
+        machine-context
+    )
+
     let local_hash = (
         fingerprint "local"
     )
 
     let cloud_hash = (
         fingerprint "cloud"
+    )
+
+    let meta_file = (
+        $context.data_root
+        | path expand
+        | path join ".dotfiles-sync-meta.nuon"
+    )
+
+    let meta = (
+        if ($meta_file | path exists) {
+            open $meta_file
+        } else {
+            {
+                last_writer: "unknown"
+                last_action: "unknown"
+                updated_at: "unknown"
+            }
+        }
     )
 
     let state_path = (
@@ -54,12 +78,24 @@ def main [] {
     )
 
     {
-        version: "1"
+        version: "2"
         local_hash: $local_hash
         cloud_hash: $cloud_hash
         last_sync: (
             date now
             | format date "%Y-%m-%d %H:%M:%S %z"
+        )
+        last_writer: (
+            $meta.last_writer?
+            | default "unknown"
+        )
+        last_write_time: (
+            $meta.updated_at?
+            | default "unknown"
+        )
+        last_action: (
+            $meta.last_action?
+            | default "unknown"
         )
     }
     | to nuon

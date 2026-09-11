@@ -1,0 +1,9 @@
+# name|command|brew_formula
+ripgrep|rg|ripgrep
+fd|fd|fd
+fzf|fzf|fzf
+bat|bat|bat
+zoxide|zoxide|zoxide
+direnv|direnv|direnv
+git-delta|delta|git-delta
+lazygit|lazygit|lazygit

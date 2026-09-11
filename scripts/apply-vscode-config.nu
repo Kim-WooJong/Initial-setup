@@ -96,21 +96,15 @@ def main [] {
 
     mkdir $user_dir
 
-    apply-file-if-exists (
-        $private_root | path join "settings.json"
-    ) (
-        $user_dir | path join "settings.json"
-    )
+    let source_settings = ($private_root | path join "settings.json")
+    let target_settings = ($user_dir | path join "settings.json")
+    apply-file-if-exists $source_settings $target_settings
 
-    apply-file-if-exists (
-        $private_root | path join "keybindings.json"
-    ) (
-        $user_dir | path join "keybindings.json"
-    )
+    let source_keybindings = ($private_root | path join "keybindings.json")
+    let target_keybindings = ($user_dir | path join "keybindings.json")
+    apply-file-if-exists $source_keybindings $target_keybindings
 
-    apply-dir-if-exists (
-        $private_root | path join "snippets"
-    ) (
-        $user_dir | path join "snippets"
-    )
+    let source_snippets = ($private_root | path join "snippets")
+    let target_snippets = ($user_dir | path join "snippets")
+    apply-dir-if-exists $source_snippets $target_snippets
 }

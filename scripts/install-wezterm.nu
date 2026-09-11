@@ -58,12 +58,7 @@ def install-with-winget [] {
         "--accept-source-agreements"
     ]
 
-    let exit_code = (
-        run-program
-            "Install WezTerm with winget"
-            "winget"
-            $args
-    )
+    let exit_code = (run-program "Install WezTerm with winget" "winget" $args)
 
     $exit_code == 0
 }
@@ -78,12 +73,7 @@ def install-with-scoop [] {
         "wezterm"
     ]
 
-    let exit_code = (
-        run-program
-            "Install WezTerm with Scoop"
-            "scoop"
-            $args
-    )
+    let exit_code = (run-program "Install WezTerm with Scoop" "scoop" $args)
 
     $exit_code == 0
 }
@@ -99,12 +89,7 @@ def install-with-choco [] {
         "-y"
     ]
 
-    let exit_code = (
-        run-program
-            "Install WezTerm with Chocolatey"
-            "choco"
-            $args
-    )
+    let exit_code = (run-program "Install WezTerm with Chocolatey" "choco" $args)
 
     $exit_code == 0
 }
@@ -120,12 +105,7 @@ def install-with-brew [] {
         "wezterm"
     ]
 
-    let exit_code = (
-        run-program
-            "Install WezTerm with Homebrew"
-            "brew"
-            $args
-    )
+    let exit_code = (run-program "Install WezTerm with Homebrew" "brew" $args)
 
     $exit_code == 0
 }
@@ -163,12 +143,7 @@ def install-linux [] {
             "wezterm"
         ]
 
-        let exit_code = (
-            run-program
-                "Install WezTerm with pacman"
-                "sudo"
-                $args
-        )
+        let exit_code = (run-program "Install WezTerm with pacman" "sudo" $args)
 
         if $exit_code == 0 {
             return true
@@ -183,12 +158,7 @@ def install-linux [] {
             "org.wezfurlong.wezterm"
         ]
 
-        let exit_code = (
-            run-program
-                "Install WezTerm with Flatpak"
-                "flatpak"
-                $args
-        )
+        let exit_code = (run-program "Install WezTerm with Flatpak" "flatpak" $args)
 
         if $exit_code == 0 {
             return true

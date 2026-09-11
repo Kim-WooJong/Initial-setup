@@ -166,11 +166,9 @@ def main [] {
     copy-file-if-needed $current_nu_env $canonical_nu_env
 
     for dir_name in ["modules" "autoload"] {
-        copy-dir-if-needed (
-            $current_nu_dir | path join $dir_name
-        ) (
-            $canonical_nushell | path join $dir_name
-        )
+        let current_dir = ($current_nu_dir | path join $dir_name)
+        let canonical_dir = ($canonical_nushell | path join $dir_name)
+        copy-dir-if-needed $current_dir $canonical_dir
     }
 
     chezmoi-add $data_root $canonical_nu_config
@@ -178,71 +176,61 @@ def main [] {
     chezmoi-add $data_root ($canonical_nushell | path join "modules")
     chezmoi-add $data_root ($canonical_nushell | path join "autoload")
 
-    print ""
-    print "--- Git ---"
+    if $context.features.git_config {
+        print ""
+        print "--- Git ---"
 
-    chezmoi-add $data_root (
-        $nu.home-path
-        | path join ".gitconfig"
-    )
-
-    chezmoi-add $data_root (
-        $nu.home-path
-        | path join ".config" "git" "config"
-    )
-
-    print ""
-    print "--- SSH config only ---"
-
-    chezmoi-add $data_root (
-        $nu.home-path
-        | path join ".ssh" "config"
-    )
-
-    print ""
-    print "--- WezTerm ---"
-
-    let canonical_wezterm = (
-        $canonical_config
-        | path join "wezterm" "wezterm.lua"
-    )
-
-    let legacy_wezterm = (
-        $nu.home-path
-        | path join ".wezterm.lua"
-    )
-
-    if not ($canonical_wezterm | path exists) {
-        copy-file-if-needed $legacy_wezterm $canonical_wezterm
+        let git_home = ($nu.home-path | path join ".gitconfig")
+        let git_xdg = ($nu.home-path | path join ".config" "git" "config")
+        chezmoi-add $data_root $git_home
+        chezmoi-add $data_root $git_xdg
     }
 
-    chezmoi-add $data_root $canonical_wezterm
+    if $context.features.ssh_config {
+        print ""
+        print "--- SSH config only ---"
 
-    print ""
-    print "--- Starship ---"
+        let ssh_config = ($nu.home-path | path join ".ssh" "config")
+        chezmoi-add $data_root $ssh_config
+    }
 
-    let canonical_starship = (
-        $canonical_config
-        | path join "starship.toml"
-    )
+    if $context.features.wezterm {
+        print ""
+        print "--- WezTerm ---"
 
-    chezmoi-add $data_root $canonical_starship
+        let canonical_wezterm = ($canonical_config | path join "wezterm" "wezterm.lua")
+        let legacy_wezterm = ($nu.home-path | path join ".wezterm.lua")
 
-    print ""
-    print "--- Cargo ---"
+        if not ($canonical_wezterm | path exists) {
+            copy-file-if-needed $legacy_wezterm $canonical_wezterm
+        }
 
-    chezmoi-add $data_root (
-        $nu.home-path
-        | path join ".cargo" "config.toml"
-    )
+        chezmoi-add $data_root $canonical_wezterm
+    }
 
-    print ""
-    print "--- Julia ---"
+    if $context.features.starship {
+        print ""
+        print "--- Starship ---"
 
-    chezmoi-add $data_root (
-        $nu.home-path
-        | path join ".julia" "config" "startup.jl"
-    )
+        let canonical_starship = ($canonical_config | path join "starship.toml")
+        chezmoi-add $data_root $canonical_starship
+    }
+
+    if $context.features.rust {
+        print ""
+        print "--- Cargo ---"
+
+        let cargo_config = ($nu.home-path | path join ".cargo" "config.toml")
+        chezmoi-add $data_root $cargo_config
+    }
+
+    if $context.features.julia {
+        print ""
+        print "--- Julia ---"
+
+        let julia_startup = ($nu.home-path | path join ".julia" "config" "startup.jl")
+        chezmoi-add $data_root $julia_startup
+    }
 
     print ""
     print "[ok] Existing configuration imported."

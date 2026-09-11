@@ -1,27 +1,10 @@
 #!/usr/bin/env nu
 
-# ============================================================
-# Install 1-minute conflict-safe bidirectional dotfiles sync.
-#
-# Windows: Task Scheduler
-# Linux:   systemd user timer
-# macOS:   LaunchAgent
-# ============================================================
-
 def machine-context [] {
     let file = (
         $nu.home-path
         | path join ".config" "dotfiles" "config.nuon"
     )
-
-    if not ($file | path exists) {
-        error make {
-            msg: (
-                "Machine config not found: "
-                + ($file | into string)
-            )
-        }
-    }
 
     open $file
 }
@@ -35,7 +18,6 @@ def run-program [
         "[run] "
         + $label
     )
-
     print ""
 
     ^$program ...$args
@@ -60,13 +42,8 @@ def run-program [
 def install-windows [
     nu_exe: path
     sync_script: path
+    interval: int
 ] {
-    if (which schtasks.exe | is-empty) {
-        error make {
-            msg: "schtasks.exe is required on Windows."
-        }
-    }
-
     let command = (
         '"'
         + ($nu_exe | into string)
@@ -81,29 +58,21 @@ def install-windows [
         "/SC"
         "MINUTE"
         "/MO"
-        "1"
+        ($interval | into string)
         "/TN"
         "DotfilesAutoSync"
         "/TR"
         $command
     ]
 
-    run-program
-        "Install Windows dotfiles auto-sync task"
-        "schtasks.exe"
-        $args
+    run-program "Install Windows dotfiles auto-sync task" "schtasks.exe" $args
 }
 
 def install-linux [
     nu_exe: path
     sync_script: path
+    interval: int
 ] {
-    if (which systemctl | is-empty) {
-        error make {
-            msg: "systemctl is required for Linux auto-sync."
-        }
-    }
-
     let unit_dir = (
         $nu.home-path
         | path join ".config" "systemd" "user"
@@ -121,43 +90,42 @@ def install-linux [
         | path join "dotfiles-auto-sync.timer"
     )
 
-    (
-        [
-            "[Unit]"
-            "Description=Conflict-safe bidirectional dotfiles sync"
-            ""
-            "[Service]"
-            "Type=oneshot"
-            (
-                'ExecStart="'
-                + ($nu_exe | into string)
-                + '" "'
-                + ($sync_script | into string)
-                + '"'
-            )
-            ""
-        ]
-        | flatten
-        | str join (char nl)
-    )
+    [
+        "[Unit]"
+        "Description=Conflict-safe bidirectional dotfiles sync"
+        ""
+        "[Service]"
+        "Type=oneshot"
+        (
+            'ExecStart="'
+            + ($nu_exe | into string)
+            + '" "'
+            + ($sync_script | into string)
+            + '"'
+        )
+        ""
+    ]
+    | str join (char nl)
     | save --force $service
 
-    (
-        [
-            "[Unit]"
-            "Description=Run dotfiles synchronization every minute"
-            ""
-            "[Timer]"
-            "OnBootSec=1min"
-            "OnUnitActiveSec=1min"
-            "Persistent=true"
-            ""
-            "[Install]"
-            "WantedBy=timers.target"
-            ""
-        ]
-        | str join (char nl)
-    )
+    [
+        "[Unit]"
+        "Description=Run dotfiles synchronization periodically"
+        ""
+        "[Timer]"
+        "OnBootSec=1min"
+        (
+            "OnUnitActiveSec="
+            + ($interval | into string)
+            + "min"
+        )
+        "Persistent=true"
+        ""
+        "[Install]"
+        "WantedBy=timers.target"
+        ""
+    ]
+    | str join (char nl)
     | save --force $timer
 
     let reload_args = [
@@ -165,10 +133,7 @@ def install-linux [
         "daemon-reload"
     ]
 
-    run-program
-        "Reload systemd user units"
-        "systemctl"
-        $reload_args
+    run-program "Reload systemd user units" "systemctl" $reload_args
 
     let enable_args = [
         "--user"
@@ -177,10 +142,7 @@ def install-linux [
         "dotfiles-auto-sync.timer"
     ]
 
-    run-program
-        "Enable dotfiles auto-sync timer"
-        "systemctl"
-        $enable_args
+    run-program "Enable dotfiles auto-sync timer" "systemctl" $enable_args
 }
 
 def xml-escape [value: string] {
@@ -193,13 +155,8 @@ def xml-escape [value: string] {
 def install-macos [
     nu_exe: path
     sync_script: path
+    interval: int
 ] {
-    if (which launchctl | is-empty) {
-        error make {
-            msg: "launchctl is required on macOS."
-        }
-    }
-
     let launch_dir = (
         $nu.home-path
         | path join "Library" "LaunchAgents"
@@ -209,54 +166,51 @@ def install-macos [
 
     let plist = (
         $launch_dir
-        | path join "com.wunjo.dotfiles-auto-sync.plist"
+        | path join "com.initial-setup.dotfiles-auto-sync.plist"
     )
 
-    let nu_xml = (
-        $nu_exe
-        | into string
-        | xml-escape
+    let seconds = (
+        $interval
+        * 60
     )
 
-    let script_xml = (
-        $sync_script
-        | into string
-        | xml-escape
-    )
+    let nu_xml = (xml-escape ($nu_exe | into string))
+    let script_xml = (xml-escape ($sync_script | into string))
 
-    (
-        [
-            '<?xml version="1.0" encoding="UTF-8"?>'
-            '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"'
-            '  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">'
-            '<plist version="1.0">'
-            '<dict>'
-            '  <key>Label</key>'
-            '  <string>com.wunjo.dotfiles-auto-sync</string>'
-            '  <key>ProgramArguments</key>'
-            '  <array>'
-            (
-                "    <string>"
-                + $nu_xml
-                + "</string>"
-            )
-            (
-                "    <string>"
-                + $script_xml
-                + "</string>"
-            )
-            '  </array>'
-            '  <key>StartInterval</key>'
-            '  <integer>60</integer>'
-            '  <key>RunAtLoad</key>'
-            '  <true/>'
-            '</dict>'
-            '</plist>'
-            ''
-        ]
-        | flatten
-        | str join (char nl)
-    )
+    [
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"'
+        '  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">'
+        '<plist version="1.0">'
+        '<dict>'
+        '  <key>Label</key>'
+        '  <string>com.initial-setup.dotfiles-auto-sync</string>'
+        '  <key>ProgramArguments</key>'
+        '  <array>'
+        (
+            "    <string>"
+            + $nu_xml
+            + "</string>"
+        )
+        (
+            "    <string>"
+            + $script_xml
+            + "</string>"
+        )
+        '  </array>'
+        '  <key>StartInterval</key>'
+        (
+            "  <integer>"
+            + ($seconds | into string)
+            + "</integer>"
+        )
+        '  <key>RunAtLoad</key>'
+        '  <true/>'
+        '</dict>'
+        '</plist>'
+        ''
+    ]
+    | str join (char nl)
     | save --force $plist
 
     let unload_args = [
@@ -265,31 +219,35 @@ def install-macos [
     ]
 
     ^launchctl ...$unload_args
-
-    let unload_exit_code = (
-        $env.LAST_EXIT_CODE
-        | default 0
-    )
-
-    if $unload_exit_code != 0 {
-        print "[info] Existing LaunchAgent was not loaded"
-    }
+    | ignore
 
     let load_args = [
         "load"
         ($plist | into string)
     ]
 
-    run-program
-        "Load macOS dotfiles LaunchAgent"
-        "launchctl"
-        $load_args
+    run-program "Load macOS dotfiles LaunchAgent" "launchctl" $load_args
 }
 
 def main [] {
     let context = (
         machine-context
     )
+
+    if not $context.sync.enabled {
+        print "[skip] Automatic synchronization is disabled."
+        return
+    }
+
+    let interval = (
+        $context.sync.interval_minutes
+    )
+
+    if $interval < 1 {
+        error make {
+            msg: "sync.interval_minutes must be at least 1."
+        }
+    }
 
     let tools_root = (
         $context.tools_root
@@ -301,15 +259,6 @@ def main [] {
         | path join "scripts" "auto-sync.nu"
     )
 
-    if not ($sync_script | path exists) {
-        error make {
-            msg: (
-                "auto-sync.nu not found: "
-                + ($sync_script | into string)
-            )
-        }
-    }
-
     let nu_exe = (
         $nu.current-exe
         | path expand
@@ -317,21 +266,15 @@ def main [] {
 
     match $nu.os-info.name {
         "windows" => {
-            install-windows
-                $nu_exe
-                $sync_script
+            install-windows $nu_exe $sync_script $interval
         }
 
         "linux" => {
-            install-linux
-                $nu_exe
-                $sync_script
+            install-linux $nu_exe $sync_script $interval
         }
 
         "macos" => {
-            install-macos
-                $nu_exe
-                $sync_script
+            install-macos $nu_exe $sync_script $interval
         }
 
         _ => {

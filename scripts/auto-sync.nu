@@ -1,20 +1,5 @@
 #!/usr/bin/env nu
 
-# ============================================================
-# auto-sync.nu
-#
-# Conflict-safe bidirectional synchronization.
-#
-# last baseline     current state           action
-# ------------------------------------------------------------
-# unchanged local + unchanged cloud      -> nothing
-# changed local   + unchanged cloud      -> sync-up
-# unchanged local + changed cloud        -> sync-down
-# changed local   + changed cloud        -> conflict, stop
-#
-# A short stability delay is used before automatic writes.
-# ============================================================
-
 const TOOLS_ROOT = path self ..
 
 def state-file [] {
@@ -28,10 +13,7 @@ def conflict-file [] {
 }
 
 def machine-context [] {
-    let file = (
-        $nu.home-path
-        | path join ".config" "dotfiles" "config.nuon"
-    )
+    let file = ($nu.home-path | path join ".config" "dotfiles" "config.nuon")
 
     if not ($file | path exists) {
         return null
@@ -40,46 +22,63 @@ def machine-context [] {
     open $file
 }
 
-def fingerprint [kind: string] {
-    let script = (
-        $TOOLS_ROOT
-        | path join "scripts" "sync-fingerprint.nu"
-    )
+def log [
+    level: string
+    message: string
+] {
+    let script = ($TOOLS_ROOT | path join "scripts" "log-event.nu")
+    let args = [
+        $script
+        "--level"
+        $level
+        "--message"
+        $message
+    ]
 
+    ^nu ...$args | ignore
+}
+
+def fingerprint [kind: string] {
+    let script = ($TOOLS_ROOT | path join "scripts" "sync-fingerprint.nu")
     let args = [
         $script
         "--kind"
         $kind
     ]
 
-    ^nu ...$args
-    | str trim
+    ^nu ...$args | str trim
+}
+
+def run-script [name: string] {
+    let script = ($TOOLS_ROOT | path join "scripts" $name)
+
+    ^nu $script
+
+    $env.LAST_EXIT_CODE | default 0
+}
+
+def wait-stable [seconds: int] {
+    let delay = ($seconds | into duration --unit sec)
+    sleep $delay
 }
 
 def write-conflict [
+    context: record
     reason: string
     baseline_local: string
     current_local: string
     baseline_cloud: string
     current_cloud: string
 ] {
-    let file = (
-        conflict-file
-    )
+    let file = (conflict-file)
+    mkdir ($file | path dirname)
 
-    mkdir (
-        $file
-        | path dirname
-    )
-
-    let timestamp = (
-        date now
-        | format date "%Y-%m-%d %H:%M:%S %z"
-    )
+    let timestamp = (date now | format date "%Y-%m-%d %H:%M:%S %z")
 
     [
         "DOTFILES SYNC CONFLICT"
         ""
+        ("Machine: " + $context.machine.name)
         ("Time: " + $timestamp)
         ("Reason: " + $reason)
         ""
@@ -89,9 +88,9 @@ def write-conflict [
         ("Baseline cloud: " + $baseline_cloud)
         ("Current cloud:  " + $current_cloud)
         ""
-        "Automatic synchronization has been stopped for this cycle."
+        "Automatic overwrite was stopped."
         ""
-        "Choose one side explicitly:"
+        "Resolve explicitly:"
         "  dotpush   -> local configuration wins"
         "  dotpull   -> cloud configuration wins"
         ""
@@ -99,159 +98,149 @@ def write-conflict [
     | str join (char nl)
     | save --force $file
 
-    print "[conflict] Both local and cloud configuration changed."
-    print (
-        "[conflict] Details: "
-        + ($file | into string)
-    )
+    log "CONFLICT" $reason
+    print "[conflict] Local and cloud configuration both changed."
+    print ("[conflict] " + ($file | into string))
 }
 
-def run-script [name: string] {
-    let script = (
-        $TOOLS_ROOT
-        | path join "scripts" $name
-    )
+def resolve-both-changed [
+    context: record
+    state: record
+    current_local: string
+    current_cloud: string
+] {
+    let policy = $context.sync.conflict_policy
 
-    ^nu $script
+    if $policy == "prefer_local" {
+        log "WARN" "Both sides changed; prefer_local policy selected."
 
-    $env.LAST_EXIT_CODE
-    | default 0
+        if not $context.sync.auto_push {
+            print "[skip] auto_push is disabled"
+            return
+        }
+
+        run-script "sync-up.nu" | ignore
+        return
+    }
+
+    if $policy == "prefer_cloud" {
+        log "WARN" "Both sides changed; prefer_cloud policy selected."
+
+        if not $context.sync.auto_pull {
+            print "[skip] auto_pull is disabled"
+            return
+        }
+
+        run-script "sync-down.nu" | ignore
+        return
+    }
+
+    write-conflict $context "Local and cloud changed since the last successful sync." $state.local_hash $current_local $state.cloud_hash $current_cloud
 }
 
 def main [] {
-    let context = (
-        machine-context
-    )
+    let context = (machine-context)
 
     if $context == null {
         return
     }
 
-    let data_root = (
-        $context.data_root
-        | path expand
-    )
+    if not $context.sync.enabled {
+        return
+    }
+
+    let data_root = ($context.data_root | path expand)
 
     if not ($data_root | path exists) {
+        log "WARN" "Private data root is unavailable."
         return
     }
 
-    let state_path = (
-        state-file
-    )
+    let state_path = (state-file)
 
     if not ($state_path | path exists) {
+        log "WARN" "Sync baseline is missing."
         print "[skip] Sync baseline is missing."
-        print "[info] Run nu setup.nu once to initialize automatic sync."
         return
     }
 
-    let state = (
-        open $state_path
-    )
-
-    let current_local = (
-        fingerprint "local"
-    )
-
-    let current_cloud = (
-        fingerprint "cloud"
-    )
-
-    let local_changed = (
-        $current_local
-        != $state.local_hash
-    )
-
-    let cloud_changed = (
-        $current_cloud
-        != $state.cloud_hash
-    )
+    let state = (open $state_path)
+    let current_local = (fingerprint "local")
+    let current_cloud = (fingerprint "cloud")
+    let local_changed = ($current_local != $state.local_hash)
+    let cloud_changed = ($current_cloud != $state.cloud_hash)
 
     if not $local_changed and not $cloud_changed {
         return
     }
 
     if $local_changed and $cloud_changed {
-        write-conflict
-            "Local and cloud changed since the last successful sync."
-            $state.local_hash
-            $current_local
-            $state.cloud_hash
-            $current_cloud
-
+        resolve-both-changed $context $state $current_local $current_cloud
         return
     }
 
+    let delay = $context.sync.stability_delay_seconds
+
     if $local_changed {
-        sleep 3sec
-
-        let cloud_after_delay = (
-            fingerprint "cloud"
-        )
-
-        if $cloud_after_delay != $current_cloud {
-            write-conflict
-                "Cloud changed while a local update was waiting to publish."
-                $state.local_hash
-                $current_local
-                $state.cloud_hash
-                $cloud_after_delay
-
+        if not $context.sync.auto_push {
+            log "INFO" "Local change detected but auto_push is disabled."
             return
         }
 
-        print "[auto] Local configuration changed."
-        print "[auto] Publishing local configuration to private cloud source."
+        wait-stable $delay
 
-        let exit_code = (
-            run-script "sync-up.nu"
-        )
+        let cloud_after_delay = (fingerprint "cloud")
+
+        if $cloud_after_delay != $current_cloud {
+            write-conflict $context "Cloud changed while a local update was waiting to publish." $state.local_hash $current_local $state.cloud_hash $cloud_after_delay
+            return
+        }
+
+        log "INFO" "Local configuration changed; starting automatic push."
+
+        let exit_code = (run-script "sync-up.nu")
 
         if $exit_code != 0 {
+            log "ERROR" "Automatic sync-up failed."
             print "[warn] Automatic sync-up failed."
+        } else {
+            log "INFO" "Automatic sync-up completed."
         }
 
         return
     }
 
     if $cloud_changed {
-        sleep 2sec
+        if not $context.sync.auto_pull {
+            log "INFO" "Cloud change detected but auto_pull is disabled."
+            return
+        }
 
-        let cloud_after_delay = (
-            fingerprint "cloud"
-        )
+        wait-stable $delay
+
+        let cloud_after_delay = (fingerprint "cloud")
 
         if $cloud_after_delay != $current_cloud {
-            print "[skip] Cloud source is still changing."
-            print "[info] The next automatic sync cycle will retry."
+            log "INFO" "Cloud source is still changing; retry next cycle."
             return
         }
 
-        let local_after_delay = (
-            fingerprint "local"
-        )
+        let local_after_delay = (fingerprint "local")
 
         if $local_after_delay != $current_local {
-            write-conflict
-                "Local changed while a cloud update was waiting to apply."
-                $state.local_hash
-                $local_after_delay
-                $state.cloud_hash
-                $current_cloud
-
+            write-conflict $context "Local changed while a cloud update was waiting to apply." $state.local_hash $local_after_delay $state.cloud_hash $current_cloud
             return
         }
 
-        print "[auto] Private cloud configuration changed."
-        print "[auto] Applying the latest configuration."
+        log "INFO" "Cloud configuration changed; starting automatic pull."
 
-        let exit_code = (
-            run-script "sync-down.nu"
-        )
+        let exit_code = (run-script "sync-down.nu")
 
         if $exit_code != 0 {
+            log "ERROR" "Automatic sync-down failed."
             print "[warn] Automatic sync-down failed."
+        } else {
+            log "INFO" "Automatic sync-down completed."
         }
     }
 }

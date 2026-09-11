@@ -96,21 +96,15 @@ def main [] {
 
     mkdir $private_root
 
-    copy-file-if-exists (
-        $user_dir | path join "settings.json"
-    ) (
-        $private_root | path join "settings.json"
-    )
+    let source_settings = ($user_dir | path join "settings.json")
+    let target_settings = ($private_root | path join "settings.json")
+    copy-file-if-exists $source_settings $target_settings
 
-    copy-file-if-exists (
-        $user_dir | path join "keybindings.json"
-    ) (
-        $private_root | path join "keybindings.json"
-    )
+    let source_keybindings = ($user_dir | path join "keybindings.json")
+    let target_keybindings = ($private_root | path join "keybindings.json")
+    copy-file-if-exists $source_keybindings $target_keybindings
 
-    copy-dir-if-exists (
-        $user_dir | path join "snippets"
-    ) (
-        $private_root | path join "snippets"
-    )
+    let source_snippets = ($user_dir | path join "snippets")
+    let target_snippets = ($private_root | path join "snippets")
+    copy-dir-if-exists $source_snippets $target_snippets
 }

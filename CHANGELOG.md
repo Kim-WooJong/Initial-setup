@@ -1,5 +1,102 @@
 # Changelog
 
+## 0.7.1
+
+### Nushell 0.109 parser compatibility
+- Fixed `install-cli-tools.nu` failing with `missing label` at multiline
+  `run-program` calls.
+- Audited every Nushell file for the same pattern.
+- Rewrote positional custom-command calls in Starship, WezTerm, auto-sync,
+  package installation, sync fingerprinting, Git/SSH overrides, VS Code
+  config capture/apply, and migration scripts.
+- Custom commands with required positional arguments no longer put the command
+  head on one line and the first argument on the following line.
+- Continuation-style calls that began with `custom-command (` were also
+  normalized through temporary variables where appropriate.
+- Added a release regression scan that discovers custom commands from each
+  `.nu` file and fails packaging if a call head is followed by indented
+  positional arguments on later physical lines.
+
+## 0.7.0
+
+### Reliability
+- Fixed the `setup.nu` multiline custom-command invocation that could fail on
+  Nushell 0.109. `save-machine-config` now receives one record in a deliberate
+  single-line invocation.
+- The main setup orchestrator now keeps positional custom-command calls on one
+  line whenever practical.
+
+### Snapshot and rollback
+- Added `dotsnapshot`.
+- Added `dotrollback` and `dotrollback --list`.
+- Automatic local-to-cloud pushes create a pre-push snapshot.
+- Snapshots are machine-local and retained according to
+  `maintenance.snapshot_keep`.
+
+### Doctor and repair
+- Added `dotdoctor`.
+- Added `dotdoctor --fix` to repair shims, management modules, local overrides,
+  secrets autoload, optional tools, and the automatic sync scheduler.
+
+### Updates
+- Added `dotupdate`.
+- Supports `--repo`, `--tools`, `--config`, and `--all`.
+- Updates Rust/Julia toolchains and Lazy.nvim plugins when detected.
+
+### Profiles
+- `workstation`, `laptop`, `server`, and `minimal` profiles now actually set
+  feature defaults.
+- Added `nu setup.nu --profile <profile>`.
+- Added `--dry-run`.
+
+### Diagnostics
+- Added persistent sync log and `dotlog`.
+- Added environment report and `dotreport --save`.
+
+### Local secrets
+- Added machine-local Nushell secrets autoload.
+- Added `dotsecrets`.
+- Secrets remain outside the synchronized/private-cloud source.
+
+### Project bootstrap
+- Added `newproj rust|julia|python|generic <name>`.
+
+## 0.6.0
+
+### Machine configuration
+- Added persistent machine profile, GUI-app switch, synchronization policy,
+  interval, automatic push/pull switches, stability delay, and feature toggles.
+- Existing values are preserved when `setup.nu` is rerun.
+- Added `dotconfig`.
+
+### Synchronization visibility
+- Added shared `.dotfiles-sync-meta.nuon`.
+- Synchronization state now records last writer, writer time, and last action.
+- `dotstatus` shows local/cloud dirty state, interval, machine, profile,
+  conflict policy, last writer, and last sync.
+
+### Git / SSH
+- Added synchronized common + unsynchronized machine-local split.
+- Added `~/.gitconfig.local` and `~/.ssh/config.local`.
+- Added `dotgitlocal` and `dotsshlocal`.
+- git-delta configuration is machine-local and is enabled only when `delta`
+  is actually available.
+
+### Package manifests
+- Added `packages/common.txt`, `windows.txt`, `macos.txt`, and `linux.txt`.
+- Package installation is manifest-driven.
+- Added git-delta and lazygit.
+
+### Platform fixes
+- Fixed Windows Neovim shim path escaping by converting `\` to `/` before
+  writing Lua.
+
+### Sync policy
+- Scheduler interval comes from `sync.interval_minutes`.
+- `auto_push` and `auto_pull` are configurable.
+- Conflict policies: `stop`, `prefer_local`, `prefer_cloud`.
+- Default remains the safer `stop` policy.
+
 ## 0.5.0
 
 ### Automatic cross-machine synchronization
