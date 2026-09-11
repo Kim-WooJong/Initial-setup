@@ -5,6 +5,24 @@
 # Both are optional; failures do not abort the full setup.
 # ============================================================
 
+def nu-home [] {
+    let home_path = ($nu | get --optional home-path)
+
+    if $home_path != null {
+        return $home_path
+    }
+
+    let home_dir = ($nu | get --optional home-dir)
+
+    if $home_dir != null {
+        return $home_dir
+    }
+
+    error make {
+        msg: "Unable to determine the Nushell home directory."
+    }
+}
+
 def run-program [label: string program: string args: list] {
     print ("[run] " + $label)
     print ""
@@ -152,7 +170,7 @@ def install-julia-unix [] {
 
 def machine-context [] {
     let file = (
-        $nu.home-path
+        (nu-home)
         | path join ".config" "dotfiles" "config.nuon"
     )
 

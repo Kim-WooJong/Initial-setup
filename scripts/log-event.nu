@@ -1,7 +1,25 @@
 #!/usr/bin/env nu
 
+def nu-home [] {
+    let home_path = ($nu | get --optional home-path)
+
+    if $home_path != null {
+        return $home_path
+    }
+
+    let home_dir = ($nu | get --optional home-dir)
+
+    if $home_dir != null {
+        return $home_dir
+    }
+
+    error make {
+        msg: "Unable to determine the Nushell home directory."
+    }
+}
+
 def machine-context [] {
-    let file = ($nu.home-path | path join ".config" "dotfiles" "config.nuon")
+    let file = ((nu-home) | path join ".config" "dotfiles" "config.nuon")
 
     if ($file | path exists) {
         open $file
@@ -22,7 +40,7 @@ def main [
     --message: string
 ] {
     let context = (machine-context)
-    let log_dir = ($nu.home-path | path join ".config" "dotfiles" "logs")
+    let log_dir = ((nu-home) | path join ".config" "dotfiles" "logs")
     let log_file = ($log_dir | path join "sync.log")
 
     mkdir $log_dir

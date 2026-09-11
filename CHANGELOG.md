@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.7.3
+
+### Nushell home-directory compatibility
+- Added a common `nu-home` compatibility pattern to every Nushell script that
+  accesses the user's home directory.
+- Supports both Nushell `$nu.home-path` and `$nu.home-dir` environments through
+  optional record lookup.
+- Removed all direct `$nu.home-path` and `$nu.home-dir` field accesses from the
+  executable Nushell code.
+- Added release regression checks so direct version-specific home-field access
+  cannot be reintroduced accidentally.
+- Updated `VERSION` to `0.7.3`.
+- Removed stale hard-coded release numbers from bootstrap display strings.
+
 ## 0.7.1
 
 ### Nushell 0.109 parser compatibility

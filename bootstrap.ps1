@@ -159,7 +159,7 @@ function Resolve-NuExecutable {
     throw "nu.exe could not be located."
 }
 
-Write-Section "Initial-setup 0.7.1 bootstrap"
+Write-Section "Initial-setup bootstrap"
 
 if (-not (Test-Command "winget")) {
     throw "winget is required. Install or update Microsoft App Installer, then rerun this script."

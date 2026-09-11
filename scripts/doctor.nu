@@ -1,7 +1,25 @@
 #!/usr/bin/env nu
 
+def nu-home [] {
+    let home_path = ($nu | get --optional home-path)
+
+    if $home_path != null {
+        return $home_path
+    }
+
+    let home_dir = ($nu | get --optional home-dir)
+
+    if $home_dir != null {
+        return $home_dir
+    }
+
+    error make {
+        msg: "Unable to determine the Nushell home directory."
+    }
+}
+
 def machine-config-path [] {
-    $nu.home-path
+    (nu-home)
     | path join ".config" "dotfiles" "config.nuon"
 }
 
@@ -86,11 +104,11 @@ def main [
         }
     }
 
-    let git_local = ($nu.home-path | path join ".gitconfig.local")
-    let ssh_local = ($nu.home-path | path join ".ssh" "config.local")
+    let git_local = ((nu-home) | path join ".gitconfig.local")
+    let ssh_local = ((nu-home) | path join ".ssh" "config.local")
     let secrets = ($nu.data-dir | path join "vendor" "autoload" "dotfiles-secrets.nu")
-    let state = ($nu.home-path | path join ".config" "dotfiles" "sync-state.nuon")
-    let conflict = ($nu.home-path | path join ".config" "dotfiles" "SYNC-CONFLICT.txt")
+    let state = ((nu-home) | path join ".config" "dotfiles" "sync-state.nuon")
+    let conflict = ((nu-home) | path join ".config" "dotfiles" "SYNC-CONFLICT.txt")
 
     if ($git_local | path exists) {
         print "[ok] Git machine-local override exists"

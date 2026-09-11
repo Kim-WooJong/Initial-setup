@@ -1,9 +1,27 @@
 # ============================================================
-# Initial-setup 0.7.0 Nushell convenience commands.
+# Initial-setup Nushell convenience commands.
 # ============================================================
 
+def nu-home [] {
+    let home_path = ($nu | get --optional home-path)
+
+    if $home_path != null {
+        return $home_path
+    }
+
+    let home_dir = ($nu | get --optional home-dir)
+
+    if $home_dir != null {
+        return $home_dir
+    }
+
+    error make {
+        msg: "Unable to determine the Nushell home directory."
+    }
+}
+
 def machine-context [] {
-    let config_file = ($nu.home-path | path join ".config" "dotfiles" "config.nuon")
+    let config_file = ((nu-home) | path join ".config" "dotfiles" "config.nuon")
 
     if not ($config_file | path exists) {
         error make {
@@ -99,8 +117,8 @@ def edit-managed-target [target: path] {
 
 export def dotstatus [] {
     let context = (machine-context)
-    let state_file = ($nu.home-path | path join ".config" "dotfiles" "sync-state.nuon")
-    let conflict_file = ($nu.home-path | path join ".config" "dotfiles" "SYNC-CONFLICT.txt")
+    let state_file = ((nu-home) | path join ".config" "dotfiles" "sync-state.nuon")
+    let conflict_file = ((nu-home) | path join ".config" "dotfiles" "SYNC-CONFLICT.txt")
 
     print "Automatic Sync"
     print "────────────────────────────────"
@@ -263,7 +281,7 @@ export def dotlog [
     --lines: int = 50
     --clear
 ] {
-    let file = ($nu.home-path | path join ".config" "dotfiles" "logs" "sync.log")
+    let file = ((nu-home) | path join ".config" "dotfiles" "logs" "sync.log")
 
     if $clear {
         if ($file | path exists) {
@@ -290,7 +308,7 @@ export def dotlog [
 }
 
 export def dotconfig [] {
-    edit-file ($nu.home-path | path join ".config" "dotfiles" "config.nuon")
+    edit-file ((nu-home) | path join ".config" "dotfiles" "config.nuon")
 
     print ""
     print "[info] Run `nu setup.nu` after changing profile, scheduler interval, or feature switches."
@@ -301,31 +319,31 @@ export def dotsecrets [] {
 }
 
 export def dotgitlocal [] {
-    edit-file ($nu.home-path | path join ".gitconfig.local")
+    edit-file ((nu-home) | path join ".gitconfig.local")
 }
 
 export def dotsshlocal [] {
-    edit-file ($nu.home-path | path join ".ssh" "config.local")
+    edit-file ((nu-home) | path join ".ssh" "config.local")
 }
 
 export def dotnvim [] {
-    edit-managed-target ($nu.home-path | path join ".config" "nvim")
+    edit-managed-target ((nu-home) | path join ".config" "nvim")
 }
 
 export def dotnu [] {
-    edit-managed-target ($nu.home-path | path join ".config" "nushell" "config.nu")
+    edit-managed-target ((nu-home) | path join ".config" "nushell" "config.nu")
 }
 
 export def dotenv [] {
-    edit-managed-target ($nu.home-path | path join ".config" "nushell" "env.nu")
+    edit-managed-target ((nu-home) | path join ".config" "nushell" "env.nu")
 }
 
 export def dotwezterm [] {
-    edit-managed-target ($nu.home-path | path join ".config" "wezterm" "wezterm.lua")
+    edit-managed-target ((nu-home) | path join ".config" "wezterm" "wezterm.lua")
 }
 
 export def dotstarship [] {
-    edit-managed-target ($nu.home-path | path join ".config" "starship.toml")
+    edit-managed-target ((nu-home) | path join ".config" "starship.toml")
 }
 
 export def newproj [

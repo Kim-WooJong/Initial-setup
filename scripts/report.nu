@@ -1,7 +1,25 @@
 #!/usr/bin/env nu
 
+def nu-home [] {
+    let home_path = ($nu | get --optional home-path)
+
+    if $home_path != null {
+        return $home_path
+    }
+
+    let home_dir = ($nu | get --optional home-dir)
+
+    if $home_dir != null {
+        return $home_dir
+    }
+
+    error make {
+        msg: "Unable to determine the Nushell home directory."
+    }
+}
+
 def machine-context [] {
-    let file = ($nu.home-path | path join ".config" "dotfiles" "config.nuon")
+    let file = ((nu-home) | path join ".config" "dotfiles" "config.nuon")
     open $file
 }
 
@@ -26,8 +44,8 @@ def main [
     --save
 ] {
     let context = (machine-context)
-    let state_file = ($nu.home-path | path join ".config" "dotfiles" "sync-state.nuon")
-    let conflict_file = ($nu.home-path | path join ".config" "dotfiles" "SYNC-CONFLICT.txt")
+    let state_file = ((nu-home) | path join ".config" "dotfiles" "sync-state.nuon")
+    let conflict_file = ((nu-home) | path join ".config" "dotfiles" "SYNC-CONFLICT.txt")
     let state = (
         if ($state_file | path exists) {
             open $state_file
@@ -83,7 +101,7 @@ def main [
     print $text
 
     if $save {
-        let report_dir = ($nu.home-path | path join ".config" "dotfiles" "reports")
+        let report_dir = ((nu-home) | path join ".config" "dotfiles" "reports")
         mkdir $report_dir
 
         let stamp = (date now | format date "%Y%m%d-%H%M%S")

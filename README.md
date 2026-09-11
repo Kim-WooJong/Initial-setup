@@ -1,4 +1,4 @@
-# Initial-setup v0.7.2
+# Initial-setup v0.7.3
 
 Windows, macOS, Linux에서 개인 개발 환경을 빠르게 구성하고, 여러 컴퓨터의 설정을 자동으로 동기화하기 위한 크로스플랫폼 환경 관리 도구입니다.
 
@@ -316,7 +316,7 @@ Dry-run에서는 파일, 패키지, scheduler를 변경하지 않습니다.
 
 ```nu
 {
-    version: "0.7.2"
+    version: "0.7.3"
 
     data_root: "..."
     tools_root: "..."
@@ -1110,3 +1110,51 @@ Project bootstrap
 - VERSION 단일 원본화
 - CI 기반 syntax / regression 검사
 - V1.0 release 후보 안정화
+
+---
+
+# Nushell Home Directory Compatibility
+
+Different Nushell releases may expose the user's home directory as either:
+
+```nu
+$nu.home-path
+```
+
+or:
+
+```nu
+$nu.home-dir
+```
+
+Initial-setup v0.7.3 no longer accesses either field directly.
+
+Every Nushell script that requires the home directory uses the same resolver:
+
+```nu
+def nu-home [] {
+    let home_path = ($nu | get --optional home-path)
+
+    if $home_path != null {
+        return $home_path
+    }
+
+    let home_dir = ($nu | get --optional home-dir)
+
+    if $home_dir != null {
+        return $home_dir
+    }
+
+    error make {
+        msg: "Unable to determine the Nushell home directory."
+    }
+}
+```
+
+This allows the same scripts to work with Nushell versions that provide
+`home-path` as well as versions that provide `home-dir`.
+
+Direct references to `$nu.home-path` and `$nu.home-dir` are prohibited by the
+release audit so that new scripts do not accidentally reintroduce a
+version-specific dependency.
+

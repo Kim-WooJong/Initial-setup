@@ -1,7 +1,25 @@
 #!/usr/bin/env nu
 
+def nu-home [] {
+    let home_path = ($nu | get --optional home-path)
+
+    if $home_path != null {
+        return $home_path
+    }
+
+    let home_dir = ($nu | get --optional home-dir)
+
+    if $home_dir != null {
+        return $home_dir
+    }
+
+    error make {
+        msg: "Unable to determine the Nushell home directory."
+    }
+}
+
 def machine-context [] {
-    let file = ($nu.home-path | path join ".config" "dotfiles" "config.nuon")
+    let file = ((nu-home) | path join ".config" "dotfiles" "config.nuon")
 
     if not ($file | path exists) {
         error make {
@@ -54,7 +72,7 @@ def main [
         return
     }
 
-    let snapshot_root = ($nu.home-path | path join ".config" "dotfiles" "snapshots")
+    let snapshot_root = ((nu-home) | path join ".config" "dotfiles" "snapshots")
     mkdir $snapshot_root
 
     let timestamp = (date now | format date "%Y%m%d-%H%M%S")

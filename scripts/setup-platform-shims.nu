@@ -5,6 +5,24 @@
 # ~/.config paths.
 # ============================================================
 
+def nu-home [] {
+    let home_path = ($nu | get --optional home-path)
+
+    if $home_path != null {
+        return $home_path
+    }
+
+    let home_dir = ($nu | get --optional home-dir)
+
+    if $home_dir != null {
+        return $home_dir
+    }
+
+    error make {
+        msg: "Unable to determine the Nushell home directory."
+    }
+}
+
 def backup-file [file: path] {
     let p = ($file | path expand)
 
@@ -22,7 +40,7 @@ def backup-file [file: path] {
 
 def main [] {
     let canonical_root = (
-        $nu.home-path
+        (nu-home)
         | path join ".config"
     )
 

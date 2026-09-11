@@ -18,6 +18,24 @@ def section [title: string] {
     print ""
 }
 
+def nu-home [] {
+    let home_path = ($nu | get --optional home-path)
+
+    if $home_path != null {
+        return $home_path
+    }
+
+    let home_dir = ($nu | get --optional home-dir)
+
+    if $home_dir != null {
+        return $home_dir
+    }
+
+    error make {
+        msg: "Unable to determine the Nushell home directory."
+    }
+}
+
 def require [name: string] {
     if (which $name | is-empty) {
         error make {
@@ -27,7 +45,7 @@ def require [name: string] {
 }
 
 def machine-config-path [] {
-    $nu.home-path
+    nu-home
     | path join ".config" "dotfiles" "config.nuon"
 }
 
@@ -458,12 +476,13 @@ def main [
     print ("Machine      : " + $context.machine.name)
     print ("Profile      : " + $context.machine.profile)
     print ("OS           : " + $nu.os-info.name)
-    print ("Home         : " + ($nu.home-path | into string))
+    print ("Home         : " + (nu-home | into string))
     print ("Nushell      : " + $env.NU_VERSION)
 
     run-script "Initializing private data structure" ($scripts | path join "init-private-data.nu")
     run-script "Configuring local secrets autoload" ($scripts | path join "setup-secrets.nu")
 
+    run-script "Installing Neovim" ($scripts | path join "install-neovim.nu")
     if $features.rust or $features.julia {
         run-script "Installing Rust and Julia toolchains" ($scripts | path join "install-language-tools.nu")
     }

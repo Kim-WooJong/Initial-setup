@@ -2,9 +2,27 @@
 
 const TOOLS_ROOT = path self ..
 
+def nu-home [] {
+    let home_path = ($nu | get --optional home-path)
+
+    if $home_path != null {
+        return $home_path
+    }
+
+    let home_dir = ($nu | get --optional home-dir)
+
+    if $home_dir != null {
+        return $home_dir
+    }
+
+    error make {
+        msg: "Unable to determine the Nushell home directory."
+    }
+}
+
 def machine-context [] {
     let file = (
-        $nu.home-path
+        (nu-home)
         | path join ".config" "dotfiles" "config.nuon"
     )
 
@@ -12,12 +30,12 @@ def machine-context [] {
 }
 
 def state-file [] {
-    $nu.home-path
+    (nu-home)
     | path join ".config" "dotfiles" "sync-state.nuon"
 }
 
 def conflict-file [] {
-    $nu.home-path
+    (nu-home)
     | path join ".config" "dotfiles" "SYNC-CONFLICT.txt"
 }
 

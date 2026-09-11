@@ -218,7 +218,7 @@ install_linux_core() {
     }
 }
 
-section "Initial-setup 0.7.1 bootstrap"
+section "Initial-setup bootstrap"
 
 case "$(uname -s)" in
     Darwin)

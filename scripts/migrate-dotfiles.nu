@@ -6,9 +6,27 @@
 # SSH private keys are intentionally excluded.
 # ============================================================
 
+def nu-home [] {
+    let home_path = ($nu | get --optional home-path)
+
+    if $home_path != null {
+        return $home_path
+    }
+
+    let home_dir = ($nu | get --optional home-dir)
+
+    if $home_dir != null {
+        return $home_dir
+    }
+
+    error make {
+        msg: "Unable to determine the Nushell home directory."
+    }
+}
+
 def machine-context [] {
     let file = (
-        $nu.home-path
+        (nu-home)
         | path join ".config" "dotfiles" "config.nuon"
     )
 
@@ -102,7 +120,7 @@ def main [] {
     let data_root = ($context.data_root | path expand)
 
     let canonical_config = (
-        $nu.home-path
+        (nu-home)
         | path join ".config"
     )
 
@@ -180,8 +198,8 @@ def main [] {
         print ""
         print "--- Git ---"
 
-        let git_home = ($nu.home-path | path join ".gitconfig")
-        let git_xdg = ($nu.home-path | path join ".config" "git" "config")
+        let git_home = ((nu-home) | path join ".gitconfig")
+        let git_xdg = ((nu-home) | path join ".config" "git" "config")
         chezmoi-add $data_root $git_home
         chezmoi-add $data_root $git_xdg
     }
@@ -190,7 +208,7 @@ def main [] {
         print ""
         print "--- SSH config only ---"
 
-        let ssh_config = ($nu.home-path | path join ".ssh" "config")
+        let ssh_config = ((nu-home) | path join ".ssh" "config")
         chezmoi-add $data_root $ssh_config
     }
 
@@ -199,7 +217,7 @@ def main [] {
         print "--- WezTerm ---"
 
         let canonical_wezterm = ($canonical_config | path join "wezterm" "wezterm.lua")
-        let legacy_wezterm = ($nu.home-path | path join ".wezterm.lua")
+        let legacy_wezterm = ((nu-home) | path join ".wezterm.lua")
 
         if not ($canonical_wezterm | path exists) {
             copy-file-if-needed $legacy_wezterm $canonical_wezterm
@@ -220,7 +238,7 @@ def main [] {
         print ""
         print "--- Cargo ---"
 
-        let cargo_config = ($nu.home-path | path join ".cargo" "config.toml")
+        let cargo_config = ((nu-home) | path join ".cargo" "config.toml")
         chezmoi-add $data_root $cargo_config
     }
 
@@ -228,7 +246,7 @@ def main [] {
         print ""
         print "--- Julia ---"
 
-        let julia_startup = ($nu.home-path | path join ".julia" "config" "startup.jl")
+        let julia_startup = ((nu-home) | path join ".julia" "config" "startup.jl")
         chezmoi-add $data_root $julia_startup
     }
 

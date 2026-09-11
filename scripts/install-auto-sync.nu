@@ -1,8 +1,26 @@
 #!/usr/bin/env nu
 
+def nu-home [] {
+    let home_path = ($nu | get --optional home-path)
+
+    if $home_path != null {
+        return $home_path
+    }
+
+    let home_dir = ($nu | get --optional home-dir)
+
+    if $home_dir != null {
+        return $home_dir
+    }
+
+    error make {
+        msg: "Unable to determine the Nushell home directory."
+    }
+}
+
 def machine-context [] {
     let file = (
-        $nu.home-path
+        (nu-home)
         | path join ".config" "dotfiles" "config.nuon"
     )
 
@@ -74,7 +92,7 @@ def install-linux [
     interval: int
 ] {
     let unit_dir = (
-        $nu.home-path
+        (nu-home)
         | path join ".config" "systemd" "user"
     )
 
@@ -158,7 +176,7 @@ def install-macos [
     interval: int
 ] {
     let launch_dir = (
-        $nu.home-path
+        (nu-home)
         | path join "Library" "LaunchAgents"
     )
 

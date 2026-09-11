@@ -1,8 +1,26 @@
 #!/usr/bin/env nu
 
+def nu-home [] {
+    let home_path = ($nu | get --optional home-path)
+
+    if $home_path != null {
+        return $home_path
+    }
+
+    let home_dir = ($nu | get --optional home-dir)
+
+    if $home_dir != null {
+        return $home_dir
+    }
+
+    error make {
+        msg: "Unable to determine the Nushell home directory."
+    }
+}
+
 def machine-context [] {
     let file = (
-        $nu.home-path
+        (nu-home)
         | path join ".config" "dotfiles" "config.nuon"
     )
 
@@ -126,12 +144,12 @@ def vscode-user-dir [] {
         }
 
         "macos" => {
-            $nu.home-path
+            (nu-home)
             | path join "Library" "Application Support" "Code" "User"
         }
 
         "linux" => {
-            $nu.home-path
+            (nu-home)
             | path join ".config" "Code" "User"
         }
 
@@ -170,7 +188,7 @@ def local-entries [] {
     )
 
     let config_root = (
-        $nu.home-path
+        (nu-home)
         | path join ".config"
     )
 
@@ -193,7 +211,7 @@ def local-entries [] {
     }
 
     if $features.git_config {
-        let git_home_path = ($nu.home-path | path join ".gitconfig")
+        let git_home_path = ((nu-home) | path join ".gitconfig")
         $entries = (append-target $entries "git-home" $git_home_path)
 
         let git_xdg_path = ($config_root | path join "git" "config")
@@ -201,17 +219,17 @@ def local-entries [] {
     }
 
     if $features.ssh_config {
-        let ssh_config_path = ($nu.home-path | path join ".ssh" "config")
+        let ssh_config_path = ((nu-home) | path join ".ssh" "config")
         $entries = (append-target $entries "ssh-config" $ssh_config_path)
     }
 
     if $features.rust {
-        let cargo_path = ($nu.home-path | path join ".cargo" "config.toml")
+        let cargo_path = ((nu-home) | path join ".cargo" "config.toml")
         $entries = (append-target $entries "cargo" $cargo_path)
     }
 
     if $features.julia {
-        let julia_path = ($nu.home-path | path join ".julia" "config" "startup.jl")
+        let julia_path = ((nu-home) | path join ".julia" "config" "startup.jl")
         $entries = (append-target $entries "julia" $julia_path)
     }
 
