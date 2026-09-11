@@ -1,0 +1,50 @@
+add_newline = false
+
+format = "$username$hostname$directory$git_branch$git_status$rust$julia$python$cmd_duration$line_break$character"
+
+[hostname]
+ssh_only = true
+format = "[$hostname]($style) "
+style = "bold dimmed green"
+
+[directory]
+truncation_length = 4
+truncate_to_repo = false
+style = "bold cyan"
+read_only = " ro"
+read_only_style = "red"
+format = "[$path]($style)[$read_only]($read_only_style) "
+
+[git_branch]
+symbol = "git:"
+style = "bold purple"
+format = "[$symbol$branch]($style) "
+
+[git_status]
+style = "yellow"
+format = "([$all_status$ahead_behind]($style)) "
+
+[rust]
+symbol = "rs "
+format = "[$symbol($version )]($style)"
+style = "bold red"
+
+[julia]
+symbol = "jl "
+format = "[$symbol($version )]($style)"
+style = "bold purple"
+
+[python]
+symbol = "py "
+format = "[$symbol($version )(($virtualenv) )]($style)"
+style = "yellow"
+
+[cmd_duration]
+min_time = 1000
+format = "[$duration]($style) "
+style = "yellow"
+
+[character]
+success_symbol = "[>](bold green)"
+error_symbol = "[>](bold red)"
+vimcmd_symbol = "[<](bold green)"

@@ -1,0 +1,16 @@
+# This repository contains public setup tooling only.
+# Private dotfiles are created in the parent directory by default.
+home/
+vscode/
+dotfiles-data/
+private-data/
+
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*.tmp
+*.bak
+*.log
+.idea/
+.vscode/
