@@ -127,6 +127,7 @@ def main [
     restore-item ($selected | path join ".chezmoiroot") ($data_root | path join ".chezmoiroot")
     restore-item ($selected | path join "home") ($data_root | path join "home")
     restore-item ($selected | path join "vscode") ($data_root | path join "vscode")
+    restore-item ($selected | path join "toolchains") ($data_root | path join "toolchains")
 
     run-script "write-sync-meta.nu" "--action" "rollback"
     run-script "sync-down.nu"

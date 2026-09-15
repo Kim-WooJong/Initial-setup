@@ -313,6 +313,11 @@ def cloud-entries [] {
         $entries = (append-target $entries "cloud-vscode" $cloud_vscode_path)
     }
 
+    if $context.features.rust or $context.features.julia {
+        let cloud_toolchains_path = ($data_root | path join "toolchains")
+        $entries = (append-target $entries "cloud-toolchains" $cloud_toolchains_path)
+    }
+
     $entries
 }
 

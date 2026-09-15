@@ -84,6 +84,7 @@ def main [
     copy-if-exists ($data_root | path join ".chezmoiroot") ($snapshot_dir | path join ".chezmoiroot")
     copy-if-exists ($data_root | path join "home") ($snapshot_dir | path join "home")
     copy-if-exists ($data_root | path join "vscode") ($snapshot_dir | path join "vscode")
+    copy-if-exists ($data_root | path join "toolchains") ($snapshot_dir | path join "toolchains")
 
     {
         version: "1"

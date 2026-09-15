@@ -1,0 +1,4 @@
+# Fonts installed for GUI development profiles.
+# Font binaries are intentionally not stored in this repository.
+
+d2coding

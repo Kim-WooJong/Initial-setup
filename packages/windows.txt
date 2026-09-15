@@ -4,6 +4,5 @@ fd|fd|sharkdp.fd
 fzf|fzf|junegunn.fzf
 bat|bat|sharkdp.bat
 zoxide|zoxide|ajeetdsouza.zoxide
-direnv|direnv|direnv.direnv
 git-delta|delta|dandavison.delta
 lazygit|lazygit|JesseDuffield.lazygit

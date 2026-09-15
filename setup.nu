@@ -79,6 +79,8 @@ def profile-defaults [profile: string] {
             {
                 install_gui_apps: true
                 features: {
+                    neovim: true
+                    fonts: true
                     cli_tools: true
                     vscode: true
                     wezterm: true
@@ -95,6 +97,8 @@ def profile-defaults [profile: string] {
             {
                 install_gui_apps: true
                 features: {
+                    neovim: true
+                    fonts: true
                     cli_tools: true
                     vscode: true
                     wezterm: true
@@ -111,6 +115,8 @@ def profile-defaults [profile: string] {
             {
                 install_gui_apps: false
                 features: {
+                    neovim: true
+                    fonts: false
                     cli_tools: true
                     vscode: false
                     wezterm: false
@@ -127,6 +133,8 @@ def profile-defaults [profile: string] {
             {
                 install_gui_apps: false
                 features: {
+                    neovim: true
+                    fonts: false
                     cli_tools: true
                     vscode: false
                     wezterm: false
@@ -206,10 +214,7 @@ def build-machine-config [
         }
     )
 
-    let reset_to_profile = (
-        not ($requested_profile | is-empty)
-        or ($old | is-empty)
-    )
+    let reset_to_profile = (not ($requested_profile | is-empty) or ($old | is-empty))
 
     let preset = (profile-defaults $profile)
     let preset_features = $preset.features
@@ -230,8 +235,6 @@ def build-machine-config [
             $old_sync.enabled? | default true
         }
     )
-    const TOOLS_ROOT = path self .
-
     {
         version: (app-version)
         data_root: ($data_root | path expand | into string)
@@ -265,6 +268,8 @@ def build-machine-config [
         }
 
         features: {
+            neovim: (feature-value $old_features $preset_features "neovim" $reset_to_profile)
+            fonts: (feature-value $old_features $preset_features "fonts" $reset_to_profile)
             cli_tools: (feature-value $old_features $preset_features "cli_tools" $reset_to_profile)
             vscode: (feature-value $old_features $preset_features "vscode" $reset_to_profile)
             wezterm: (feature-value $old_features $preset_features "wezterm" $reset_to_profile)
@@ -433,11 +438,14 @@ def print-dry-run [
     print ""
     print "Planned stages:"
     print "  - initialize private source"
+    print "  - install Neovim and D2Coding when enabled"
     print "  - install enabled toolchains / CLI tools"
+    print "  - configure direnv and Nushell PWD hook"
     print "  - import or apply configuration"
     print "  - configure platform shims"
     print "  - configure local Git / SSH overrides"
     print "  - configure local secrets autoload"
+    print "  - capture/restore Rust and Julia environment state"
     print "  - configure Starship / WezTerm when enabled"
     print "  - initialize sync baseline"
     print "  - install automatic sync scheduler when enabled"
@@ -451,7 +459,7 @@ def main [
     --no-auto-sync
     --dry-run
 ] {
-    section $"Initial-setup (app-version)"
+    section ("Initial-setup " + (app-version))
     require chezmoi
 
     let scripts = ($TOOLS_ROOT | path join "scripts")
@@ -481,8 +489,16 @@ def main [
 
     run-script "Initializing private data structure" ($scripts | path join "init-private-data.nu")
     run-script "Configuring local secrets autoload" ($scripts | path join "setup-secrets.nu")
+    run-script "Cleaning legacy direnv integration" ($scripts | path join "cleanup-direnv.nu")
 
-    run-script "Installing Neovim" ($scripts | path join "install-neovim.nu")
+    if $features.neovim {
+        run-script "Installing Neovim" ($scripts | path join "install-neovim.nu")
+    }
+
+    if $features.fonts and $install_gui {
+        run-script "Installing D2Coding font" ($scripts | path join "install-fonts.nu")
+    }
+
     if $features.rust or $features.julia {
         run-script "Installing Rust and Julia toolchains" ($scripts | path join "install-language-tools.nu")
     }
@@ -512,10 +528,18 @@ def main [
             run-script "Capturing VS Code settings" ($scripts | path join "capture-vscode-config.nu")
         }
 
+        if $features.rust or $features.julia {
+            run-script "Capturing language environment state" ($scripts | path join "capture-work-environment.nu")
+        }
+
         run-script "Recording initial sync writer" ($scripts | path join "write-sync-meta.nu") "--action" "initial"
     } else {
         section "Applying private cloud configuration"
         apply-private-source $data_root
+
+        if $features.rust or $features.julia {
+            run-script "Restoring language environment state" ($scripts | path join "restore-work-environment.nu")
+        }
 
         run-script "Configuring platform-specific paths" ($scripts | path join "setup-platform-shims.nu")
         run-script "Enabling Nushell dotfiles commands" ($scripts | path join "enable-nushell-dotfiles.nu")
@@ -545,7 +569,11 @@ def main [
         print "[skip] sync.enabled is false"
     }
 
+    if $features.cli_tools {
+    }
+
     run-script "Final environment check" ($scripts | path join "doctor.nu")
+    run-script "Showing post-setup checklist" ($scripts | path join "post-setup-checklist.nu")
 
     section "Setup complete"
 
@@ -559,6 +587,9 @@ def main [
     print "  dotstatus / dotsync / dotpush / dotpull"
     print "  dotsnapshot / dotrollback"
     print "  dotdoctor / dotupdate / dotreport / dotlog"
+    print "  dotversion / dotrepo / dotrelease / dotchecklist"
+    print ""
+    print "  dotcapture / dotrestoreenv"
     print "  dotconfig / dotsecrets"
     print "  dotgitlocal / dotsshlocal"
     print "  newproj"

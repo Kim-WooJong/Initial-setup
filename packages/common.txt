@@ -6,6 +6,5 @@ fd
 fzf
 bat
 zoxide
-direnv
 git-delta
 lazygit

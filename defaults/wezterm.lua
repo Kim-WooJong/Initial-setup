@@ -11,6 +11,14 @@ config.initial_cols = 120
 config.initial_rows = 32
 config.adjust_window_size_when_changing_font_size = false
 
+-- Initial-setup installs D2 Coding for GUI-oriented profiles.
+-- Existing private WezTerm configs are never overwritten by this default.
+config.font = wezterm.font_with_fallback {
+  'D2Coding',
+  'D2Coding ligature',
+  'Consolas',
+}
+
 config.window_padding = {
   left = 8,
   right = 8,

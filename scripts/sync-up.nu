@@ -71,6 +71,10 @@ def main [] {
         run-script $tools_root "create-snapshot.nu" "--label" "pre-push" "--quiet"
     }
 
+    if $context.features.rust or $context.features.julia {
+        run-script $tools_root "capture-work-environment.nu"
+    }
+
     print ("Private data: " + ($data_root | into string))
     print "[1/4] Updating managed chezmoi files..."
 

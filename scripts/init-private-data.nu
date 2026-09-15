@@ -67,6 +67,9 @@ def main [] {
     mkdir $data_root
     mkdir ($data_root | path join "home")
     mkdir ($data_root | path join "vscode")
+    mkdir ($data_root | path join "toolchains")
+    mkdir ($data_root | path join "toolchains" "rust")
+    mkdir ($data_root | path join "toolchains" "julia" "environments")
 
     let chezmoi_root = ($data_root | path join ".chezmoiroot")
 
@@ -132,6 +135,7 @@ def main [] {
     cp $module_source $module_target
 
     print $"[sync] Management module -> ($module_target)"
+
 
     let vscode_extensions = (
         $data_root

@@ -64,6 +64,16 @@ def main [
         ("OS             : " + $nu.os-info.name)
         ("Nushell        : " + $env.NU_VERSION)
         ("Git            : " + (first-version "git" ["--version"]))
+        (
+            "Git describe   : "
+            + (
+                if (($context.tools_root | path expand | path join ".git") | path exists) {
+                    ^git -C ($context.tools_root | path expand) describe --tags --always --dirty | str trim
+                } else {
+                    "not a Git checkout"
+                }
+            )
+        )
         ("Neovim         : " + (first-version "nvim" ["--version"]))
         ("chezmoi        : " + (first-version "chezmoi" ["--version"]))
         ("Starship       : " + (first-version "starship" ["--version"]))
@@ -73,6 +83,36 @@ def main [
         ("Julia          : " + (first-version "julia" ["--version"]))
         ("git-delta      : " + (first-version "delta" ["--version"]))
         ("lazygit        : " + (first-version "lazygit" ["--version"]))
+        (
+            "D2Coding       : "
+            + (
+                if (((nu-home) | path join ".config" "dotfiles" "fonts" "d2coding.nuon") | path exists) {
+                    "detected/installed"
+                } else {
+                    "not confirmed"
+                }
+            )
+        )
+        (
+            "Rust state     : "
+            + (
+                if (($context.data_root | path expand | path join "toolchains" "rust" "state.nuon") | path exists) {
+                    "captured"
+                } else {
+                    "not captured"
+                }
+            )
+        )
+        (
+            "Julia envs     : "
+            + (
+                if (($context.data_root | path expand | path join "toolchains" "julia" "environments") | path exists) {
+                    "captured"
+                } else {
+                    "not captured"
+                }
+            )
+        )
         ""
         "Synchronization"
         "---------------"

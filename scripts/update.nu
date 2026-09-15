@@ -260,7 +260,9 @@ def main [
 
         update-toolchains
         update-neovim-plugins
+        run-script "install-neovim.nu" | ignore
         run-script "install-cli-tools.nu" | ignore
+        run-script "capture-work-environment.nu" | ignore
     }
 
     if $do_all or $config {

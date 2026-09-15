@@ -225,6 +225,50 @@ export def dotrollback [
     }
 }
 
+export def dotversion [] {
+    ^nu (tool-script "version-info.nu")
+}
+
+export def dotrepo [] {
+    ^nu (tool-script "repo-status.nu")
+}
+
+export def dotrelease [
+    mode: string
+    requested: string = ""
+    --push
+    --no-tag
+] {
+    let script = (tool-script "release.nu")
+    mut args = [$script $mode]
+
+    if not ($requested | is-empty) {
+        $args = ($args | append $requested)
+    }
+
+    if $push {
+        $args = ($args | append "--push")
+    }
+
+    if $no_tag {
+        $args = ($args | append "--no-tag")
+    }
+
+    ^nu ...$args
+}
+
+export def dotchecklist [] {
+    ^nu (tool-script "post-setup-checklist.nu")
+}
+
+export def dotcapture [] {
+    ^nu (tool-script "sync-up.nu")
+}
+
+export def dotrestoreenv [] {
+    ^nu (tool-script "restore-work-environment.nu")
+}
+
 export def dotdoctor [
     --fix
 ] {

@@ -89,7 +89,6 @@ def main [
         "fzf"
         "bat"
         "zoxide"
-        "direnv"
         "delta"
         "lazygit"
         "rustup"
@@ -104,11 +103,17 @@ def main [
         }
     }
 
+    }
+
     let git_local = ((nu-home) | path join ".gitconfig.local")
     let ssh_local = ((nu-home) | path join ".ssh" "config.local")
     let secrets = ($nu.data-dir | path join "vendor" "autoload" "dotfiles-secrets.nu")
     let state = ((nu-home) | path join ".config" "dotfiles" "sync-state.nuon")
     let conflict = ((nu-home) | path join ".config" "dotfiles" "SYNC-CONFLICT.txt")
+    let sync_lock = ((nu-home) | path join ".config" "dotfiles" "locks" "auto-sync.lock")
+    let font_marker = ((nu-home) | path join ".config" "dotfiles" "fonts" "d2coding.nuon")
+    let rust_state = ($data_root | path join "toolchains" "rust" "state.nuon")
+    let julia_envs = ($data_root | path join "toolchains" "julia" "environments")
 
     if ($git_local | path exists) {
         print "[ok] Git machine-local override exists"
@@ -128,6 +133,30 @@ def main [
         print "[--] Machine-local secrets autoload missing"
     }
 
+    if $context.features.fonts {
+        if ($font_marker | path exists) {
+            print "[ok] D2Coding installation marker exists"
+        } else {
+            print "[--] D2Coding installation marker missing"
+        }
+    }
+
+    if $context.features.rust {
+        if ($rust_state | path exists) {
+            print "[ok] Captured Rust toolchain state exists"
+        } else {
+            print "[--] Captured Rust toolchain state missing"
+        }
+    }
+
+    if $context.features.julia {
+        if ($julia_envs | path exists) {
+            print "[ok] Julia environment metadata directory exists"
+        } else {
+            print "[--] Julia environment metadata missing"
+        }
+    }
+
     if ($state | path exists) {
         let sync_state = (open $state)
         print ("[ok] Last sync: " + ($sync_state.last_sync? | default "unknown"))
@@ -142,6 +171,12 @@ def main [
         print "[ok] No automatic sync conflict"
     }
 
+    if ($sync_lock | path exists) {
+        print "[info] Automatic sync lock currently exists"
+    } else {
+        print "[ok] No automatic sync lock"
+    }
+
     if $fix {
         print ""
         print "Repair"
@@ -152,6 +187,15 @@ def main [
         run-script $tools_root "enable-nushell-dotfiles.nu" | ignore
         run-script $tools_root "setup-local-overrides.nu" | ignore
         run-script $tools_root "setup-secrets.nu" | ignore
+        run-script $tools_root "cleanup-direnv.nu" | ignore
+
+        if $context.features.neovim {
+            run-script $tools_root "install-neovim.nu" | ignore
+        }
+
+        if $context.features.fonts and $context.machine.install_gui_apps {
+            run-script $tools_root "install-fonts.nu" | ignore
+        }
 
         if $context.features.cli_tools {
             run-script $tools_root "install-cli-tools.nu" | ignore

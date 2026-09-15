@@ -86,6 +86,10 @@ def main [] {
         }
     }
 
+    if $context.features.rust or $context.features.julia {
+        run-script $tools_root "restore-work-environment.nu"
+    }
+
     if $context.features.vscode {
         print "[2/4] Applying VS Code settings..."
         run-script $tools_root "apply-vscode-config.nu"

@@ -63,7 +63,8 @@ def main [] {
     }
 
     let import_line = "use ~/.config/nushell/modules/dotfiles.nu *"
-    let current = (open --raw $config_file)
+    mut current = (open --raw $config_file)
+    $current = ($current | lines | where { |line| not ($line | str contains "source ~/.config/nushell/modules/direnv.nu") } | where { |line| not ($line | str contains "# direnv integration") } | str join (char nl))
 
     if not ($current | str contains $import_line) {
         let separator = (
@@ -74,7 +75,7 @@ def main [] {
             }
         )
 
-        (
+        $current = (
             $current
             + $separator
             + "# Dotfiles management"
@@ -82,12 +83,10 @@ def main [] {
             + $import_line
             + (char nl)
         )
-        | save --force $config_file
-
-        print $"[update] ($config_file)"
-    } else {
-        print "[ok] Dotfiles module already enabled"
     }
+
+    $current | save --force $config_file
+    print $"[update] ($config_file)"
 
     let args = [
         "--source"

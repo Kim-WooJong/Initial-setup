@@ -121,10 +121,7 @@ def linux-has-gui [] {
         | default ""
     )
 
-    not (
-        ($display | is-empty)
-        and ($wayland | is-empty)
-    )
+    not (($display | is-empty) and ($wayland | is-empty))
 }
 
 def install-linux [] {

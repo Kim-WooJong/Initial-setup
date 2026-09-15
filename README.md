@@ -1,57 +1,57 @@
-# Initial-setup v0.7.3
+# Initial-setup v0.8.8
 
-A cross-platform development environment manager for Windows, macOS, and Linux.
+Windows, macOS, Linux에서 개인 개발 환경을 빠르게 구성하고, 여러 컴퓨터의 설정을 자동으로 동기화하기 위한 크로스플랫폼 환경 관리 도구입니다.
 
-`Initial-setup` is designed to bootstrap a new machine quickly and keep personal development configuration synchronized across multiple computers.
-
-The overall workflow is:
+`Initial-setup`의 목표는 다음과 같습니다.
 
 ```text
-New computer
+새 컴퓨터
    ↓
-Run setup.nu
+setup.nu 실행
    ↓
-Install/configure development tools
+개발 도구 / 설정 구성
    ↓
-Restore personal configuration from Private Cloud
+Private Cloud에서 개인 설정 복원
    ↓
-Future configuration changes are synchronized automatically
+이후 설정 변경은 자동 동기화
 ```
 
-The public Git repository contains only installation and management scripts. Personal configuration is stored outside the repository in a Private Cloud-synchronized directory.
+공개 Git 저장소에는 **설치 및 관리 스크립트만** 저장하고, 실제 개인 설정은 저장소 바깥의 Private Cloud 폴더에서 관리합니다.
 
 ---
 
-# 1. Main Features
+## 주요 기능
 
-- Windows / macOS / Linux support
-- Nushell-centered setup workflow
-- chezmoi-based dotfiles management
-- Bidirectional automatic configuration synchronization across machines
-- SHA-256-based local/cloud change detection
-- Conflict-safe synchronization
-- Full Neovim configuration synchronization
-- Nushell configuration synchronization
-- WezTerm / Starship configuration synchronization
-- VS Code settings and extension synchronization
-- Shared and machine-local Git / SSH configuration separation
-- Rust / Julia development environment setup
-- Manifest-based CLI tool installation
-- Snapshot / rollback support
-- Environment diagnostics and automatic repair
-- Development environment update command
-- Synchronization logs and environment reports
-- Machine-local secrets management
-- Rust / Julia / Python project bootstrap
-- Workstation / Laptop / Server / Minimal machine profiles
+- Windows / macOS / Linux 지원
+- Nushell 중심의 단일 setup workflow
+- chezmoi 기반 dotfiles 관리
+- 여러 PC 간 양방향 자동 설정 동기화
+- SHA-256 기반 local/cloud 변경 감지
+- 동시 수정 시 conflict-safe 동작
+- Neovim 전체 설정 동기화
+- Nushell 설정 동기화
+- WezTerm / Starship 설정 동기화
+- VS Code 설정 및 확장 프로그램 동기화
+- Git / SSH 공통 설정과 머신별 설정 분리
+- Rust / Julia 개발 환경 구성
+- CLI 도구 manifest 기반 설치
+- Snapshot / Rollback
+- 환경 검사 및 자동 복구
+- 개발 환경 업데이트
+- 동기화 로그 / 환경 리포트
+- 머신별 secret 분리
+- Rust / Julia / Python 프로젝트 bootstrap
+- Workstation / Laptop / Server / Minimal profile
 
 ---
 
-# 2. Recommended Directory Layout
+# 1. 기본 구조
+
+권장 디렉터리 구조는 다음과 같습니다.
 
 ```text
 PRIVATE-CLOUD-FOLDER/
-├─ Initial-setup/               # GitHub repository
+├─ Initial-setup/               # GitHub 저장소
 │  ├─ VERSION
 │  ├─ setup.nu
 │  ├─ bootstrap.ps1
@@ -130,65 +130,67 @@ PRIVATE-CLOUD-FOLDER/
    └─ snippets/
 ```
 
-`home/`, `vscode/`, and `.chezmoiroot` are siblings of the `Initial-setup` repository, so personal configuration is structurally outside the Git repository and cannot accidentally be committed with `git add .`.
+`home/`, `vscode/`, `.chezmoiroot`는 `Initial-setup` Git 저장소 밖에 있기 때문에 개인 설정이 실수로 GitHub에 올라가는 것을 방지합니다.
 
 ---
 
-# 3. Installation
+# 2. 설치
 
-## If Nushell / Git / Neovim / chezmoi are already installed
+## 이미 Nushell / Git / Neovim / chezmoi가 설치되어 있는 경우
 
-Run from the repository root:
+저장소 루트에서:
 
 ```nu
 nu setup.nu
 ```
 
-For the first authoritative machine:
+를 실행하면 됩니다.
+
+첫 번째 기준 컴퓨터라면:
 
 ```nu
 nu setup.nu --mode initial
 ```
 
-For another machine where the Private Cloud source has already synchronized:
+다른 컴퓨터에서 Private Cloud의 설정을 내려받아 구성하는 경우:
 
 ```nu
 nu setup.nu --mode existing
 ```
 
-`auto` is the default mode, so in most cases:
+`auto`가 기본값이므로 일반적으로는:
 
 ```nu
 nu setup.nu
 ```
 
-is sufficient. The setup script checks whether a private source already exists and chooses the appropriate mode.
+만 실행하면 기존 private source 존재 여부를 기준으로 자동 판단합니다.
 
 ---
 
-## Fresh Windows Machine
+## 완전히 새로운 Windows PC
 
-Open PowerShell in the repository directory:
+PowerShell에서:
 
 ```powershell
 .\bootstrap.ps1
 ```
 
-First machine:
+또는:
 
 ```powershell
 .\bootstrap.ps1 -Mode initial
 ```
 
-Additional machine:
+추가 컴퓨터:
 
 ```powershell
 .\bootstrap.ps1 -Mode existing
 ```
 
-`bootstrap.ps1` installs the core prerequisites required to run `setup.nu`.
+`bootstrap.ps1`은 setup을 실행하기 위한 핵심 prerequisite를 먼저 설치합니다.
 
-Typical prerequisites include:
+대표적으로:
 
 - Git
 - Nushell
@@ -196,7 +198,7 @@ Typical prerequisites include:
 - chezmoi
 - VS Code
 
-After the prerequisites are available, the bootstrap script invokes `setup.nu`.
+를 준비한 뒤 `setup.nu`를 실행합니다.
 
 ---
 
@@ -207,13 +209,13 @@ chmod +x bootstrap.sh
 ./bootstrap.sh
 ```
 
-First machine:
+첫 컴퓨터:
 
 ```sh
 ./bootstrap.sh --mode initial
 ```
 
-Additional machine:
+추가 컴퓨터:
 
 ```sh
 ./bootstrap.sh --mode existing
@@ -221,9 +223,11 @@ Additional machine:
 
 ---
 
-# 4. Machine Profiles
+# 3. Machine Profile
 
-The following profiles are supported:
+V0.7.x부터 profile을 실제 기능 설정과 연결합니다.
+
+지원 profile:
 
 ```text
 workstation
@@ -232,7 +236,7 @@ server
 minimal
 ```
 
-Example:
+예:
 
 ```nu
 nu setup.nu --profile workstation
@@ -244,7 +248,7 @@ nu setup.nu --profile server
 
 ## workstation
 
-Full GUI-oriented development environment.
+GUI 개발 환경 전체를 구성합니다.
 
 ```text
 VS Code
@@ -259,11 +263,11 @@ SSH
 
 ## laptop
 
-Similar to `workstation`. Individual features can be adjusted in the machine-local `config.nuon`.
+기본적으로 workstation과 비슷한 구성을 사용하며, 필요에 따라 머신별 `config.nuon`에서 기능을 조절할 수 있습니다.
 
 ## server
 
-CLI-oriented server environment without desktop applications.
+GUI 프로그램을 제외한 서버 작업 환경을 구성합니다.
 
 ```text
 Nushell
@@ -278,39 +282,41 @@ Julia
 
 ## minimal
 
-Minimal shell/editor-oriented environment with heavier toolchains and GUI applications disabled.
+최소한의 CLI 작업 환경을 구성합니다.
 
 ---
 
-# 5. Dry Run
+# 4. Dry Run
 
-To inspect what setup would do without changing files, packages, or scheduler entries:
+실제 변경 전에 setup이 무엇을 수행할지 확인할 수 있습니다.
 
 ```nu
 nu setup.nu --dry-run
 ```
 
-Example:
+예:
 
 ```nu
 nu setup.nu --profile server --dry-run
 ```
 
+Dry-run에서는 파일, 패키지, scheduler를 변경하지 않습니다.
+
 ---
 
-# 6. Machine-local Configuration
+# 5. Machine-local 설정
 
-Each machine stores its own configuration in:
+각 컴퓨터에는 다음 파일이 생성됩니다.
 
 ```text
 ~/.config/dotfiles/config.nuon
 ```
 
-Example:
+예:
 
 ```nu
 {
-    version: "0.7.3"
+    version: "0.8.8"
 
     data_root: "..."
     tools_root: "..."
@@ -349,30 +355,30 @@ Example:
 }
 ```
 
-Edit it with:
+편집:
 
 ```nu
 dotconfig
 ```
 
-After changing scheduler interval, profile, or feature-related values, rerun:
+scheduler interval이나 profile, feature 설정을 변경한 경우:
 
 ```nu
 nu setup.nu
 ```
 
-so the installed environment and scheduler can be reconciled.
+를 다시 실행하는 것을 권장합니다.
 
 ---
 
-# 7. Automatic Synchronization
+# 6. 자동 동기화
 
-The synchronization model is:
+자동 동기화의 기본 구조:
 
 ```text
-Edit config on PC A
+PC A에서 config 수정
         ↓
-Local fingerprint changes
+Local fingerprint 변경
         ↓
 auto-sync
         ↓
@@ -380,24 +386,24 @@ chezmoi re-add
         ↓
 Private Cloud source
         ↓
-Cloud client synchronization
+Cloud client
         ↓
 PC B / PC C
         ↓
-Cloud fingerprint changes
+Cloud fingerprint 변경
         ↓
 chezmoi apply
         ↓
-Latest configuration becomes active
+최신 config 반영
 ```
 
-Default polling interval:
+기본 주기:
 
 ```nu
 interval_minutes: 1
 ```
 
-Platform schedulers:
+운영체제별 scheduler:
 
 - Windows: Task Scheduler
 - Linux: systemd user timer
@@ -405,35 +411,37 @@ Platform schedulers:
 
 ---
 
-# 8. Conflict Handling
+# 7. Conflict 처리
 
-If both Local and Cloud have changed since the last successful synchronization, the system does not silently overwrite either side.
+마지막 정상 동기화 이후 Local과 Cloud가 모두 변경된 경우 자동으로 어느 한쪽을 덮어쓰지 않습니다.
 
-Recommended default:
+기본값:
 
 ```nu
 conflict_policy: "stop"
 ```
 
-When a conflict is detected, the following file is created:
+Conflict가 발생하면:
 
 ```text
 ~/.config/dotfiles/SYNC-CONFLICT.txt
 ```
 
-To make the current local configuration authoritative:
+가 생성됩니다.
+
+Local 설정을 기준으로 해결:
 
 ```nu
 dotpush
 ```
 
-To make the cloud configuration authoritative:
+Cloud 설정을 기준으로 해결:
 
 ```nu
 dotpull
 ```
 
-Supported policies:
+지원 정책:
 
 ```text
 stop
@@ -441,17 +449,17 @@ prefer_local
 prefer_cloud
 ```
 
-For normal use, `stop` is recommended.
+일반적인 사용에서는 `stop`을 권장합니다.
 
 ---
 
-# 9. Synchronization Status
+# 8. 동기화 상태
 
 ```nu
 dotstatus
 ```
 
-Example output:
+예:
 
 ```text
 Automatic Sync
@@ -472,25 +480,25 @@ Cloud         : clean
 Conflict      : none
 ```
 
-Run one synchronization cycle immediately:
+즉시 자동 동기화 cycle 실행:
 
 ```nu
 dotsync
 ```
 
-Force local configuration to become authoritative:
+현재 Local을 기준으로 강제 push:
 
 ```nu
 dotpush
 ```
 
-Force cloud configuration to become authoritative:
+Cloud를 기준으로 강제 pull:
 
 ```nu
 dotpull
 ```
 
-Show chezmoi differences:
+chezmoi diff:
 
 ```nu
 dotdiff
@@ -498,7 +506,7 @@ dotdiff
 
 ---
 
-# 10. Synchronized Configuration
+# 9. 동기화 대상
 
 ## Nushell
 
@@ -511,9 +519,9 @@ autoload/
 
 ## Neovim
 
-The complete Neovim configuration directory is managed.
+전체 config directory를 관리합니다.
 
-Example:
+예:
 
 ```text
 ~/.config/nvim/
@@ -522,15 +530,15 @@ Example:
 └─ lazy-lock.json
 ```
 
-On Windows, the native Neovim configuration directory may differ from the canonical synchronized path. Initial-setup creates a platform shim when required.
+Windows에서는 실제 Neovim config 경로와 canonical config 경로가 다른 경우 platform shim을 사용합니다.
 
-Windows paths written into Lua use forward slashes:
+Lua shim 안의 Windows 경로는:
 
 ```lua
 C:/Users/name/.config/nvim
 ```
 
-rather than raw backslashes.
+처럼 `/`를 사용합니다.
 
 ## WezTerm
 
@@ -546,47 +554,47 @@ rather than raw backslashes.
 
 ## Git
 
-Shared:
+공통 설정:
 
 ```text
 ~/.gitconfig
 ```
 
-Machine-local:
+머신별 설정:
 
 ```text
 ~/.gitconfig.local
 ```
 
-Edit the machine-local file:
+편집:
 
 ```nu
 dotgitlocal
 ```
 
-The shared `.gitconfig` includes the local file.
+공통 `.gitconfig`에서 local config를 include합니다.
 
 ## SSH
 
-Shared:
+공통:
 
 ```text
 ~/.ssh/config
 ```
 
-Machine-local:
+머신별:
 
 ```text
 ~/.ssh/config.local
 ```
 
-Edit:
+편집:
 
 ```nu
 dotsshlocal
 ```
 
-SSH private keys are not synchronized.
+SSH private key는 동기화하지 않습니다.
 
 ## Rust
 
@@ -602,7 +610,7 @@ SSH private keys are not synchronized.
 
 ## VS Code
 
-Synchronized state:
+동기화 항목:
 
 ```text
 settings.json
@@ -611,13 +619,13 @@ snippets/
 extensions.txt
 ```
 
-The extension list is authoritative rather than additive. Extensions removed from the authoritative machine can therefore be removed on other machines as well.
+확장 프로그램은 단순 추가가 아니라 authoritative machine의 목록과 동일하게 맞춥니다.
 
 ---
 
-# 11. Package Manifests
+# 10. Package Manifest
 
-CLI package definitions are separated from installation logic.
+CLI package 목록은 installer와 분리되어 있습니다.
 
 ```text
 packages/
@@ -627,7 +635,7 @@ packages/
 └─ linux.txt
 ```
 
-Default common tools:
+기본 공통 도구:
 
 ```text
 ripgrep
@@ -640,104 +648,104 @@ git-delta
 lazygit
 ```
 
-To add another standard CLI tool, updating the manifest is preferred over hardcoding package installation directly into the installer script.
+새 CLI 프로그램을 공통 환경에 추가하려면 manifest를 수정하는 방식이 권장됩니다.
 
 ---
 
-# 12. Snapshots
+# 11. Snapshot
 
-Create a manual snapshot:
+수동 snapshot:
 
 ```nu
 dotsnapshot
 ```
 
-Create a named snapshot:
+이름 지정:
 
 ```nu
 dotsnapshot --label before-nvim-change
 ```
 
-Snapshots are stored locally under:
+기본 저장 위치:
 
 ```text
 ~/.config/dotfiles/snapshots/
 ```
 
-Default retention:
+Snapshot은 머신 로컬에 보관합니다.
+
+기본 보존 개수:
 
 ```nu
 snapshot_keep: 20
 ```
 
-`dotpush` automatically creates a `pre-push` snapshot before updating the private cloud source.
-
-Snapshots are intentionally machine-local.
+`dotpush` 실행 전에도 자동으로 `pre-push` snapshot을 생성합니다.
 
 ---
 
-# 13. Rollback
+# 12. Rollback
 
-List available snapshots:
+Snapshot 목록:
 
 ```nu
 dotrollback --list
 ```
 
-Restore the latest snapshot:
+가장 최근 snapshot 복원:
 
 ```nu
 dotrollback
 ```
 
-Restore a specific snapshot:
+특정 snapshot:
 
 ```nu
 dotrollback --snapshot 20260912-031500-before-nvim-change
 ```
 
-Before rollback, the current state is preserved as a `pre-rollback` snapshot.
+Rollback 전에도 현재 상태를 `pre-rollback` snapshot으로 보존합니다.
 
 ---
 
-# 14. Doctor
+# 13. Doctor
 
-Run environment diagnostics:
+환경 검사:
 
 ```nu
 dotdoctor
 ```
 
-Run the repair pass:
+자동 복구:
 
 ```nu
 dotdoctor --fix
 ```
 
-The repair pass can restore or reconfigure:
+복구 대상에는 다음이 포함됩니다.
 
-- Private source structure
-- Neovim / Nushell platform shims
-- Nushell management module
-- Git / SSH machine-local overrides
-- Machine-local secrets autoload
+- private source 구조
+- Neovim / Nushell platform shim
+- Nushell 관리 module
+- Git / SSH local override
+- machine-local secrets
 - CLI tools
 - Starship
 - WezTerm
-- Synchronization baseline
-- Automatic synchronization scheduler
+- sync baseline
+- auto-sync scheduler
 
 ---
 
-# 15. Environment Update
+# 14. Update
 
-Update the development environment:
+전체 개발 환경 업데이트:
 
 ```nu
 dotupdate
 ```
 
-Specific categories:
+세부 옵션:
 
 ```nu
 dotupdate --repo
@@ -746,75 +754,73 @@ dotupdate --config
 dotupdate --all
 ```
 
-Depending on the operating system and installed tools, this may update:
+대상에는 환경에 따라 다음이 포함됩니다.
 
 - Initial-setup Git repository
-- Winget / Homebrew / Linux package-manager tools
+- Winget / Homebrew / Linux package manager 도구
 - rustup
 - juliaup
 - Neovim Lazy plugins
-- Private configuration
-- Environment diagnostics
+- private config apply
+- doctor
 
-A snapshot is created before the update process.
+업데이트 전에는 snapshot을 생성합니다.
 
 ---
 
-# 16. Synchronization Log
+# 15. 동기화 Log
 
-Automatic synchronization events are written to:
+자동 sync 관련 이벤트는 다음 위치에 기록됩니다.
 
 ```text
 ~/.config/dotfiles/logs/sync.log
 ```
 
-Show recent log entries:
+최근 로그:
 
 ```nu
 dotlog
 ```
 
-Show more lines:
+200줄:
 
 ```nu
 dotlog --lines 200
 ```
 
-Clear the log:
+로그 초기화:
 
 ```nu
 dotlog --clear
 ```
 
-Default maximum number of retained lines:
+기본 최대 보존 줄 수:
 
 ```nu
 log_keep_lines: 2000
 ```
 
-The log is machine-local.
-
 ---
 
-# 17. Environment Report
+# 16. Environment Report
 
-Show a diagnostic environment report:
+현재 머신의 환경을 정리해서 출력:
 
 ```nu
 dotreport
 ```
 
-Save the report:
+파일로 저장:
 
 ```nu
 dotreport --save
 ```
 
-The report includes information such as:
+대표적으로 다음 정보를 포함합니다.
 
 - Initial-setup version
-- Operating system
-- Machine profile
+- OS
+- machine profile
 - Nushell
 - Git
 - Neovim
@@ -826,41 +832,41 @@ The report includes information such as:
 - Julia
 - git-delta
 - lazygit
-- Synchronization state
-- Last writer
-- Conflict state
+- sync 상태
+- 마지막 writer
+- conflict 상태
 
-This is useful when comparing environments or debugging a machine-specific issue.
+문제가 발생했을 때 `dotreport` 결과를 이용하면 환경 비교가 쉽습니다.
 
 ---
 
-# 18. Machine-local Secrets
+# 17. Machine-local Secrets
 
-Secrets are intentionally excluded from Private Cloud synchronization.
+Secret은 Private Cloud에 동기화하지 않습니다.
 
-Initial-setup creates a machine-local Nushell autoload file:
+Initial-setup은 Nushell의 machine-local autoload를 사용합니다.
 
 ```text
 $nu.data-dir/vendor/autoload/dotfiles-secrets.nu
 ```
 
-Edit it with:
+편집:
 
 ```nu
 dotsecrets
 ```
 
-Example:
+예:
 
 ```nu
 $env.MY_API_KEY = "..."
 ```
 
-Avoid storing API keys, passwords, or tokens directly in the synchronized `env.nu` unless that is explicitly intended.
+공용 `env.nu`에 API key나 token을 직접 넣지 않는 것을 권장합니다.
 
 ---
 
-# 19. Project Bootstrap
+# 18. Project Bootstrap
 
 ## Rust
 
@@ -886,7 +892,7 @@ newproj python quick-analysis
 newproj generic my-project
 ```
 
-Specify another base directory:
+특정 위치:
 
 ```nu
 newproj rust my-tool --path D:/Projects
@@ -894,9 +900,9 @@ newproj rust my-tool --path D:/Projects
 
 ---
 
-# 20. Main Commands
+# 19. 주요 명령어
 
-## Synchronization
+## Sync
 
 ```text
 dotstatus
@@ -922,7 +928,7 @@ dotreport
 dotlog
 ```
 
-## Machine-local Configuration
+## Machine-local
 
 ```text
 dotconfig
@@ -931,7 +937,7 @@ dotgitlocal
 dotsshlocal
 ```
 
-## Managed Configuration
+## Managed configuration
 
 ```text
 dotnvim
@@ -941,13 +947,13 @@ dotwezterm
 dotstarship
 ```
 
-## Project Bootstrap
+## Project
 
 ```text
 newproj
 ```
 
-## Locations
+## Directory
 
 ```text
 dotdata
@@ -956,21 +962,23 @@ dottools
 
 ---
 
-# 21. Version Management
+# 20. Version
 
-The project version is stored in the repository-root file:
+프로젝트 버전은 저장소 루트의:
 
 ```text
 VERSION
 ```
 
-For v0.7.2:
+파일을 기준으로 관리합니다.
+
+V0.7.2:
 
 ```text
 0.7.2
 ```
 
-When reading the version from Nushell, convert raw file contents to UTF-8 text explicitly:
+Nushell에서 버전을 읽을 때는 UTF-8 문자열로 변환하여 사용하는 것이 안전합니다.
 
 ```nu
 def app-version [] {
@@ -979,25 +987,25 @@ def app-version [] {
 }
 ```
 
-Project components should read the version from `VERSION` whenever possible instead of duplicating the same version string across multiple files.
+프로젝트 내 표시용 버전은 가능한 한 `VERSION` 파일을 기준으로 읽고, 여러 파일에 동일 버전 문자열을 중복 하드코딩하지 않는 구조를 권장합니다.
 
-Git tags and an automated release workflow can be added separately as a future release-management feature.
+Git tag / 자동 release workflow는 별도 릴리스 관리 기능으로 확장할 수 있습니다.
 
 ---
 
-# 22. Nushell Compatibility Guidelines
+# 21. Nushell 작성 규칙
 
-This project targets real-world Nushell 0.109 behavior and avoids syntax patterns that caused parser issues during development.
+이 프로젝트는 Nushell 0.109 계열에서 실제로 발생한 parser 차이를 고려합니다.
 
-## Keep custom command positional arguments on the same physical line
+특히 custom command의 positional argument는 다음처럼 한 줄로 작성하는 방식을 권장합니다.
 
-Recommended:
+권장:
 
 ```nu
 run-program ("Install " + $name) "winget" $args
 ```
 
-Avoid:
+피해야 하는 형태:
 
 ```nu
 run-program
@@ -1006,19 +1014,17 @@ run-program
     $args
 ```
 
-## Keep boolean expressions on one physical line when practical
+Boolean expression도 가능한 한 한 물리적 줄에 유지합니다.
 
-Recommended:
+권장:
 
 ```nu
 | where { |line| not ($line | is-empty) and not ($line | str starts-with "#") }
 ```
 
-Avoid splitting `and` or `or` onto a new physical line if it may be parsed as a separate command.
+Custom command가 positional argument를 받도록 정의되어 있다면 pipeline input으로 암묵적으로 전달하지 않습니다.
 
-## Do not assume pipeline input fills positional custom-command parameters
-
-Given:
+예:
 
 ```nu
 def xml-escape [value: string] {
@@ -1027,84 +1033,66 @@ def xml-escape [value: string] {
 }
 ```
 
-Use:
+호출:
 
 ```nu
 let value = (xml-escape ($path | into string))
 ```
 
-rather than:
-
-```nu
-$path | into string | xml-escape
-```
-
-unless the command is explicitly written to consume `$in`.
-
-## Avoid Bash-style line continuation
-
-Do not use:
-
-```text
-\
-```
-
-as a line continuation character in Nushell.
-
-## Avoid `complete | str trim` for Windows package-manager output
-
-Some Windows CLIs such as Winget may produce binary output. Installer scripts therefore prefer direct execution and `$env.LAST_EXIT_CODE`.
+Windows CLI의 binary output 문제를 피하기 위해 `winget` 등의 installer command에서는 `complete | str trim` 패턴을 사용하지 않습니다.
 
 ---
 
-# 23. Recommended Daily Workflow
+# 22. 권장 운영 방식
 
-Normally, edit configuration directly.
+평소에는 config 파일을 일반적으로 수정하면 됩니다.
 
-For example:
+예:
 
 ```nu
 nvim ~/.config/nushell/config.nu
 ```
 
-or:
+또는:
 
 ```nu
 nvim ~/.config/nvim/init.lua
 ```
 
-Automatic synchronization detects the change.
+자동 sync가 변경을 감지합니다.
 
-Typical flow:
+일반적인 운영 흐름:
 
 ```text
-Edit configuration
+config 수정
    ↓
-Local change detected within about 1 minute
+1분 이내 local 변경 감지
    ↓
-Private source updated
+private source update
    ↓
-Cloud client synchronizes the directory
+cloud client sync
    ↓
-Other machines detect the cloud change
+다른 PC에서 cloud 변경 감지
    ↓
-Configuration is applied automatically
+자동 apply
 ```
 
-Under normal operation, `dotpush` and `dotpull` should not be required frequently. They are mainly useful for explicit conflict resolution or forced synchronization.
+따라서 정상적인 환경에서는 `dotpush`와 `dotpull`을 자주 사용할 필요가 없습니다.
+
+이 두 명령은 주로 conflict 해결이나 강제 동기화에 사용합니다.
 
 ---
 
-# 24. Current Project Stage
+# 23. 현재 단계
 
-v0.7.2 provides the core functionality required for personal cross-machine development environment synchronization.
+V0.7.2는 기본적인 개인 작업환경 동기화 기능이 갖춰진 단계입니다.
 
-Current scope:
+현재 핵심 범위:
 
 ```text
 Bootstrap
 Configuration management
-Cross-machine synchronization
+Cross-machine sync
 Conflict protection
 Recovery
 Maintenance
@@ -1114,13 +1102,308 @@ Local secrets
 Project bootstrap
 ```
 
-The next stage should focus more on stabilization than on adding many new features.
+향후에는 기능 추가보다 다음 항목을 우선하는 것이 권장됩니다.
 
-Recommended priorities:
+- Windows / macOS / Linux 실제 통합 테스트
+- Nushell parser compatibility 안정화
+- Git 기반 release workflow
+- VERSION 단일 원본화
+- CI 기반 syntax / regression 검사
+- V1.0 release 후보 안정화
 
-- Real integration testing on Windows / macOS / Linux
-- Nushell parser compatibility hardening
-- Git-based release workflow
-- Full VERSION single-source-of-truth cleanup
-- CI-based syntax and regression checks
-- Stabilization toward a v1.0 release candidate
+---
+
+# Nushell Home Directory Compatibility
+
+Different Nushell releases may expose the user's home directory as either:
+
+```nu
+$nu.home-path
+```
+
+or:
+
+```nu
+$nu.home-dir
+```
+
+Initial-setup v0.7.3 no longer accesses either field directly.
+
+Every Nushell script that requires the home directory uses the same resolver:
+
+```nu
+def nu-home [] {
+    let home_path = ($nu | get --optional home-path)
+
+    if $home_path != null {
+        return $home_path
+    }
+
+    let home_dir = ($nu | get --optional home-dir)
+
+    if $home_dir != null {
+        return $home_dir
+    }
+
+    error make {
+        msg: "Unable to determine the Nushell home directory."
+    }
+}
+```
+
+This allows the same scripts to work with Nushell versions that provide
+`home-path` as well as versions that provide `home-dir`.
+
+Direct references to `$nu.home-path` and `$nu.home-dir` are prohibited by the
+release audit so that new scripts do not accidentally reintroduce a
+version-specific dependency.
+
+
+
+---
+
+# Work Environment Reproduction (v0.8.0)
+
+v0.8.0 expands Initial-setup from configuration synchronization toward
+reproducing the development environment itself.
+
+## Neovim
+
+Neovim is now an explicit setup feature and is installed before Neovim
+configuration and platform shims are applied.
+
+It is enabled by default for workstation, laptop, server, and minimal
+profiles.
+
+## D2 Coding
+
+GUI-oriented profiles install D2 Coding automatically when possible.
+
+```nu
+features: {
+    fonts: true
+}
+```
+
+Font binaries are not stored in this repository. Initial-setup uses the
+official D2 Coding installation scripts and uses Homebrew's `font-d2coding`
+cask on macOS when available.
+
+New default WezTerm configurations prefer D2Coding. Existing private WezTerm
+configuration is not overwritten.
+
+## Rust state
+
+Initial-setup captures and restores:
+
+- rustup toolchains
+- default toolchain
+- optional components such as clippy, rustfmt, rust-src and rust-analyzer
+- installed compilation targets
+
+State is stored in:
+
+```text
+PRIVATE-CLOUD-FOLDER/toolchains/rust/state.nuon
+```
+
+## Julia environments
+
+Initial-setup synchronizes Julia environment definitions without copying the
+entire Julia depot/cache.
+
+Only `Project.toml` and `Manifest.toml` files from
+`~/.julia/environments/` are captured.
+
+```text
+PRIVATE-CLOUD-FOLDER/toolchains/julia/environments/
+```
+
+Registries, package caches, compiled caches, and downloaded artifacts remain
+local.
+
+## Commands
+
+Capture the current work environment and publish it:
+
+```nu
+dotcapture
+```
+
+Restore Rust and Julia environment metadata:
+
+```nu
+dotrestoreenv
+```
+
+`dotpush` also captures Rust and Julia state automatically.
+
+## Post-setup checklist
+
+Setup now reports intentionally machine-local or authenticated state that may
+still require attention:
+
+- Git identity
+- SSH private keys
+- local API tokens/secrets
+- Private Cloud login
+- Git hosting authentication
+- VS Code account-backed services
+- Julia environment instantiation
+- D2Coding availability
+
+SSH private keys and secrets remain intentionally outside automatic cloud
+synchronization.
+
+## Private data additions
+
+```text
+PRIVATE-CLOUD-FOLDER/
+├─ home/
+├─ vscode/
+└─ toolchains/
+   ├─ rust/
+   │  └─ state.nuon
+   └─ julia/
+      └─ environments/
+         └─ <environment>/
+            ├─ Project.toml
+            └─ Manifest.toml
+```
+
+Snapshots and rollback now include `toolchains/`.
+
+
+---
+
+# Git and Release Convenience (v0.8.1)
+
+v0.8.1 focuses on operational stability and repository maintenance.
+
+## Preventing overlapping automatic sync runs
+
+Scheduled synchronization now uses a machine-local lock wrapper.
+
+```text
+auto-sync.nu
+  ├─ acquire lock
+  ├─ run auto-sync-worker.nu
+  └─ release lock
+```
+
+A lock older than 10 minutes is treated as stale and removed automatically.
+
+```text
+~/.config/dotfiles/locks/auto-sync.lock
+```
+
+## Version information
+
+```nu
+dotversion
+```
+
+Shows the repository `VERSION`, Git branch, Git describe result, working-tree
+state, and origin URL when available.
+
+## Repository status
+
+```nu
+dotrepo
+```
+
+Shows Initial-setup Git status and remotes.
+
+## Release helper
+
+Patch release:
+
+```nu
+dotrelease patch
+```
+
+Minor release:
+
+```nu
+dotrelease minor
+```
+
+Major release:
+
+```nu
+dotrelease major
+```
+
+Explicit version:
+
+```nu
+dotrelease set 0.9.0
+```
+
+The release helper requires a clean Git working tree, updates `VERSION`,
+adds a CHANGELOG entry, commits the release, and creates an annotated tag.
+
+Remote publication is explicit:
+
+```nu
+dotrelease patch --push
+```
+
+Without `--push`, no remote push occurs.
+
+To skip tag creation:
+
+```nu
+dotrelease patch --no-tag
+```
+
+## Checklist
+
+```nu
+dotchecklist
+```
+
+Reruns the post-setup checklist for SSH keys, Git identity, secrets, cloud
+login, and other intentionally machine-local state.
+
+---
+
+# direnv Policy (v0.8.8)
+
+`direnv` is no longer installed, configured, hooked, or validated by
+Initial-setup.
+
+The core environment manager already covers Nushell, Neovim, WezTerm,
+Starship, VS Code, Git/SSH, Rust, Julia, chezmoi, local secrets, and
+cross-machine synchronization. `direnv` is optional and only needed when a
+project explicitly depends on `.envrc`.
+
+Removing it from the default stack avoids Windows-specific XDG path side
+effects and Nushell command/hook conflicts.
+
+## Upgrade migration
+
+During `nu setup.nu`, Initial-setup removes only legacy state that it previously
+managed:
+
+```text
+~/.config/nushell/modules/direnv.nu
+~/.config/nushell/autoload/initial-setup-direnv.nu
+source ~/.config/nushell/modules/direnv.nu
+```
+
+On Windows, old User-scope values are removed only when they exactly match the
+defaults written by Initial-setup v0.8.2-v0.8.5:
+
+```text
+DIRENV_CONFIG  = %APPDATA%\direnv\config
+XDG_CACHE_HOME = %LOCALAPPDATA%\direnv\cache
+XDG_DATA_HOME  = %LOCALAPPDATA%\direnv\data
+```
+
+Custom values are preserved.
+
+The external `direnv.exe` itself is not uninstalled. If the user wants direnv
+later, it can be installed and configured manually without Initial-setup
+interfering with it.
+
