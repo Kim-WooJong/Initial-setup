@@ -64,7 +64,6 @@ def main [] {
 
     let import_line = "use ~/.config/nushell/modules/dotfiles.nu *"
     mut current = (open --raw $config_file)
-    $current = ($current | lines | where { |line| not ($line | str contains "source ~/.config/nushell/modules/direnv.nu") } | where { |line| not ($line | str contains "# direnv integration") } | str join (char nl))
 
     if not ($current | str contains $import_line) {
         let separator = (

@@ -7,6 +7,11 @@ def app-version [] {
     open $file --raw | decode utf-8 | str trim
 }
 
+def schema-version [] {
+    let file = ($TOOLS_ROOT | path join "SCHEMA_VERSION")
+    open $file --raw | decode utf-8 | str trim
+}
+
 def git-output [args: list] {
     if (which git | is-empty) { return "" }
 
@@ -20,6 +25,7 @@ def main [] {
     let git_dir = ($TOOLS_ROOT | path join ".git")
 
     print ("Initial-setup : " + $version)
+    print ("Config schema : " + (schema-version))
 
     if not ($git_dir | path exists) {
         print "Git repository : no"

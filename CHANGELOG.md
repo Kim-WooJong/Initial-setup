@@ -1,5 +1,158 @@
 # Changelog
 
+## 0.9.5
+
+### Missing-path fingerprint fix
+- Fixed `sync-fingerprint.nu` passing `nothing` into `path type` when an
+  optional managed path did not exist.
+- Fingerprint targets now reject null/empty values before filesystem
+  inspection.
+- `path exists` is checked before `path expand` and `path type`.
+- Missing managed files/directories are represented as `MISSING` fingerprint
+  entries instead of aborting synchronization baseline generation.
+- `target-entries` and `append-target` now accept optional path values safely.
+- Added project validation for the path-existence guard ordering.
+
+### Documentation
+- README remains English-only.
+- Documented missing-path fingerprint behavior.
+
+## 0.9.4
+
+### Synchronization fingerprint fix
+- Fixed `sync-fingerprint.nu` string concatenation where a physical line
+  beginning with `+` could be interpreted as an external command.
+- Rewrote affected fingerprint strings as complete expressions.
+- Explicitly converts variable filesystem patterns with `into glob`.
+- Applied the same explicit glob conversion to the project validator.
+- Added a regression check for physical `+` continuation lines in the
+  synchronization fingerprint implementation.
+
+### Documentation
+- README remains English-only.
+- Added the fingerprint compatibility note.
+
+## 0.9.3
+
+### Merge-first synchronization
+- Added machine-config schema 2.
+- Added `sync.prune_extras`, defaulting to `false`.
+- VS Code extension synchronization installs missing extensions but preserves
+  local-only extensions by default.
+- Added `dotpull --prune` for explicit one-time strict reconciliation.
+- Persistent strict reconciliation is available through
+  `sync.prune_extras: true`.
+- VS Code snippets merge file-by-file by default instead of deleting the
+  destination snippets directory before copy.
+- Settings and keybindings continue to overwrite the managed files.
+
+### Incremental Rust restore
+- Existing Rust toolchains are skipped instead of being reinstalled.
+- Existing components and targets are skipped instead of being re-added.
+- The default toolchain is changed only when it differs.
+- New toolchains use the minimal profile before captured components are added.
+- Extra local Rust toolchains/components/targets are preserved.
+
+### Documentation
+- README remains English-only.
+- Documented merge-first synchronization and explicit prune behavior.
+
+## 0.9.2
+
+### Idempotent Windows package handling
+- Added a WinGet package-state probe that checks installed state without
+  invoking an installer.
+- Setup skips WinGet installation when the package is already installed even
+  if the executable is not visible in the current process PATH.
+- `dotupdate` checks for an available newer version before invoking
+  `winget upgrade`.
+- When the installed version is already current, no installer/upgrader is
+  launched.
+- If package state cannot be determined reliably, Initial-setup leaves the
+  package unchanged instead of forcing a reinstall.
+- Applied the guard to common CLI tools, Neovim, VS Code, Starship, WezTerm,
+  Rustup, Julia, and Windows bootstrap prerequisites.
+- Existing package-manager behavior on macOS/Linux is unchanged.
+
+### Documentation
+- README remains English-only.
+- Documented the install/update idempotency policy.
+
+## 0.9.1
+
+### Nushell compatibility fixes
+- Fixed `enable-nushell-dotfiles.nu` assigning to an immutable `$current`
+  binding; `$current` is now declared with `mut`.
+- Removed deprecated lowercase-conversion usage from the legacy direnv cleanup
+  migration.
+- Avoided the newer lowercase replacement because it was introduced after the
+  Nushell 0.109.x compatibility baseline.
+- Winget direnv-path detection now uses `str contains --ignore-case`.
+- Project validation now rejects reintroduction of the deprecated
+  case-conversion commands without self-matching its own validation strings.
+
+### Documentation
+- README remains English-only.
+- Added a Nushell compatibility policy for deprecation handling.
+
+## 0.9.0
+
+### Configuration schema architecture
+- Added `SCHEMA_VERSION` as a separate source of truth from `VERSION`.
+- Machine config now stores `app_version` and `schema_version`.
+- Added `migrate-config.nu` with sequential schema migration support.
+- Added automatic legacy schema-0 to schema-1 migration.
+- Legacy machine config is backed up before the first schema migration.
+- Newer unsupported schemas fail safely instead of being downgraded.
+- Added `dotmigrate` and `dotmigrate --check`.
+
+### Environment state and audit
+- Added machine-local tool-version snapshots in
+  `~/.config/dotfiles/state/tools.nuon`.
+- Added `capture-tool-state.nu` and `dotstate`.
+- `dotcapture` now refreshes the tool-version snapshot.
+- Added read-only `dotaudit` with non-zero exit on critical failures.
+- Environment report and doctor now expose schema/tool-state information.
+- Fixed an inherited stray closing brace in `doctor.nu`.
+
+### CI and validation
+- Added `.github/workflows/ci.yml`.
+- CI covers Windows, macOS, and Ubuntu.
+- CI validates Nushell 0.109.1 and 0.115.1.
+- Added `validate-project.nu` for parser, manifest, version, schema, and
+  repository-structure validation.
+- Setup dry-run no longer requires chezmoi, allowing safe orchestration checks
+  in CI.
+- CI validates Bash and PowerShell bootstrap syntax.
+
+### Release workflow
+- Release helper now updates the README version heading.
+- Release helper validates the project before creating a release commit.
+- README remains English-only.
+
+## 0.8.9
+
+### Final direnv removal migration
+- Expanded legacy direnv cleanup to canonical and platform-native Nushell
+  configuration directories.
+- Removes old managed direnv module/autoload files and stale `source` lines
+  from both live and private chezmoi configuration.
+- On Windows, removes former Initial-setup User-scope direnv/XDG values only
+  when they exactly match the defaults created by older releases.
+- Preserves custom User-scope environment values.
+- Adds a one-time migration marker so future manually installed direnv
+  packages are not removed by later setup runs.
+- If the remaining external executable is the exact Winget `direnv.direnv`
+  package under Winget's managed package path, the one-time migration
+  uninstalls that former managed dependency.
+- Added `dotcleanup` and `dotcleanup --force` for migration maintenance.
+
+### Documentation
+- Rewrote README.md completely in English.
+- Removed stale documentation that still listed direnv as a default package.
+- Updated the package list, current feature set, release helpers, environment
+  reproduction workflow, and direnv migration policy for v0.8.9.
+
 ## 0.8.8
 
 ### Remove direnv from the default environment

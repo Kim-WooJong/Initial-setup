@@ -33,6 +33,25 @@ def machine-context [] {
     open $file
 }
 
+
+def winget-package-state [
+    mode: string
+    package_id: string
+    source: string = "winget"
+] {
+    let script = ($TOOLS_ROOT | path join "scripts" "winget-package-state.nu")
+    let args = [$script $mode $package_id "--source" $source]
+
+    ^nu ...$args | ignore
+    let exit_code = ($env.LAST_EXIT_CODE | default 2)
+
+    match $exit_code {
+        0 => { "yes" }
+        10 => { "no" }
+        _ => { "error" }
+    }
+}
+
 def run-program [
     label: string
     program: string
@@ -154,6 +173,19 @@ def install-windows [
                 "[ok] "
                 + $name
             )
+            continue
+        }
+
+        let package_state = (winget-package-state "installed" $package_id)
+
+        if $package_state == "yes" {
+            print ("[ok] " + $name + " package already installed; skipping reinstall")
+            print ("[info] " + $command + " is not visible in PATH in this process")
+            continue
+        }
+
+        if $package_state == "error" {
+            print ("[warn] Could not determine WinGet state for " + $package_id + "; leaving package unchanged")
             continue
         }
 

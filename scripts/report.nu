@@ -58,7 +58,8 @@ def main [
         "Initial-setup environment report"
         "================================"
         ("Generated      : " + (date now | format date "%Y-%m-%d %H:%M:%S %z"))
-        ("Initial-setup  : " + $context.version)
+        ("Initial-setup  : " + ($context.app_version? | default (($context | get --optional version) | default "unknown")))
+        ("Config schema   : " + (($context.schema_version? | default 0) | into string))
         ("Machine        : " + $context.machine.name)
         ("Profile        : " + $context.machine.profile)
         ("OS             : " + $nu.os-info.name)
@@ -107,6 +108,16 @@ def main [
             "Julia envs     : "
             + (
                 if (($context.data_root | path expand | path join "toolchains" "julia" "environments") | path exists) {
+                    "captured"
+                } else {
+                    "not captured"
+                }
+            )
+        )
+        (
+            "Tool state     : "
+            + (
+                if (((nu-home) | path join ".config" "dotfiles" "state" "tools.nuon") | path exists) {
                     "captured"
                 } else {
                     "not captured"

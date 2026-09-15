@@ -1,9 +1,30 @@
 #!/usr/bin/env nu
 
+const TOOLS_ROOT = path self ..
+
 # ============================================================
 # Install Rust (rustup) and Julia (Juliaup).
 # Both are optional; failures do not abort the full setup.
 # ============================================================
+
+
+def winget-package-state [
+    mode: string
+    package_id: string
+    source: string = "winget"
+] {
+    let script = ($TOOLS_ROOT | path join "scripts" "winget-package-state.nu")
+    let args = [$script $mode $package_id "--source" $source]
+
+    ^nu ...$args | ignore
+    let exit_code = ($env.LAST_EXIT_CODE | default 2)
+
+    match $exit_code {
+        0 => { "yes" }
+        10 => { "no" }
+        _ => { "error" }
+    }
+}
 
 def nu-home [] {
     let home_path = ($nu | get --optional home-path)
@@ -52,6 +73,19 @@ def install-rust-windows [] {
 
     if (which winget | is-empty) {
         print "[warn] winget not found; Rustup installation skipped."
+        return
+    }
+
+    let package_state = (winget-package-state "installed" "Rustlang.Rustup")
+
+    if $package_state == "yes" {
+        print "[ok] Rustup WinGet package already installed; skipping reinstall"
+        print "[info] rustup is not visible in PATH in this process"
+        return
+    }
+
+    if $package_state == "error" {
+        print "[warn] Could not determine Rustup WinGet state; leaving package unchanged"
         return
     }
 
@@ -113,6 +147,19 @@ def install-julia-windows [] {
 
     if (which winget | is-empty) {
         print "[warn] winget not found; Juliaup installation skipped."
+        return
+    }
+
+    let package_state = (winget-package-state "installed" "9NJNWW8PVKMN" "msstore")
+
+    if $package_state == "yes" {
+        print "[ok] Julia WinGet/MS Store package already installed; skipping reinstall"
+        print "[info] julia/juliaup is not visible in PATH in this process"
+        return
+    }
+
+    if $package_state == "error" {
+        print "[warn] Could not determine Julia WinGet/MS Store state; leaving package unchanged"
         return
     }
 

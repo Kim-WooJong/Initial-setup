@@ -1,5 +1,7 @@
 #!/usr/bin/env nu
 
+const TOOLS_ROOT = path self ..
+
 # ============================================================
 # install-starship.nu
 #
@@ -11,6 +13,25 @@
 #
 # A failed Starship installation does not stop setup.
 # ============================================================
+
+
+def winget-package-state [
+    mode: string
+    package_id: string
+    source: string = "winget"
+] {
+    let script = ($TOOLS_ROOT | path join "scripts" "winget-package-state.nu")
+    let args = [$script $mode $package_id "--source" $source]
+
+    ^nu ...$args | ignore
+    let exit_code = ($env.LAST_EXIT_CODE | default 2)
+
+    match $exit_code {
+        0 => { "yes" }
+        10 => { "no" }
+        _ => { "error" }
+    }
+}
 
 def run-program [
     label: string
@@ -45,6 +66,18 @@ def starship-visible [] {
 def install-with-winget [] {
     if (which winget | is-empty) {
         return false
+    }
+
+    let package_state = (winget-package-state "installed" "Starship.Starship")
+
+    if $package_state == "yes" {
+        print "[ok] Starship WinGet package already installed; skipping reinstall"
+        return true
+    }
+
+    if $package_state == "error" {
+        print "[warn] Could not determine Starship WinGet state; leaving package unchanged"
+        return true
     }
 
     let args = [

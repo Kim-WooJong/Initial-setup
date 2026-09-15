@@ -1,9 +1,30 @@
 #!/usr/bin/env nu
 
+const TOOLS_ROOT = path self ..
+
 # ============================================================
 # Install VS Code where a predictable package-manager path exists.
 # VS Code is optional; failure does not stop setup.
 # ============================================================
+
+
+def winget-package-state [
+    mode: string
+    package_id: string
+    source: string = "winget"
+] {
+    let script = ($TOOLS_ROOT | path join "scripts" "winget-package-state.nu")
+    let args = [$script $mode $package_id "--source" $source]
+
+    ^nu ...$args | ignore
+    let exit_code = ($env.LAST_EXIT_CODE | default 2)
+
+    match $exit_code {
+        0 => { "yes" }
+        10 => { "no" }
+        _ => { "error" }
+    }
+}
 
 def run-program [label: string program: string args: list] {
     print ("[run] " + $label)
@@ -36,6 +57,19 @@ def main [] {
         "windows" => {
             if (which winget | is-empty) {
                 print "[warn] winget not found; skipping VS Code installation."
+                return
+            }
+
+            let package_state = (winget-package-state "installed" "Microsoft.VisualStudioCode")
+
+            if $package_state == "yes" {
+                print "[ok] VS Code WinGet package already installed; skipping reinstall"
+                print "[info] code is not visible in PATH in this process"
+                return
+            }
+
+            if $package_state == "error" {
+                print "[warn] Could not determine VS Code WinGet state; leaving package unchanged"
                 return
             }
 

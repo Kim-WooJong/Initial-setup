@@ -32,15 +32,11 @@ foreach ($name in $managedDefaults.Keys) {
                 [System.StringComparison]::OrdinalIgnoreCase
             )
         ) {
-            # Remove only values that exactly match defaults written by
-            # Initial-setup v0.8.2-v0.8.5.
             [Environment]::SetEnvironmentVariable($name, $null, 'User')
             $removed = $true
             $action = 'removed-old-managed-value'
         }
         else {
-            # Preserve anything that may have been set by the user or
-            # another application.
             $action = 'preserved-custom-value'
         }
     }

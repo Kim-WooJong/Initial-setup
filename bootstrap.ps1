@@ -55,6 +55,43 @@ function Test-Command {
     return $null -ne (Get-Command $Command -ErrorAction SilentlyContinue)
 }
 
+function Test-WingetPackageState {
+    param(
+        [ValidateSet("installed", "upgrade-available")]
+        [string]$Mode,
+
+        [string]$PackageId,
+
+        [string]$Source = "winget"
+    )
+
+    $arguments = @(
+        "list",
+        "--id", $PackageId,
+        "--exact",
+        "--accept-source-agreements",
+        "--disable-interactivity"
+    )
+
+    if ($Source) {
+        $arguments += @("--source", $Source)
+    }
+
+    if ($Mode -eq "upgrade-available") {
+        $arguments += "--upgrade-available"
+    }
+
+    try {
+        $output = (& winget @arguments 2>&1 | Out-String)
+        $escapedId = [regex]::Escape($PackageId)
+        $pattern = "(?im)(^|\s)$escapedId(\s|$)"
+        return [regex]::IsMatch($output, $pattern)
+    }
+    catch {
+        return $false
+    }
+}
+
 function Invoke-Winget {
     param(
         [string]$Label,
@@ -88,6 +125,22 @@ function Install-WingetId {
         return
     }
 
+    if (Test-WingetPackageState -Mode "installed" -PackageId $PackageId) {
+        Refresh-ProcessPath
+
+        if (Test-Command $Command) {
+            Write-Host "[ok] $PackageId already installed; PATH refreshed"
+            return
+        }
+
+        if ($Required) {
+            throw "$PackageId is already installed, but '$Command' is not visible in PATH. Restart the terminal or repair PATH; bootstrap will not reinstall the same package."
+        }
+
+        Write-Warning "$PackageId is already installed, but '$Command' is not visible in PATH. Skipping reinstall."
+        return
+    }
+
     $args = @(
         "install",
         "--id", $PackageId,
@@ -112,6 +165,25 @@ function Install-Nushell {
     if (Test-Command "nu") {
         Write-Host "[ok] nu already available"
         return
+    }
+
+    if (Test-WingetPackageState -Mode "installed" -PackageId "Nushell.Nushell") {
+        Refresh-ProcessPath
+
+        if (Test-Command "nu") {
+            Write-Host "[ok] Nushell package already installed; PATH refreshed"
+            return
+        }
+
+        $candidate = Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Links\nu.exe"
+
+        if (Test-Path $candidate) {
+            $script:NuExecutable = $candidate
+            Write-Host "[ok] Nushell package already installed; using WinGet link"
+            return
+        }
+
+        throw "Nushell is already installed, but nu.exe is not visible. Restart the terminal or repair PATH; bootstrap will not reinstall the same package."
     }
 
     # Nushell's official Windows documentation recommends:

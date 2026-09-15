@@ -62,6 +62,33 @@ def git-run [label: string args: list] {
     }
 }
 
+def update-readme-version [version: string] {
+    let file = ($TOOLS_ROOT | path join "README.md")
+
+    if not ($file | path exists) {
+        return
+    }
+
+    let text = (open --raw $file | decode utf-8)
+    let updated = (
+        $text
+        | str replace --regex '^# Initial-setup v[0-9]+\.[0-9]+\.[0-9]+' ("# Initial-setup v" + $version)
+    )
+
+    $updated | save --force $file
+}
+
+def validate-release [] {
+    let script = ($TOOLS_ROOT | path join "scripts" "validate-project.nu")
+    ^nu $script
+
+    let exit_code = ($env.LAST_EXIT_CODE | default 0)
+
+    if $exit_code != 0 {
+        error make { msg: "Project validation failed; release aborted." }
+    }
+}
+
 def prepend-changelog [version: string] {
     let file = ($TOOLS_ROOT | path join "CHANGELOG.md")
     if not ($file | path exists) { return }
@@ -117,9 +144,11 @@ def main [
     }
 
     ($next + (char nl)) | save --force (version-file)
+    update-readme-version $next
     prepend-changelog $next
+    validate-release
 
-    git-run ("Stage release " + $next) ["add" "VERSION" "CHANGELOG.md"]
+    git-run ("Stage release " + $next) ["add" "VERSION" "README.md" "CHANGELOG.md"]
     git-run ("Commit release " + $next) ["commit" "-m" ("Release v" + $next)]
 
     if not $no_tag {

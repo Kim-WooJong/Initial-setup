@@ -81,6 +81,7 @@ def main [] {
     print "[ ] Verify Private Cloud client login and sync status"
     print "[ ] Authenticate GitHub/Git hosting credentials if required"
     print "[ ] Sign in to VS Code extensions/services that require accounts"
+    print "[ ] Run `dotaudit` after any manual credential/tool restoration"
 
     if $context.features.julia {
         print "[ ] Instantiate Julia environments when first used on this machine"

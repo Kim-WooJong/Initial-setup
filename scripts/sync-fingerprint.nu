@@ -51,25 +51,47 @@ def file-entry [
         | hash sha256
     )
 
-    $label
-    + "|"
-    + $relative
-    + "|"
-    + $content_hash
+    ($label + "|" + $relative + "|" + $content_hash)
 }
 
 def target-entries [
     label: string
-    target: path
+    target: any
 ] {
-    let expanded = (
-        $target
-        | path expand
-    )
+    if $target == null {
+        return [
+            ($label + "|MISSING")
+        ]
+    }
+
+    let target_text = ($target | into string)
+
+    if ($target_text | is-empty) {
+        return [
+            ($label + "|MISSING")
+        ]
+    }
+
+    if not ($target_text | path exists) {
+        return [
+            ($label + "|MISSING")
+        ]
+    }
+
+    let expanded = ($target_text | path expand)
+
+    if $expanded == null {
+        return [
+            ($label + "|MISSING")
+        ]
+    }
 
     let object_type = (
-        $expanded
-        | path type
+        try {
+            $expanded | path type
+        } catch {
+            null
+        }
     )
 
     if $object_type == null {
@@ -85,11 +107,7 @@ def target-entries [
         )
 
         return [
-            (
-                $label
-                + "|FILE|"
-                + $content_hash
-            )
+            ($label + "|FILE|" + $content_hash)
         ]
     }
 
@@ -98,10 +116,7 @@ def target-entries [
             normalize-path $expanded
         )
 
-        let pattern = (
-            $root_text
-            + "/**/*"
-        )
+        let pattern = ($root_text + "/**/*" | into glob)
 
         let files = (
             glob -D $pattern
@@ -162,7 +177,7 @@ def vscode-user-dir [] {
 def append-target [
     entries: list
     label: string
-    path: path
+    path: any
 ] {
     mut result = $entries
 
@@ -282,10 +297,7 @@ def local-entries [] {
 
             $entries = (
                 $entries
-                | append (
-                    "vscode-extensions|"
-                    + $extension_hash
-                )
+                | append ("vscode-extensions|" + $extension_hash)
             )
         }
     }

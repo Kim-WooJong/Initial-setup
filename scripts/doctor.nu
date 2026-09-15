@@ -1,5 +1,7 @@
 #!/usr/bin/env nu
 
+const TOOLS_ROOT = path self ..
+
 def nu-home [] {
     let home_path = ($nu | get --optional home-path)
 
@@ -23,10 +25,14 @@ def machine-config-path [] {
     | path join ".config" "dotfiles" "config.nuon"
 }
 
-def run-script [
-    tools_root: path
-    name: string
-] {
+def schema-version [] {
+    open --raw ($TOOLS_ROOT | path join "SCHEMA_VERSION")
+    | decode utf-8
+    | str trim
+    | into int
+}
+
+def run-script [tools_root: path name: string] {
     let script = ($tools_root | path join "scripts" $name)
 
     if not ($script | path exists) {
@@ -35,7 +41,6 @@ def run-script [
     }
 
     ^nu $script
-
     let exit_code = ($env.LAST_EXIT_CODE | default 0)
 
     if $exit_code != 0 {
@@ -46,9 +51,7 @@ def run-script [
     true
 }
 
-def main [
-    --fix
-] {
+def main [--fix] {
     let config_file = (machine-config-path)
 
     print ("Nushell      : " + $env.NU_VERSION)
@@ -61,15 +64,30 @@ def main [
         return
     }
 
+    if $fix {
+        run-script $TOOLS_ROOT "migrate-config.nu" | ignore
+    }
+
     let context = (open $config_file)
     let data_root = ($context.data_root | path expand)
     let tools_root = ($context.tools_root | path expand)
+    let actual_schema = ($context.schema_version? | default 0)
+    let expected_schema = (schema-version)
 
+    print ("App version  : " + ($context.app_version? | default (($context | get --optional version) | default "legacy")))
+    print ("Schema       : " + ($actual_schema | into string) + " / " + ($expected_schema | into string))
     print ("Machine      : " + $context.machine.name)
     print ("Profile      : " + $context.machine.profile)
     print ("Private data : " + ($data_root | into string))
     print ("Sync         : " + ($context.sync.enabled | into string) + " / " + ($context.sync.interval_minutes | into string) + " min")
+    print ("Prune extras : " + (($context.sync.prune_extras? | default false) | into string))
     print ""
+
+    if $actual_schema == $expected_schema {
+        print "[ok] Machine config schema is current"
+    } else {
+        print "[WARN] Machine config schema is not current"
+    }
 
     if ($data_root | path exists) {
         print "[ok] Private data root exists"
@@ -103,14 +121,13 @@ def main [
         }
     }
 
-    }
-
     let git_local = ((nu-home) | path join ".gitconfig.local")
     let ssh_local = ((nu-home) | path join ".ssh" "config.local")
     let secrets = ($nu.data-dir | path join "vendor" "autoload" "dotfiles-secrets.nu")
     let state = ((nu-home) | path join ".config" "dotfiles" "sync-state.nuon")
     let conflict = ((nu-home) | path join ".config" "dotfiles" "SYNC-CONFLICT.txt")
     let sync_lock = ((nu-home) | path join ".config" "dotfiles" "locks" "auto-sync.lock")
+    let tool_state = ((nu-home) | path join ".config" "dotfiles" "state" "tools.nuon")
     let font_marker = ((nu-home) | path join ".config" "dotfiles" "fonts" "d2coding.nuon")
     let rust_state = ($data_root | path join "toolchains" "rust" "state.nuon")
     let julia_envs = ($data_root | path join "toolchains" "julia" "environments")
@@ -155,6 +172,12 @@ def main [
         } else {
             print "[--] Julia environment metadata missing"
         }
+    }
+
+    if ($tool_state | path exists) {
+        print "[ok] Tool-version snapshot exists"
+    } else {
+        print "[--] Tool-version snapshot missing"
     }
 
     if ($state | path exists) {
@@ -218,6 +241,7 @@ def main [
             run-script $tools_root "install-auto-sync.nu" | ignore
         }
 
+        run-script $tools_root "capture-tool-state.nu" | ignore
         print "[ok] Repair pass completed"
     }
 

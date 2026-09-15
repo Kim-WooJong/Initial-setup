@@ -28,10 +28,11 @@ def machine-context [] {
 def run-script [
     tools_root: path
     name: string
+    ...args: string
 ] {
     let script = ($tools_root | path join "scripts" $name)
 
-    ^nu $script
+    ^nu $script ...$args
 
     let exit_code = ($env.LAST_EXIT_CODE | default 0)
 
@@ -55,7 +56,7 @@ def log [level: string message: string] {
     ^nu ...$args | ignore
 }
 
-def main [] {
+def main [--prune] {
     let context = (machine-context)
     let data_root = ($context.data_root | path expand)
     let tools_root = ($context.tools_root | path expand)
@@ -91,11 +92,24 @@ def main [] {
     }
 
     if $context.features.vscode {
+        let configured_prune = ($context.sync.prune_extras? | default false)
+        let should_prune = ($prune or $configured_prune)
+
         print "[2/4] Applying VS Code settings..."
-        run-script $tools_root "apply-vscode-config.nu"
+
+        if $should_prune {
+            run-script $tools_root "apply-vscode-config.nu" "--prune"
+        } else {
+            run-script $tools_root "apply-vscode-config.nu"
+        }
 
         print "[3/4] Reconciling VS Code extensions..."
-        run-script $tools_root "install-vscode-extensions.nu"
+
+        if $should_prune {
+            run-script $tools_root "install-vscode-extensions.nu" "--prune"
+        } else {
+            run-script $tools_root "install-vscode-extensions.nu"
+        }
     } else {
         print "[2/4] VS Code synchronization disabled"
         print "[3/4] VS Code synchronization disabled"

@@ -189,9 +189,14 @@ def feature-value [
 }
 
 def app-version [] {
-        let version_file = ($TOOLS_ROOT | path join "VERSION")
-        open $version_file --raw | decode utf-8 | str trim
-    }
+    let version_file = ($TOOLS_ROOT | path join "VERSION")
+    open $version_file --raw | decode utf-8 | str trim
+}
+
+def schema-version [] {
+    let schema_file = ($TOOLS_ROOT | path join "SCHEMA_VERSION")
+    open $schema_file --raw | decode utf-8 | str trim | into int
+}
 
 def build-machine-config [
     data_root: path
@@ -236,7 +241,8 @@ def build-machine-config [
         }
     )
     {
-        version: (app-version)
+        app_version: (app-version)
+        schema_version: (schema-version)
         data_root: ($data_root | path expand | into string)
         tools_root: ($TOOLS_ROOT | path expand | into string)
 
@@ -259,6 +265,7 @@ def build-machine-config [
             auto_pull: ($old_sync.auto_pull? | default true)
             conflict_policy: ($old_sync.conflict_policy? | default "stop")
             stability_delay_seconds: ($old_sync.stability_delay_seconds? | default 3)
+            prune_extras: ($old_sync.prune_extras? | default false)
         }
 
         maintenance: {
@@ -435,12 +442,13 @@ def print-dry-run [
     print ("Private data  : " + $context.data_root)
     print ("Auto sync     : " + ($context.sync.enabled | into string))
     print ("Sync interval : " + ($context.sync.interval_minutes | into string) + " minute(s)")
+    print ("Prune extras  : " + ($context.sync.prune_extras | into string))
     print ""
     print "Planned stages:"
     print "  - initialize private source"
     print "  - install Neovim and D2Coding when enabled"
     print "  - install enabled toolchains / CLI tools"
-    print "  - configure direnv and Nushell PWD hook"
+    print "  - validate/migrate machine config schema"
     print "  - import or apply configuration"
     print "  - configure platform shims"
     print "  - configure local Git / SSH overrides"
@@ -449,7 +457,8 @@ def print-dry-run [
     print "  - configure Starship / WezTerm when enabled"
     print "  - initialize sync baseline"
     print "  - install automatic sync scheduler when enabled"
-    print "  - run environment doctor"
+    print "  - capture tool-version state"
+    print "  - run environment doctor and audit"
 }
 
 def main [
@@ -460,9 +469,13 @@ def main [
     --dry-run
 ] {
     section ("Initial-setup " + (app-version))
-    require chezmoi
 
     let scripts = ($TOOLS_ROOT | path join "scripts")
+
+    if not $dry_run {
+        run-script "Migrating machine config schema" ($scripts | path join "migrate-config.nu")
+    }
+
     let data_root = (resolve-data-root $data_dir)
     let proposed_context = (build-machine-config $data_root $no_auto_sync $profile)
     let resolved_mode = (resolve-mode $mode $data_root)
@@ -471,6 +484,8 @@ def main [
         print-dry-run $proposed_context $resolved_mode
         return
     }
+
+    require chezmoi
 
     # Kept intentionally on one line for Nushell 0.109 compatibility.
     save-machine-config $proposed_context
@@ -486,6 +501,9 @@ def main [
     print ("OS           : " + $nu.os-info.name)
     print ("Home         : " + (nu-home | into string))
     print ("Nushell      : " + $env.NU_VERSION)
+    print ("App version  : " + $context.app_version)
+    print ("Config schema: " + ($context.schema_version | into string))
+    print ("Prune extras : " + ($context.sync.prune_extras | into string))
 
     run-script "Initializing private data structure" ($scripts | path join "init-private-data.nu")
     run-script "Configuring local secrets autoload" ($scripts | path join "setup-secrets.nu")
@@ -569,10 +587,9 @@ def main [
         print "[skip] sync.enabled is false"
     }
 
-    if $features.cli_tools {
-    }
-
     run-script "Final environment check" ($scripts | path join "doctor.nu")
+    run-script "Capturing tool-version state" ($scripts | path join "capture-tool-state.nu")
+    run-script "Auditing managed environment" ($scripts | path join "audit.nu")
     run-script "Showing post-setup checklist" ($scripts | path join "post-setup-checklist.nu")
 
     section "Setup complete"
@@ -587,7 +604,8 @@ def main [
     print "  dotstatus / dotsync / dotpush / dotpull"
     print "  dotsnapshot / dotrollback"
     print "  dotdoctor / dotupdate / dotreport / dotlog"
-    print "  dotversion / dotrepo / dotrelease / dotchecklist"
+    print "  dotversion / dotrepo / dotrelease / dotaudit / dotstate"
+    print "  dotmigrate / dotcleanup / dotchecklist"
     print ""
     print "  dotcapture / dotrestoreenv"
     print "  dotconfig / dotsecrets"

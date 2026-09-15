@@ -1,5 +1,26 @@
 #!/usr/bin/env nu
 
+const TOOLS_ROOT = path self ..
+
+
+def winget-package-state [
+    mode: string
+    package_id: string
+    source: string = "winget"
+] {
+    let script = ($TOOLS_ROOT | path join "scripts" "winget-package-state.nu")
+    let args = [$script $mode $package_id "--source" $source]
+
+    ^nu ...$args | ignore
+    let exit_code = ($env.LAST_EXIT_CODE | default 2)
+
+    match $exit_code {
+        0 => { "yes" }
+        10 => { "no" }
+        _ => { "error" }
+    }
+}
+
 def nu-home [] {
     let home_path = ($nu | get --optional home-path)
     if $home_path != null { return $home_path }
@@ -32,6 +53,19 @@ def main [] {
         "windows" => {
             if (which winget | is-empty) {
                 print "[warn] winget not found; Neovim installation skipped."
+                return
+            }
+
+            let package_state = (winget-package-state "installed" "Neovim.Neovim")
+
+            if $package_state == "yes" {
+                print "[ok] Neovim WinGet package already installed; skipping reinstall"
+                print "[info] nvim is not visible in PATH in this process"
+                return
+            }
+
+            if $package_state == "error" {
+                print "[warn] Could not determine Neovim WinGet state; leaving package unchanged"
                 return
             }
 

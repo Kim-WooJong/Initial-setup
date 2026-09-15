@@ -187,8 +187,16 @@ export def dotpush [] {
     ^nu (tool-script "sync-up.nu")
 }
 
-export def dotpull [] {
-    ^nu (tool-script "sync-down.nu")
+export def dotpull [
+    --prune
+] {
+    let script = (tool-script "sync-down.nu")
+
+    if $prune {
+        ^nu $script --prune
+    } else {
+        ^nu $script
+    }
 }
 
 export def dotsync [] {
@@ -257,11 +265,42 @@ export def dotrelease [
     ^nu ...$args
 }
 
+export def dotcleanup [
+    --force
+] {
+    let script = (tool-script "cleanup-direnv.nu")
+
+    if $force {
+        ^nu $script --force
+    } else {
+        ^nu $script
+    }
+}
+
+export def dotaudit [] {
+    ^nu (tool-script "audit.nu")
+}
+
+export def dotstate [] {
+    ^nu (tool-script "capture-tool-state.nu")
+}
+
+export def dotmigrate [--check] {
+    let script = (tool-script "migrate-config.nu")
+
+    if $check {
+        ^nu $script --check
+    } else {
+        ^nu $script
+    }
+}
+
 export def dotchecklist [] {
     ^nu (tool-script "post-setup-checklist.nu")
 }
 
 export def dotcapture [] {
+    ^nu (tool-script "capture-tool-state.nu")
     ^nu (tool-script "sync-up.nu")
 }
 

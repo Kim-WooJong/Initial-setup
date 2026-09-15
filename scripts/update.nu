@@ -25,6 +25,25 @@ def machine-context [] {
     open $file
 }
 
+
+def winget-package-state [
+    mode: string
+    package_id: string
+    source: string = "winget"
+] {
+    let script = ($TOOLS_ROOT | path join "scripts" "winget-package-state.nu")
+    let args = [$script $mode $package_id "--source" $source]
+
+    ^nu ...$args | ignore
+    let exit_code = ($env.LAST_EXIT_CODE | default 2)
+
+    match $exit_code {
+        0 => { "yes" }
+        10 => { "no" }
+        _ => { "error" }
+    }
+}
+
 def run-external [
     label: string
     program: string
@@ -100,13 +119,40 @@ def update-windows [] {
         let all_ids = ($ids | append $core_ids | uniq)
 
         for package_id in $all_ids {
+            let installed_state = (winget-package-state "installed" $package_id)
+
+            if $installed_state == "error" {
+                print ("[warn] Could not determine installed state for " + $package_id + "; leaving it unchanged")
+                continue
+            }
+
+            if $installed_state == "no" {
+                print ("[skip] " + $package_id + " is not installed")
+                continue
+            }
+
+            let upgrade_state = (winget-package-state "upgrade-available" $package_id)
+
+            if $upgrade_state == "error" {
+                print ("[warn] Could not determine upgrade state for " + $package_id + "; leaving it unchanged")
+                continue
+            }
+
+            if $upgrade_state == "no" {
+                print ("[ok] " + $package_id + " already up to date; skipping reinstall")
+                continue
+            }
+
             let args = [
                 "upgrade"
                 "--id"
                 $package_id
                 "--exact"
+                "--source"
+                "winget"
                 "--accept-package-agreements"
                 "--accept-source-agreements"
+                "--disable-interactivity"
             ]
 
             run-external ("Upgrade " + $package_id) "winget" $args | ignore
