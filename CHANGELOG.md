@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.9.6
+
+### Hidden Windows auto-sync
+- Windows `DotfilesAutoSync` no longer launches `nu.exe` directly.
+- Added a machine-local `auto-sync-hidden.vbs` launcher under
+  `~/.config/dotfiles/scheduler/`.
+- Task Scheduler now invokes the launcher through
+  `wscript.exe //B //Nologo`.
+- The launcher starts Nushell with hidden window style and waits for each sync
+  cycle to finish.
+- Re-running setup replaces an older visible `DotfilesAutoSync` task in place.
+- `dotdoctor` now reports whether the Windows hidden launcher exists.
+
+### Scheduler safety
+- Added project validation that prevents scheduled auto-sync scripts from
+  containing Git pull/fetch/push/clone operations.
+- Public Initial-setup repository updates remain explicit rather than periodic.
+
+### Documentation
+- README remains English-only.
+- Documented the Windows hidden/background scheduler architecture.
+
 ## 0.9.5
 
 ### Missing-path fingerprint fix

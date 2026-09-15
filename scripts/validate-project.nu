@@ -87,6 +87,42 @@ def main [] {
     let forbidden_nu_version = ("$nu." + "version")
     let deprecated_downcase = ("str " + "downcase")
     let deprecated_upcase = ("str " + "upcase")
+    let auto_sync_installer = (open --raw ($TOOLS_ROOT | path join "scripts" "install-auto-sync.nu"))
+
+    for required_scheduler_token in [
+        "auto-sync-hidden.vbs"
+        "wscript.exe"
+        "//B"
+        "//Nologo"
+        "shell.Run(commandLine, 0, True)"
+    ] {
+        if not ($auto_sync_installer | str contains $required_scheduler_token) {
+            fail ("Windows hidden scheduler support is missing: " + $required_scheduler_token)
+        }
+    }
+
+    let forbidden_git_network = [
+        ("git " + "pull")
+        ("git " + "fetch")
+        ("git " + "push")
+        ("git " + "clone")
+    ]
+
+    for auto_sync_file in [
+        "scripts/auto-sync.nu"
+        "scripts/auto-sync-worker.nu"
+        "scripts/sync-up.nu"
+        "scripts/sync-down.nu"
+    ] {
+        let source = (open --raw ($TOOLS_ROOT | path join $auto_sync_file))
+
+        for forbidden in $forbidden_git_network {
+            if ($source | str contains $forbidden) {
+                fail ($auto_sync_file + " contains forbidden scheduled Git network operation: " + $forbidden)
+            }
+        }
+    }
+
     let sync_fingerprint = (open --raw ($TOOLS_ROOT | path join "scripts" "sync-fingerprint.nu"))
 
     if ($sync_fingerprint | lines | any { |line| ($line | str trim | str starts-with "+") }) {

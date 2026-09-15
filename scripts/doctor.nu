@@ -128,6 +128,7 @@ def main [--fix] {
     let conflict = ((nu-home) | path join ".config" "dotfiles" "SYNC-CONFLICT.txt")
     let sync_lock = ((nu-home) | path join ".config" "dotfiles" "locks" "auto-sync.lock")
     let tool_state = ((nu-home) | path join ".config" "dotfiles" "state" "tools.nuon")
+    let windows_sync_launcher = ((nu-home) | path join ".config" "dotfiles" "scheduler" "auto-sync-hidden.vbs")
     let font_marker = ((nu-home) | path join ".config" "dotfiles" "fonts" "d2coding.nuon")
     let rust_state = ($data_root | path join "toolchains" "rust" "state.nuon")
     let julia_envs = ($data_root | path join "toolchains" "julia" "environments")
@@ -198,6 +199,14 @@ def main [--fix] {
         print "[info] Automatic sync lock currently exists"
     } else {
         print "[ok] No automatic sync lock"
+    }
+
+    if $nu.os-info.name == "windows" and $context.sync.enabled {
+        if ($windows_sync_launcher | path exists) {
+            print "[ok] Windows auto-sync hidden launcher exists"
+        } else {
+            print "[--] Windows auto-sync hidden launcher missing"
+        }
     }
 
     if $fix {

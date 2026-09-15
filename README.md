@@ -1,4 +1,4 @@
-# Initial-setup v0.9.5
+# Initial-setup v0.9.6
 
 `Initial-setup` is a cross-platform bootstrap and configuration synchronization
 tool for reproducing a personal development environment on Windows, macOS, and
@@ -245,7 +245,7 @@ Typical structure:
 
 ```nu
 {
-    app_version: "0.9.5"
+    app_version: "0.9.6"
     schema_version: 2
     data_root: "..."
     tools_root: "..."
@@ -307,7 +307,7 @@ Application releases and machine-config structure now have independent
 versions:
 
 ```text
-VERSION         0.9.5
+VERSION         0.9.6
 SCHEMA_VERSION  2
 ```
 
@@ -315,7 +315,7 @@ Machine config stores both values:
 
 ```nu
 {
-    app_version: "0.9.5"
+    app_version: "0.9.6"
     schema_version: 2
     ...
 }
@@ -465,6 +465,48 @@ Run the repository validator locally:
 
 ```nu
 nu scripts/validate-project.nu
+```
+
+
+---
+
+## Hidden Windows automatic synchronization
+
+v0.9.6 changes the Windows `DotfilesAutoSync` scheduled task so periodic sync
+runs do not open a terminal or console window.
+
+The task now uses:
+
+```text
+Task Scheduler
+    ↓
+wscript.exe //B //Nologo
+    ↓
+~/.config/dotfiles/scheduler/auto-sync-hidden.vbs
+    ↓
+nu.exe scripts/auto-sync.nu
+```
+
+The machine-local VBScript launcher invokes Nushell with window style `0`
+(hidden) and waits for the sync cycle to finish.
+
+Running setup replaces the existing `DotfilesAutoSync` task in place, so an
+older task that directly launched `nu.exe` is automatically upgraded to the
+hidden launcher.
+
+Automatic synchronization does not update the public Initial-setup Git
+repository. The scheduled sync graph is limited to fingerprint comparison,
+chezmoi/private-state synchronization, VS Code/toolchain state handling, and
+sync metadata. Repository updates remain explicit through commands such as:
+
+```nu
+dotupdate --repo
+```
+
+or:
+
+```nu
+dotupdate --all
 ```
 
 

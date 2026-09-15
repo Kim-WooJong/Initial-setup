@@ -57,18 +57,60 @@ def run-program [
     }
 }
 
+def vbs-literal [value: string] {
+    let escaped = ($value | str replace --all '"' '""')
+    ('"' + $escaped + '"')
+}
+
+def windows-wscript [] {
+    let system_root = ($env.SystemRoot? | default 'C:\Windows')
+    let candidate = ($system_root | path join "System32" "wscript.exe")
+
+    if ($candidate | path exists) {
+        return ($candidate | path expand)
+    }
+
+    let rows = (which wscript.exe)
+
+    if not ($rows | is-empty) {
+        return ($rows | get 0.path | path expand)
+    }
+
+    error make {
+        msg: "wscript.exe is required for hidden Windows auto-sync."
+    }
+}
+
 def install-windows [
     nu_exe: path
     sync_script: path
     interval: int
 ] {
-    let command = (
-        '"'
-        + ($nu_exe | into string)
-        + '" "'
-        + ($sync_script | into string)
-        + '"'
-    )
+    let launcher_dir = ((nu-home) | path join ".config" "dotfiles" "scheduler")
+    let launcher = ($launcher_dir | path join "auto-sync-hidden.vbs")
+
+    mkdir $launcher_dir
+
+    let nu_literal = (vbs-literal ($nu_exe | into string))
+    let script_literal = (vbs-literal ($sync_script | into string))
+
+    [
+        "Option Explicit"
+        ("Dim nuPath: nuPath = " + $nu_literal)
+        ("Dim syncScript: syncScript = " + $script_literal)
+        "Dim shell: Set shell = CreateObject(\"WScript.Shell\")"
+        "Dim commandLine"
+        "commandLine = Chr(34) & nuPath & Chr(34) & \" \" & Chr(34) & syncScript & Chr(34)"
+        "Dim exitCode"
+        "exitCode = shell.Run(commandLine, 0, True)"
+        "WScript.Quit exitCode"
+        ""
+    ]
+    | str join (char nl)
+    | save --force $launcher
+
+    let wscript = (windows-wscript)
+    let command = ('"' + ($wscript | into string) + '" //B //Nologo "' + ($launcher | into string) + '"')
 
     let args = [
         "/Create"
@@ -83,7 +125,10 @@ def install-windows [
         $command
     ]
 
-    run-program "Install Windows dotfiles auto-sync task" "schtasks.exe" $args
+    run-program "Install hidden Windows dotfiles auto-sync task" "schtasks.exe" $args
+
+    print ("[ok] Hidden launcher -> " + ($launcher | into string))
+    print "[ok] DotfilesAutoSync runs without a terminal window."
 }
 
 def install-linux [
