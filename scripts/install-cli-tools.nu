@@ -58,8 +58,7 @@ def run-program [
     args: list
 ] {
     print (
-        "[run] "
-        + $label
+        "[run] " + $label
     )
     print ""
 
@@ -72,8 +71,7 @@ def run-program [
 
     if $exit_code != 0 {
         print (
-            "[warn] Command returned exit code "
-            + ($exit_code | into string)
+            "[warn] Command returned exit code " + ($exit_code | into string)
         )
     }
 
@@ -152,8 +150,7 @@ def install-windows [
 
         if $row == null {
             print (
-                "[skip] No Windows mapping: "
-                + $name
+                "[skip] No Windows mapping: " + $name
             )
             continue
         }
@@ -170,8 +167,7 @@ def install-windows [
 
         if not (which $command | is-empty) {
             print (
-                "[ok] "
-                + $name
+                "[ok] " + $name
             )
             continue
         }
@@ -228,8 +224,7 @@ def install-macos [
 
         if $row == null {
             print (
-                "[skip] No macOS mapping: "
-                + $name
+                "[skip] No macOS mapping: " + $name
             )
             continue
         }
@@ -246,8 +241,7 @@ def install-macos [
 
         if not (which $command | is-empty) {
             print (
-                "[ok] "
-                + $name
+                "[ok] " + $name
             )
             continue
         }
@@ -355,8 +349,7 @@ def install-linux [
 
         if $row == null {
             print (
-                "[skip] No Linux mapping: "
-                + $name
+                "[skip] No Linux mapping: " + $name
             )
             continue
         }
@@ -373,8 +366,7 @@ def install-linux [
 
         if not (which $command | is-empty) {
             print (
-                "[ok] "
-                + $name
+                "[ok] " + $name
             )
             continue
         }
@@ -409,8 +401,7 @@ def install-linux [
         }
 
         print (
-            "[warn] Could not install "
-            + $name
+            "[warn] Could not install " + $name
         )
     }
 

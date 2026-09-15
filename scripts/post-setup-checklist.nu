@@ -88,4 +88,5 @@ def main [] {
     }
 
     print ""
+    print "[ ] Add computer-specific Nushell setup with `dotlocal` if needed"
 }

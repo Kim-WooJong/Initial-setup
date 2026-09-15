@@ -59,9 +59,7 @@ def migrate-step [config: record from_schema: int] {
         _ => {
             error make {
                 msg: (
-                    "No machine-config migration is defined from schema "
-                    + ($from_schema | into string)
-                    + "."
+                    "No machine-config migration is defined from schema " + ($from_schema | into string) + "."
                 )
             }
         }
@@ -84,11 +82,7 @@ def main [--check] {
     if $detected_schema > $current_schema {
         error make {
             msg: (
-                "Machine config schema "
-                + ($detected_schema | into string)
-                + " is newer than this Initial-setup supports ("
-                + ($current_schema | into string)
-                + ")."
+                "Machine config schema " + ($detected_schema | into string) + " is newer than this Initial-setup supports (" + ($current_schema | into string) + ")."
             )
         }
     }

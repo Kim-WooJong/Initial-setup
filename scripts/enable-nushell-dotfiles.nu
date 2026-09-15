@@ -63,6 +63,7 @@ def main [] {
     }
 
     let import_line = "use ~/.config/nushell/modules/dotfiles.nu *"
+    let local_line = "source ~/.config/dotfiles/local.nu"
     mut current = (open --raw $config_file)
 
     if not ($current | str contains $import_line) {
@@ -75,12 +76,21 @@ def main [] {
         )
 
         $current = (
-            $current
-            + $separator
-            + "# Dotfiles management"
-            + (char nl)
-            + $import_line
-            + (char nl)
+            $current + $separator + "# Dotfiles management" + (char nl) + $import_line + (char nl)
+        )
+    }
+
+    if not ($current | str contains $local_line) {
+        let separator = (
+            if ($current | str trim | is-empty) {
+                ""
+            } else {
+                char nl
+            }
+        )
+
+        $current = (
+            $current + $separator + "# Machine-local setup (not synchronized)" + (char nl) + $local_line + (char nl)
         )
     }
 

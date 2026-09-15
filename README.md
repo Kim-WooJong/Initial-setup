@@ -1,4 +1,4 @@
-# Initial-setup v0.9.6
+# Initial-setup v0.9.8
 
 `Initial-setup` is a cross-platform bootstrap and configuration synchronization
 tool for reproducing a personal development environment on Windows, macOS, and
@@ -245,7 +245,7 @@ Typical structure:
 
 ```nu
 {
-    app_version: "0.9.6"
+    app_version: "0.9.8"
     schema_version: 2
     data_root: "..."
     tools_root: "..."
@@ -307,7 +307,7 @@ Application releases and machine-config structure now have independent
 versions:
 
 ```text
-VERSION         0.9.6
+VERSION         0.9.8
 SCHEMA_VERSION  2
 ```
 
@@ -315,7 +315,7 @@ Machine config stores both values:
 
 ```nu
 {
-    app_version: "0.9.6"
+    app_version: "0.9.8"
     schema_version: 2
     ...
 }
@@ -466,6 +466,87 @@ Run the repository validator locally:
 ```nu
 nu scripts/validate-project.nu
 ```
+
+
+---
+
+## Cross-version Nushell syntax normalization
+
+v0.9.8 performs a repository-wide syntax normalization for Nushell physical
+lines.
+
+Arithmetic/string continuation operators are never placed at the beginning of
+a physical line. For example:
+
+```nu
+# Avoid
+let value = (
+    "prefix"
+    + $suffix
+)
+
+# Use
+let value = (
+    "prefix" + $suffix
+)
+```
+
+The same rule applies to multiplication and similar arithmetic continuations.
+
+Project validation now rejects physical lines beginning with `+`, `*`, or `/`
+in Nushell source files. Existing checks for leading `and` / `or`, Bash-style
+trailing backslashes, deprecated string case commands, direct version-specific
+Nushell home fields, and parser validation remain enabled.
+
+
+---
+
+## Machine-local Nushell setup
+
+v0.9.7 adds one intentionally unmanaged file for computer-specific Nushell
+configuration:
+
+```text
+~/.config/dotfiles/local.nu
+```
+
+Initial-setup creates the file only when it is missing. After creation,
+Initial-setup never overwrites or replaces its contents.
+
+The synchronized canonical Nushell config contains only this shared source
+directive:
+
+```nu
+# Machine-local setup (not synchronized)
+source ~/.config/dotfiles/local.nu
+```
+
+This allows every computer to use the same shared Nushell configuration while
+keeping different machine-specific setup in `local.nu`.
+
+Example:
+
+```nu
+$env.MY_MACHINE_ONLY = "value"
+alias local-tool = some-command
+```
+
+Edit it with:
+
+```nu
+dotlocal
+```
+
+The file is deliberately excluded from:
+
+- chezmoi and private-cloud synchronization
+- automatic sync fingerprints
+- `dotpush` and `dotpull`
+- snapshots and rollback
+- public Git repository state
+
+`dotdoctor --fix` creates it when missing, but does not modify an existing
+file.
 
 
 ---
@@ -1231,6 +1312,7 @@ Maintenance
 
 Machine-local
   dotconfig
+  dotlocal
   dotsecrets
   dotgitlocal
   dotsshlocal

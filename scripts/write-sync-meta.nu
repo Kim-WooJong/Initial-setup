@@ -63,7 +63,6 @@ def main [
     | save --force $file
 
     print (
-        "[meta] Last writer: "
-        + $context.machine.name
+        "[meta] Last writer: " + $context.machine.name
     )
 }

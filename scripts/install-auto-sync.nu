@@ -33,8 +33,7 @@ def run-program [
     args: list
 ] {
     print (
-        "[run] "
-        + $label
+        "[run] " + $label
     )
     print ""
 
@@ -48,10 +47,7 @@ def run-program [
     if $exit_code != 0 {
         error make {
             msg: (
-                "Command failed with exit code "
-                + ($exit_code | into string)
-                + ": "
-                + $label
+                "Command failed with exit code " + ($exit_code | into string) + ": " + $label
             )
         }
     }
@@ -160,11 +156,7 @@ def install-linux [
         "[Service]"
         "Type=oneshot"
         (
-            'ExecStart="'
-            + ($nu_exe | into string)
-            + '" "'
-            + ($sync_script | into string)
-            + '"'
+            'ExecStart="' + ($nu_exe | into string) + '" "' + ($sync_script | into string) + '"'
         )
         ""
     ]
@@ -178,9 +170,7 @@ def install-linux [
         "[Timer]"
         "OnBootSec=1min"
         (
-            "OnUnitActiveSec="
-            + ($interval | into string)
-            + "min"
+            "OnUnitActiveSec=" + ($interval | into string) + "min"
         )
         "Persistent=true"
         ""
@@ -233,8 +223,7 @@ def install-macos [
     )
 
     let seconds = (
-        $interval
-        * 60
+        $interval * 60
     )
 
     let nu_xml = (xml-escape ($nu_exe | into string))
@@ -251,21 +240,15 @@ def install-macos [
         '  <key>ProgramArguments</key>'
         '  <array>'
         (
-            "    <string>"
-            + $nu_xml
-            + "</string>"
+            "    <string>" + $nu_xml + "</string>"
         )
         (
-            "    <string>"
-            + $script_xml
-            + "</string>"
+            "    <string>" + $script_xml + "</string>"
         )
         '  </array>'
         '  <key>StartInterval</key>'
         (
-            "  <integer>"
-            + ($seconds | into string)
-            + "</integer>"
+            "  <integer>" + ($seconds | into string) + "</integer>"
         )
         '  <key>RunAtLoad</key>'
         '  <true/>'
@@ -343,8 +326,7 @@ def main [] {
         _ => {
             error make {
                 msg: (
-                    "Unsupported OS: "
-                    + $nu.os-info.name
+                    "Unsupported OS: " + $nu.os-info.name
                 )
             }
         }

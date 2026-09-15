@@ -62,10 +62,7 @@ def run-external [
 
     if $exit_code != 0 {
         print (
-            "[warn] "
-            + $label
-            + " returned exit code "
-            + ($exit_code | into string)
+            "[warn] " + $label + " returned exit code " + ($exit_code | into string)
         )
         return false
     }

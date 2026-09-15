@@ -397,6 +397,16 @@ export def dotconfig [] {
     print "[info] Run `nu setup.nu` after changing profile, scheduler interval, or feature switches."
 }
 
+export def dotlocal [] {
+    let file = ((nu-home) | path join ".config" "dotfiles" "local.nu")
+
+    if not ($file | path exists) {
+        ^nu (tool-script "setup-machine-local.nu")
+    }
+
+    edit-file $file
+}
+
 export def dotsecrets [] {
     edit-file ($nu.data-dir | path join "vendor" "autoload" "dotfiles-secrets.nu")
 }

@@ -39,8 +39,7 @@ def run-program [label: string program: string args: list] {
 
     if $exit_code != 0 {
         print (
-            "[warn] Command returned exit code "
-            + ($exit_code | into string)
+            "[warn] Command returned exit code " + ($exit_code | into string)
         )
     }
 

@@ -129,6 +129,7 @@ def main [--fix] {
     let sync_lock = ((nu-home) | path join ".config" "dotfiles" "locks" "auto-sync.lock")
     let tool_state = ((nu-home) | path join ".config" "dotfiles" "state" "tools.nuon")
     let windows_sync_launcher = ((nu-home) | path join ".config" "dotfiles" "scheduler" "auto-sync-hidden.vbs")
+    let machine_local_setup = ((nu-home) | path join ".config" "dotfiles" "local.nu")
     let font_marker = ((nu-home) | path join ".config" "dotfiles" "fonts" "d2coding.nuon")
     let rust_state = ($data_root | path join "toolchains" "rust" "state.nuon")
     let julia_envs = ($data_root | path join "toolchains" "julia" "environments")
@@ -181,6 +182,12 @@ def main [--fix] {
         print "[--] Tool-version snapshot missing"
     }
 
+    if ($machine_local_setup | path exists) {
+        print "[ok] Machine-local Nushell setup exists"
+    } else {
+        print "[--] Machine-local Nushell setup missing"
+    }
+
     if ($state | path exists) {
         let sync_state = (open $state)
         print ("[ok] Last sync: " + ($sync_state.last_sync? | default "unknown"))
@@ -219,6 +226,7 @@ def main [--fix] {
         run-script $tools_root "enable-nushell-dotfiles.nu" | ignore
         run-script $tools_root "setup-local-overrides.nu" | ignore
         run-script $tools_root "setup-secrets.nu" | ignore
+        run-script $tools_root "setup-machine-local.nu" | ignore
         run-script $tools_root "cleanup-direnv.nu" | ignore
 
         if $context.features.neovim {

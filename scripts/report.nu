@@ -66,8 +66,7 @@ def main [
         ("Nushell        : " + $env.NU_VERSION)
         ("Git            : " + (first-version "git" ["--version"]))
         (
-            "Git describe   : "
-            + (
+            "Git describe   : " + (
                 if (($context.tools_root | path expand | path join ".git") | path exists) {
                     ^git -C ($context.tools_root | path expand) describe --tags --always --dirty | str trim
                 } else {
@@ -85,8 +84,7 @@ def main [
         ("git-delta      : " + (first-version "delta" ["--version"]))
         ("lazygit        : " + (first-version "lazygit" ["--version"]))
         (
-            "D2Coding       : "
-            + (
+            "D2Coding       : " + (
                 if (((nu-home) | path join ".config" "dotfiles" "fonts" "d2coding.nuon") | path exists) {
                     "detected/installed"
                 } else {
@@ -95,8 +93,7 @@ def main [
             )
         )
         (
-            "Rust state     : "
-            + (
+            "Rust state     : " + (
                 if (($context.data_root | path expand | path join "toolchains" "rust" "state.nuon") | path exists) {
                     "captured"
                 } else {
@@ -105,8 +102,7 @@ def main [
             )
         )
         (
-            "Julia envs     : "
-            + (
+            "Julia envs     : " + (
                 if (($context.data_root | path expand | path join "toolchains" "julia" "environments") | path exists) {
                     "captured"
                 } else {
@@ -115,8 +111,7 @@ def main [
             )
         )
         (
-            "Tool state     : "
-            + (
+            "Tool state     : " + (
                 if (((nu-home) | path join ".config" "dotfiles" "state" "tools.nuon") | path exists) {
                     "captured"
                 } else {
@@ -134,8 +129,7 @@ def main [
         ("Last writer    : " + ($state.last_writer? | default "unknown"))
         ("Last action    : " + ($state.last_action? | default "unknown"))
         (
-            "Conflict       : "
-            + (
+            "Conflict       : " + (
                 if ($conflict_file | path exists) {
                     "YES"
                 } else {

@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.9.8
+
+### Repository-wide Nushell syntax normalization
+- Removed every physical Nushell source line beginning with `+`.
+- Removed the remaining physical arithmetic continuation beginning with `*`.
+- Fixed the reported `capture-vscode-extensions.nu` `Command '+' not found`
+  failure and the same latent pattern across the rest of the project.
+- Added project-wide validation rejecting physical Nushell lines beginning
+  with `+`, `*`, or `/`.
+- Existing regression checks for leading `and` / `or`, trailing Bash
+  continuations, deprecated case-conversion commands, and version-specific
+  home fields remain enabled.
+
+### Documentation
+- README remains English-only.
+- Documented the cross-version Nushell physical-line syntax policy.
+
+## 0.9.7
+
+### Machine-local Nushell setup
+- Added `~/.config/dotfiles/local.nu` for computer-specific Nushell setup.
+- The file is created only when missing and is never overwritten by
+  Initial-setup.
+- Canonical Nushell config sources the machine-local file at shell startup.
+- Added `dotlocal` for editing the machine-local setup.
+- `dotdoctor` reports the file and `dotdoctor --fix` creates it only when
+  missing.
+- The file is excluded from private-cloud/chezmoi synchronization,
+  synchronization fingerprints, snapshots, rollback, and public Git state.
+
+### Documentation
+- README remains English-only.
+- Documented the machine-local setup contract and `dotlocal`.
+
 ## 0.9.6
 
 ### Hidden Windows auto-sync

@@ -51,8 +51,7 @@ def run-program [
     if $exit_code != 0 {
         print ""
         print (
-            "[warn] Command returned exit code "
-            + ($exit_code | into string)
+            "[warn] Command returned exit code " + ($exit_code | into string)
         )
     }
 

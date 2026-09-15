@@ -66,8 +66,7 @@ def update-managed-file [
     if $exit_code != 0 {
         error make {
             msg: (
-                "Failed to update managed file: "
-                + ($file | into string)
+                "Failed to update managed file: " + ($file | into string)
             )
         }
     }
@@ -106,8 +105,7 @@ def ensure-git [
         | save $local
 
         print (
-            "[create] "
-            + ($local | into string)
+            "[create] " + ($local | into string)
         )
     }
 
@@ -128,14 +126,7 @@ def ensure-git [
 
         if not ($content | str contains ".gitconfig.local") {
             (
-                $content
-                + (char nl)
-                + "# Initial-setup machine-local overrides"
-                + (char nl)
-                + "[include]"
-                + (char nl)
-                + "    path = ~/.gitconfig.local"
-                + (char nl)
+                $content + (char nl) + "# Initial-setup machine-local overrides" + (char nl) + "[include]" + (char nl) + "    path = ~/.gitconfig.local" + (char nl)
             )
             | save --force $common
 
@@ -150,32 +141,7 @@ def ensure-git [
 
         if not ($local_content | str contains "pager = delta") {
             (
-                $local_content
-                + (char nl)
-                + "# Initial-setup: delta is available on this machine"
-                + (char nl)
-                + "[core]"
-                + (char nl)
-                + "    pager = delta"
-                + (char nl)
-                + "[interactive]"
-                + (char nl)
-                + "    diffFilter = delta --color-only"
-                + (char nl)
-                + "[delta]"
-                + (char nl)
-                + "    navigate = true"
-                + (char nl)
-                + "    line-numbers = true"
-                + (char nl)
-                + "[merge]"
-                + (char nl)
-                + "    conflictStyle = zdiff3"
-                + (char nl)
-                + "[diff]"
-                + (char nl)
-                + "    colorMoved = default"
-                + (char nl)
+                $local_content + (char nl) + "# Initial-setup: delta is available on this machine" + (char nl) + "[core]" + (char nl) + "    pager = delta" + (char nl) + "[interactive]" + (char nl) + "    diffFilter = delta --color-only" + (char nl) + "[delta]" + (char nl) + "    navigate = true" + (char nl) + "    line-numbers = true" + (char nl) + "[merge]" + (char nl) + "    conflictStyle = zdiff3" + (char nl) + "[diff]" + (char nl) + "    colorMoved = default" + (char nl)
             )
             | save --force $local
 
@@ -221,8 +187,7 @@ def ensure-ssh [
         | save $local
 
         print (
-            "[create] "
-            + ($local | into string)
+            "[create] " + ($local | into string)
         )
     }
 
@@ -241,10 +206,7 @@ def ensure-ssh [
 
         if not ($content | str contains "config.local") {
             (
-                "Include ~/.ssh/config.local"
-                + (char nl)
-                + (char nl)
-                + $content
+                "Include ~/.ssh/config.local" + (char nl) + (char nl) + $content
             )
             | save --force $common
 

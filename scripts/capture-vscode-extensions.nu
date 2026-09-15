@@ -31,8 +31,7 @@ def machine-context [] {
     if not ($file | path exists) {
         error make {
             msg: (
-                "Machine config not found: "
-                + ($file | into string)
+                "Machine config not found: " + ($file | into string)
             )
         }
     }
@@ -84,8 +83,7 @@ def main [] {
         if ($current | is-empty) {
             ""
         } else {
-            $current
-            + (char nl)
+            $current + (char nl)
         }
     )
 
@@ -93,7 +91,6 @@ def main [] {
     | save --force $extension_file
 
     print (
-        "[ok] VS Code extension set -> "
-        + ($extension_file | into string)
+        "[ok] VS Code extension set -> " + ($extension_file | into string)
     )
 }

@@ -57,8 +57,7 @@ def run-program [label: string program: string args: list] {
 
     if $exit_code != 0 {
         print (
-            "[warn] Command returned exit code "
-            + ($exit_code | into string)
+            "[warn] Command returned exit code " + ($exit_code | into string)
         )
     }
 
@@ -121,8 +120,7 @@ def install-rust-unix [] {
     }
 
     let command = (
-        "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs "
-        + "| sh -s -- -y"
+        "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs " + "| sh -s -- -y"
     )
 
     let args = [
@@ -197,8 +195,7 @@ def install-julia-unix [] {
     }
 
     let command = (
-        "curl -fsSL https://install.julialang.org "
-        + "| sh -s -- --yes"
+        "curl -fsSL https://install.julialang.org " + "| sh -s -- --yes"
     )
 
     let args = [

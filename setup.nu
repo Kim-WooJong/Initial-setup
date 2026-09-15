@@ -150,9 +150,7 @@ def profile-defaults [profile: string] {
         _ => {
             error make {
                 msg: (
-                    "Unknown profile '"
-                    + $profile
-                    + "'. Use workstation, laptop, server, or minimal."
+                    "Unknown profile '" + $profile + "'. Use workstation, laptop, server, or minimal."
                 )
             }
         }
@@ -299,8 +297,7 @@ def save-machine-config [context: record] {
     | save --force $config_file
 
     print (
-        "[save] Machine config -> "
-        + ($config_file | into string)
+        "[save] Machine config -> " + ($config_file | into string)
     )
 }
 
@@ -371,9 +368,7 @@ def resolve-mode [
         _ => {
             error make {
                 msg: (
-                    "Unknown mode '"
-                    + $requested
-                    + "'. Use auto, initial, or existing."
+                    "Unknown mode '" + $requested + "'. Use auto, initial, or existing."
                 )
             }
         }
@@ -529,6 +524,8 @@ def main [
         run-script "Installing VS Code" ($scripts | path join "install-vscode.nu")
     }
 
+    run-script "Preparing machine-local Nushell setup" ($scripts | path join "setup-machine-local.nu")
+
     section ("Selected mode: " + $resolved_mode)
 
     if $resolved_mode == "initial" {
@@ -605,7 +602,7 @@ def main [
     print "  dotsnapshot / dotrollback"
     print "  dotdoctor / dotupdate / dotreport / dotlog"
     print "  dotversion / dotrepo / dotrelease / dotaudit / dotstate"
-    print "  dotmigrate / dotcleanup / dotchecklist"
+    print "  dotmigrate / dotcleanup / dotlocal / dotchecklist"
     print ""
     print "  dotcapture / dotrestoreenv"
     print "  dotconfig / dotsecrets"

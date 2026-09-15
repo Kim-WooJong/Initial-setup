@@ -51,6 +51,7 @@ def main [] {
         "scripts/migrate-config.nu"
         "scripts/capture-tool-state.nu"
         "scripts/audit.nu"
+        "scripts/setup-machine-local.nu"
         "scripts/winget-package-state.nu"
         "scripts/windows/winget-package-state.ps1"
         "scripts/modules/dotfiles.nu"
@@ -120,6 +121,33 @@ def main [] {
             if ($source | str contains $forbidden) {
                 fail ($auto_sync_file + " contains forbidden scheduled Git network operation: " + $forbidden)
             }
+        }
+    }
+
+    let local_setup_script = (open --raw ($TOOLS_ROOT | path join "scripts" "setup-machine-local.nu"))
+    let machine_local_leaf = ("dotfiles" + "/local.nu")
+
+    if not ($local_setup_script | str contains "if ($file | path exists)") {
+        fail "Machine-local setup initializer must preserve an existing local.nu file."
+    }
+
+    if ($local_setup_script | str contains "save --force") {
+        fail "Machine-local setup initializer must never force-overwrite local.nu."
+    }
+
+    for excluded_file in [
+        "scripts/sync-fingerprint.nu"
+        "scripts/sync-up.nu"
+        "scripts/sync-down.nu"
+        "scripts/create-snapshot.nu"
+        "scripts/rollback.nu"
+        "scripts/init-private-data.nu"
+        "scripts/capture-vscode-config.nu"
+    ] {
+        let source = (open --raw ($TOOLS_ROOT | path join $excluded_file))
+
+        if ($source | str contains $machine_local_leaf) {
+            fail ($excluded_file + " must not manage machine-local local.nu.")
         }
     }
 
@@ -215,6 +243,38 @@ def main [] {
 
             if ($trimmed | str starts-with "or ") {
                 fail (($file | into string) + " starts a physical line with `or`.")
+            }
+
+            if ($trimmed | str starts-with "+ ") {
+                fail (($file | into string) + " starts a physical line with `+`.")
+            }
+
+            if ($trimmed | str starts-with "* ") {
+                fail (($file | into string) + " starts a physical line with `*`.")
+            }
+
+            if ($trimmed | str starts-with "/ ") {
+                fail (($file | into string) + " starts a physical line with `/`.")
+            }
+
+            if ($trimmed | str starts-with "% ") {
+                fail (($file | into string) + " starts a physical line with `%`.")
+            }
+
+            if ($trimmed | str starts-with "== ") {
+                fail (($file | into string) + " starts a physical line with `==`.")
+            }
+
+            if ($trimmed | str starts-with "!= ") {
+                fail (($file | into string) + " starts a physical line with `!=`.")
+            }
+
+            if ($trimmed | str starts-with "<= ") {
+                fail (($file | into string) + " starts a physical line with `<=`.")
+            }
+
+            if ($trimmed | str starts-with ">= ") {
+                fail (($file | into string) + " starts a physical line with `>=`.")
             }
         }
     }
