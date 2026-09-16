@@ -43,6 +43,19 @@ def git-identity-present [] {
     $exit_code == 0 and not ($email | is-empty)
 }
 
+def folder-git-identities-present [] {
+    let file = ((nu-home) | path join ".config" "dotfiles" "git-identities.nuon")
+
+    if not ($file | path exists) {
+        return false
+    }
+
+    let manifest = (open $file)
+    let identities = ($manifest.identities? | default [])
+
+    $identities | any { |identity| $identity.enabled? | default true }
+}
+
 def main [] {
     let context = (machine-context)
     let secrets_file = ($nu.data-dir | path join "vendor" "autoload" "dotfiles-secrets.nu")
@@ -54,12 +67,15 @@ def main [] {
 
     if (git-identity-present) {
         print "[ok] Git global identity is configured"
+    } else if (folder-git-identities-present) {
+        print "[ok] Folder-specific Git identities are configured"
     } else {
-        print "[ ] Configure Git identity in ~/.gitconfig.local"
+        print "[ ] Configure a global Git identity or run `dotgitids --edit`"
     }
 
     if (ssh-private-key-present) {
         print "[ok] At least one machine-local SSH private key appears to exist"
+        print "[ ] Run `dotsshkeys` to verify matching public keys"
     } else {
         print "[ ] Restore/generate SSH private keys if this machine needs SSH authentication"
     }
@@ -82,6 +98,8 @@ def main [] {
     print "[ ] Authenticate GitHub/Git hosting credentials if required"
     print "[ ] Sign in to VS Code extensions/services that require accounts"
     print "[ ] Run `dotaudit` after any manual credential/tool restoration"
+    print "[ ] Use `dotpreflight --diff` before accepting unexpected private-source changes"
+    print "[ ] Use `dotlocalbackup` before large manual configuration edits"
 
     if $context.features.julia {
         print "[ ] Instantiate Julia environments when first used on this machine"

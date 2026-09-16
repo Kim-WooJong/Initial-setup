@@ -56,7 +56,7 @@ def log [level: string message: string] {
     ^nu ...$args | ignore
 }
 
-def main [--prune] {
+def main [--prune --force] {
     let context = (machine-context)
     let data_root = ($context.data_root | path expand)
     let tools_root = ($context.tools_root | path expand)
@@ -70,11 +70,16 @@ def main [--prune] {
     print ("Private data: " + ($data_root | into string))
     print "[1/4] Applying private chezmoi source..."
 
-    let args = [
+    mut args = [
         "--source"
         ($data_root | into string)
-        "apply"
     ]
+
+    if $force {
+        $args = ($args | append "--force")
+    }
+
+    $args = ($args | append "apply")
 
     ^chezmoi ...$args
 
@@ -89,6 +94,10 @@ def main [--prune] {
 
     if $context.features.rust or $context.features.julia {
         run-script $tools_root "restore-work-environment.nu"
+    }
+
+    if ($context.features.rclone_config? | default false) {
+        run-script $tools_root "restore-rclone-config.nu"
     }
 
     if $context.features.vscode {

@@ -32,8 +32,8 @@ def main [] {
         fail "VERSION is empty."
     }
 
-    if $schema < 2 {
-        fail "SCHEMA_VERSION must be at least 2."
+    if $schema < 4 {
+        fail "SCHEMA_VERSION must be at least 4."
     }
 
     let readme = (open --raw ($TOOLS_ROOT | path join "README.md"))
@@ -52,15 +52,151 @@ def main [] {
         "scripts/capture-tool-state.nu"
         "scripts/audit.nu"
         "scripts/setup-machine-local.nu"
+        "scripts/rclone-config-path.nu"
+        "scripts/capture-rclone-config.nu"
+        "scripts/restore-rclone-config.nu"
+        "scripts/setup-onedrive-ignore-upload.nu"
+        "scripts/windows/set-onedrive-ignore-upload-policy.ps1"
+        "defaults/onedrive-ignore-upload-patterns.txt"
         "scripts/winget-package-state.nu"
         "scripts/windows/winget-package-state.ps1"
+        "scripts/modules/core.nu"
+        "scripts/modules/profiles.nu"
+        "scripts/modules/setup-policy.nu"
+        "scripts/modules/git-identities.nu"
+        "scripts/modules/ssh-keys.nu"
         "scripts/modules/dotfiles.nu"
-        ".github/workflows/ci.yml"
+        "scripts/setup-git-identities.nu"
+        "scripts/setup-ssh-keys.nu"
+        "scripts/backup-local-config.nu"
+        "scripts/preflight.nu"
+        "scripts/resolve-config.nu"
+        "profiles/common.nuon"
+        "profiles/workstation.nuon"
+        "profiles/laptop.nuon"
+        "profiles/server.nuon"
+        "profiles/minimal.nuon"
+        "templates/git-identities.nuon.example"
     ] {
         let file = ($TOOLS_ROOT | path join $required)
 
         if not ($file | path exists) {
             fail ("Required file missing: " + $required)
+        }
+    }
+
+    let common_profile = (open ($TOOLS_ROOT | path join "profiles" "common.nuon"))
+    let common_features = ($common_profile.features? | default {})
+
+    for required_feature in [
+        "neovim"
+        "fonts"
+        "cli_tools"
+        "vscode"
+        "wezterm"
+        "starship"
+        "rust"
+        "julia"
+        "git_config"
+        "ssh_config"
+        "rclone_config"
+        "onedrive_ignore_uploads"
+    ] {
+        if ($common_features | get --optional $required_feature) == null {
+            fail ("profiles/common.nuon is missing feature: " + $required_feature)
+        }
+    }
+
+    for profile_name in ["workstation" "laptop" "server" "minimal"] {
+        let profile_file = ($TOOLS_ROOT | path join "profiles" ($profile_name + ".nuon"))
+        let profile = (open $profile_file)
+
+        if $profile.install_gui_apps? == null {
+            fail ("Profile is missing install_gui_apps: " + $profile_name)
+        }
+
+        if $profile.features? == null {
+            fail ("Profile is missing features record: " + $profile_name)
+        }
+    }
+
+    let git_identity_template = (open ($TOOLS_ROOT | path join "templates" "git-identities.nuon.example"))
+
+    if ($git_identity_template.version? | default 0) != 1 {
+        fail "Git identity example manifest must use version 1."
+    }
+
+    if (($git_identity_template.identities? | default []) | is-empty) {
+        fail "Git identity example manifest must contain at least one example."
+    }
+
+    let setup_source = (open --raw ($TOOLS_ROOT | path join "setup.nu"))
+
+    for required_setup_token in [
+        "profiles.nu"
+        "setup-policy.nu"
+        "--config-policy"
+        "choose-config-policy"
+        "choose-reviewed-policy"
+        "normalize-config-policy"
+        "push-local"
+        "pull-private"
+        "backup-local-config.nu"
+        "--force-source"
+        "setup-git-identities.nu"
+        "setup-ssh-keys.nu"
+    ] {
+        if not ($setup_source | str contains $required_setup_token) {
+            fail ("setup.nu is missing v0.11.x integration: " + $required_setup_token)
+        }
+    }
+
+    let bootstrap_ps1 = (open --raw ($TOOLS_ROOT | path join "bootstrap.ps1"))
+    let bootstrap_sh = (open --raw ($TOOLS_ROOT | path join "bootstrap.sh"))
+
+    if not ($bootstrap_ps1 | str contains "ConfigPolicy") {
+        fail "bootstrap.ps1 must pass through the configuration policy."
+    }
+
+    if not ($bootstrap_sh | str contains "--config-policy") {
+        fail "bootstrap.sh must pass through the configuration policy."
+    }
+
+    let dotfiles_module = (open --raw ($TOOLS_ROOT | path join "scripts" "modules" "dotfiles.nu"))
+
+    for required_sync_token in [
+        "dotresolve"
+        "dotpush"
+        "dotpull"
+        "--backup"
+        "--force"
+    ] {
+        if not ($dotfiles_module | str contains $required_sync_token) {
+            fail ("Bidirectional sync command integration is incomplete: " + $required_sync_token)
+        }
+    }
+
+    let local_backup = (open --raw ($TOOLS_ROOT | path join "scripts" "backup-local-config.nu"))
+
+    for forbidden_secret_token in [
+        "id_ed25519"
+        "id_rsa"
+        "private_dot_ssh"
+        ".env"
+    ] {
+        if ($local_backup | str contains $forbidden_secret_token) {
+            fail ("Local configuration backups must not reference secret/private-key payloads: " + $forbidden_secret_token)
+        }
+    }
+
+    for required_backup_token in [
+        ".ssh"
+        "config.local"
+        "local-backups"
+        "--force"
+    ] {
+        if not ($local_backup | str contains $required_backup_token) {
+            fail ("Local backup implementation is incomplete: " + $required_backup_token)
         }
     }
 
@@ -124,6 +260,46 @@ def main [] {
         }
     }
 
+    let onedrive_patterns = (
+        open --raw ($TOOLS_ROOT | path join "defaults" "onedrive-ignore-upload-patterns.txt")
+        | lines
+        | where { |line| not ($line | str trim | is-empty) }
+    )
+
+    let expected_onedrive_patterns = ["*.log" "*.tmp" "*.cache" "*.bak"]
+
+    if $onedrive_patterns != $expected_onedrive_patterns {
+        fail "OneDrive exclusion patterns must be *.log, *.tmp, *.cache, *.bak in that order."
+    }
+
+    let onedrive_helper = (
+        open --raw ($TOOLS_ROOT | path join "scripts" "windows" "set-onedrive-ignore-upload-policy.ps1")
+    )
+
+    if not ($onedrive_helper | str contains "EnableODIgnoreListFromGPO") {
+        fail "OneDrive exclusion helper is missing the official policy registry path."
+    }
+
+    if ($onedrive_helper | str contains "Remove-ItemProperty") {
+        fail "OneDrive exclusion helper must preserve unrelated registry values."
+    }
+
+    let rclone_capture = (open --raw ($TOOLS_ROOT | path join "scripts" "capture-rclone-config.nu"))
+    let rclone_restore = (open --raw ($TOOLS_ROOT | path join "scripts" "restore-rclone-config.nu"))
+    let rclone_mount_command = ("rclone " + "mount")
+
+    if ($rclone_capture | str contains $rclone_mount_command) or ($rclone_restore | str contains $rclone_mount_command) {
+        fail "rclone config synchronization must not invoke rclone mount."
+    }
+
+    if not ($rclone_capture | str contains "rclone config file") {
+        fail "rclone capture must resolve the active config path through rclone."
+    }
+
+    if not ($rclone_restore | str contains "rclone config file") {
+        fail "rclone restore must resolve the active config path through rclone."
+    }
+
     let local_setup_script = (open --raw ($TOOLS_ROOT | path join "scripts" "setup-machine-local.nu"))
     let machine_local_leaf = ("dotfiles" + "/local.nu")
 
@@ -148,6 +324,28 @@ def main [] {
 
         if ($source | str contains $machine_local_leaf) {
             fail ($excluded_file + " must not manage machine-local local.nu.")
+        }
+    }
+
+    let git_identity_local_leaf = ("dotfiles" + "/git-identities.nuon")
+
+    for excluded_file in [
+        "scripts/sync-fingerprint.nu"
+        "scripts/sync-up.nu"
+        "scripts/sync-down.nu"
+        "scripts/create-snapshot.nu"
+        "scripts/rollback.nu"
+        "scripts/init-private-data.nu"
+        "scripts/migrate-dotfiles.nu"
+    ] {
+        let source = (open --raw ($TOOLS_ROOT | path join $excluded_file))
+
+        if ($source | str contains $git_identity_local_leaf) {
+            fail ($excluded_file + " must not manage machine-local git-identities.nuon.")
+        }
+
+        if ($source | str contains "initial-setup-identities.gitconfig") {
+            fail ($excluded_file + " must not manage generated Git identity dispatchers.")
         }
     }
 
@@ -281,6 +479,8 @@ def main [] {
 
     print ("[ok] VERSION = " + $version)
     print ("[ok] SCHEMA_VERSION = " + ($schema | into string))
+    print "[ok] Profile manifests are complete."
+    print "[ok] Git identity template is valid."
     print ("[ok] Package manifests are complete.")
     print ("[ok] Nushell parser validation passed for " + (($nu_files | length) | into string) + " files.")
     print "[ok] Project validation passed."

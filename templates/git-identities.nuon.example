@@ -1,0 +1,21 @@
+{
+    version: 1
+    identities: [
+        {
+            name: "personal"
+            enabled: true
+            paths: ["~/Projects/"]
+            user_name: "Your Name"
+            email: "you@example.com"
+            ssh_key: "~/.ssh/id_ed25519_personal"
+        }
+        {
+            name: "work"
+            enabled: true
+            paths: ["~/Work/"]
+            user_name: "Your Work Name"
+            email: "you@work.example"
+            ssh_key: "~/.ssh/id_ed25519_work"
+        }
+    ]
+}

@@ -70,6 +70,7 @@ def main [] {
     mkdir ($data_root | path join "toolchains")
     mkdir ($data_root | path join "toolchains" "rust")
     mkdir ($data_root | path join "toolchains" "julia" "environments")
+    mkdir ($data_root | path join "rclone")
 
     let chezmoi_root = ($data_root | path join ".chezmoiroot")
 

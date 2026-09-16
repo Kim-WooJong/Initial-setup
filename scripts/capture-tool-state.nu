@@ -76,6 +76,7 @@ def main [] {
             zoxide: (command-version "zoxide" ["--version"])
             delta: (command-version "delta" ["--version"])
             lazygit: (command-version "lazygit" ["--version"])
+            rclone: (command-version "rclone" ["--version"])
         }
     }
 

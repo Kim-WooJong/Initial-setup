@@ -75,6 +75,10 @@ def main [] {
         run-script $tools_root "capture-work-environment.nu"
     }
 
+    if ($context.features.rclone_config? | default false) {
+        run-script $tools_root "capture-rclone-config.nu"
+    }
+
     print ("Private data: " + ($data_root | into string))
     print "[1/4] Updating managed chezmoi files..."
 

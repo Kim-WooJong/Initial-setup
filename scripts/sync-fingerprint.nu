@@ -142,6 +142,27 @@ def target-entries [
     ]
 }
 
+def rclone-config-path [] {
+    if (which rclone | is-empty) {
+        return null
+    }
+
+    let rows = (
+        ^rclone config file
+        | lines
+        | each { |line| $line | str trim }
+        | where { |line| not ($line | is-empty) }
+    )
+
+    let exit_code = ($env.LAST_EXIT_CODE | default 1)
+
+    if $exit_code != 0 or ($rows | is-empty) {
+        return null
+    }
+
+    $rows | last
+}
+
 def vscode-user-dir [] {
     match $nu.os-info.name {
         "windows" => {
@@ -248,6 +269,16 @@ def local-entries [] {
         $entries = (append-target $entries "julia" $julia_path)
     }
 
+    if ($features.rclone_config? | default false) {
+        let rclone_path = (rclone-config-path)
+
+        if $rclone_path == null {
+            $entries = ($entries | append "rclone-config|UNAVAILABLE")
+        } else {
+            $entries = (append-target $entries "rclone-config" $rclone_path)
+        }
+    }
+
     if $features.vscode {
         let vscode_dir = (
             vscode-user-dir
@@ -328,6 +359,11 @@ def cloud-entries [] {
     if $context.features.rust or $context.features.julia {
         let cloud_toolchains_path = ($data_root | path join "toolchains")
         $entries = (append-target $entries "cloud-toolchains" $cloud_toolchains_path)
+    }
+
+    if ($context.features.rclone_config? | default false) {
+        let cloud_rclone_path = ($data_root | path join "rclone" "rclone.conf")
+        $entries = (append-target $entries "cloud-rclone-config" $cloud_rclone_path)
     }
 
     $entries

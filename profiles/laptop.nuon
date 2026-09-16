@@ -1,0 +1,9 @@
+{
+    install_gui_apps: true
+    features: {
+        fonts: true
+        vscode: true
+        wezterm: true
+        onedrive_ignore_uploads: true
+    }
+}

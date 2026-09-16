@@ -1,5 +1,169 @@
 # Changelog
 
+
+
+## [0.11.3] - 2026-09-16
+
+- Fixed a Nushell parse error in `scripts/capture-tool-state.nu` where the `lazygit` and `rclone` version checks were accidentally merged into one call.
+- Added separate valid `command-version` entries for `lazygit` and `rclone`.
+- No configuration-policy behavior changes from v0.11.2.
+
+## [0.11.2] - 2026-09-16
+
+### Bidirectional setup reconciliation
+- Added `push-local` and `pull-private` as explicit synchronization policies.
+- `nu setup.nu` now offers a first-class "Save local changes to private drive"
+  option when local and private configuration coexist.
+- Review mode now shows `chezmoi status`/`diff` and then returns to an
+  Initial-setup direction menu instead of falling through to chezmoi's raw
+  overwrite prompt.
+- Existing `keep-local`/`keep-private` policy names remain compatibility aliases.
+
+### Conflict-resolution commands
+- Added `dotresolve` for an interactive local-vs-private reconciliation workflow.
+- Added `dotpull --force` for explicit private-authoritative pulls.
+- Added `dotpull --backup` to create a local configuration backup before an
+  explicit private-authoritative pull.
+- Added `--force` support to `scripts/sync-down.nu` for guarded internal use.
+
+### Cleanup
+- Removed the obsolete `.github/workflows/ci.yml` requirement from the project
+  validator after the `.github` directory was removed in v0.11.1.
+
+## [0.11.1] - 2026-09-16
+
+- Removed the `.github` directory and GitHub-specific repository metadata/workflows.
+- No runtime behavior changes.
+
+## 0.11.0
+
+### First-run configuration policy
+- Replaced the first-run overwrite-centric flow with an explicit six-choice
+  source-selection menu: review, keep local, keep private, backup then keep
+  private, preview, or cancel.
+- Added `--config-policy` for scripted/non-interactive selection.
+- `--mode initial` remains supported and maps to the local-authoritative path.
+- `--mode existing` uses interactive review on a first run instead of immediately
+  forcing a destination overwrite decision.
+- Added state-aware recommendations based on whether local/private configuration
+  is detected.
+- Added private-source validation so destructive private-authoritative policies
+  cannot be selected when no private source exists.
+
+### Safer chezmoi reconciliation
+- `review` uses chezmoi interactive apply so managed changes can be inspected
+  individually.
+- `keep-local` explicitly updates existing source entries from the current
+  machine instead of falling through to a confusing source overwrite prompt.
+- `keep-private` explicitly applies the private source as authoritative.
+- `preview` shows the setup plan plus chezmoi status/diff without applying setup
+  changes.
+
+### Local recovery and preflight
+- Added `backup-local-config.nu` for machine-local live-configuration backups.
+- Backups include editor/shell/terminal/Git/SSH-config/VS Code configuration but
+  deliberately exclude SSH private keys and secret files.
+- Added `dotlocalbackup` and guarded `dotlocalrestore`; restore is preview-only
+  unless `--force` is provided.
+- Added `dotpreflight` and `dotpreflight --diff` for managed-state inspection.
+- `dotdoctor` now reports the count and newest local-configuration backup.
+- Local backups follow `maintenance.snapshot_keep` retention.
+- Added `backup-private`, which automatically creates a local backup before a
+  forced private-source apply.
+
+### Bootstrap and validation
+- Added `--config-policy` passthrough to Windows, macOS, and Linux bootstrap
+  entry points.
+- Extended project validation for the new setup-policy module and recovery
+  scripts.
+
+## 0.10.0
+
+### Declarative profiles and modular setup
+- Moved workstation, laptop, server, and minimal profile defaults from
+  `setup.nu` into composable `profiles/*.nuon` manifests.
+- Added reusable `core.nu` and `profiles.nu` modules under `scripts/modules/`.
+- Kept existing package manifests and chezmoi private-data architecture intact.
+
+### Folder-specific Git identities
+- Added machine-local `~/.config/dotfiles/git-identities.nuon`.
+- Added conditional Git identity generation using `includeIf gitdir/i:` rules.
+- Each identity can define folder paths, Git name/email, an optional signing key,
+  and an optional SSH private-key path.
+- Generated identity files live under `~/.config/git/identities/` and are never
+  synchronized by Initial-setup.
+- Added `dotgitids`, `dotgitids --edit`, and `dotgitids --apply`.
+- Added a public example manifest at `templates/git-identities.nuon.example`.
+- Added manifest validation for entry types, booleans, duplicate identity names,
+  required folder paths, and generated Git-safe values.
+- Kept normal identity/doctor checks read-only; the local manifest is created
+  only by init/edit/apply flows.
+
+### SSH key recovery and diagnostics
+- Added SSH private-key discovery for conventional `id_*` keys and keys
+  referenced by folder-specific Git identities.
+- Missing `.pub` files are regenerated non-interactively when the private key
+  is unencrypted. Encrypted keys are preserved and reported for manual recovery.
+- Added `dotsshkeys` and `dotsshkeys --generate`.
+- Integrated Git identity and SSH key checks into setup, doctor, repair, and the
+  post-setup checklist.
+
+### Validation and documentation
+- Extended project validation to cover the new modules, scripts, profile
+  manifests, and Git identity template.
+- Updated README for the v0.10.0 architecture and commands.
+
+## 0.9.10
+
+### OneDrive upload exclusion policy
+- Added Windows OneDrive upload exclusion policy management.
+- Uses the official
+  `HKLM\SOFTWARE\Policies\Microsoft\OneDrive\EnableODIgnoreListFromGPO`
+  string-list policy.
+- Manages:
+  - `1 = *.log`
+  - `2 = *.tmp`
+  - `3 = *.cache`
+  - `4 = *.bak`
+- Preserves additional/unrelated values already present in the policy key.
+- Does not force UAC elevation during normal setup.
+- If administrator rights are required, setup warns and continues.
+- Added `dotonedrive` for status and `dotonedrive --apply` for explicit apply.
+- Added `dotdoctor` status/repair integration.
+
+### Configuration schema
+- Bumped machine-config schema to 4.
+- Added `features.onedrive_ignore_uploads`.
+- Defaults to enabled for workstation/laptop and disabled for server/minimal.
+
+### Documentation
+- README remains English-only.
+- Documented Administrator-rights and OneDrive-restart requirements.
+
+## 0.9.9
+
+### rclone config synchronization
+- Added synchronization of the active rclone configuration file only.
+- Uses `rclone config file` to resolve the actual platform-specific config
+  location instead of hard-coding Windows/macOS/Linux paths.
+- Stores the private copy as `rclone/rclone.conf`.
+- Initial/push workflows capture the local config.
+- Existing/pull workflows restore the private config.
+- Identical config files are skipped.
+- Added `dotrclone`, `dotrclone --capture`, and `dotrclone --restore`.
+- Added rclone config state to synchronization fingerprints, snapshots, and
+  rollback.
+- Does not install rclone and does not configure or invoke rclone mounts,
+  services, drive letters, or VFS mount state.
+
+### Configuration schema
+- Bumped machine-config schema to 3.
+- Added `features.rclone_config`, defaulting to `true`.
+
+### Documentation
+- README remains English-only.
+- Added credential/security guidance for synchronized `rclone.conf`.
+
 ## 0.9.8
 
 ### Repository-wide Nushell syntax normalization

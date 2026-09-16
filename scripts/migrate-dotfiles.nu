@@ -39,7 +39,7 @@ def machine-context [] {
     open $file
 }
 
-def chezmoi-add [data_root: path target: path] {
+def chezmoi-add [data_root: path target: path force_source: bool] {
     let p = ($target | path expand)
 
     if not ($p | path exists) {
@@ -49,14 +49,19 @@ def chezmoi-add [data_root: path target: path] {
 
     print $"[add]  ($p)"
 
-    let args = [
+    mut args = [
         "--source"
         ($data_root | into string)
         "add"
         "--secrets"
         "error"
-        ($p | into string)
     ]
+
+    if $force_source {
+        $args = ($args | append "--force")
+    }
+
+    $args = ($args | append ($p | into string))
 
     ^chezmoi ...$args
 
@@ -115,7 +120,7 @@ def copy-dir-if-needed [source: path destination: path] {
     print $"       -> ($dst)"
 }
 
-def main [] {
+def main [--force-source] {
     let context = (machine-context)
     let data_root = ($context.data_root | path expand)
 
@@ -156,7 +161,7 @@ def main [] {
         )
 
         copy-dir-if-needed $current_nvim $canonical_nvim
-        chezmoi-add $data_root $canonical_nvim
+        chezmoi-add $data_root $canonical_nvim $force_source
     } else {
         print "[skip] nvim not installed"
     }
@@ -189,10 +194,10 @@ def main [] {
         copy-dir-if-needed $current_dir $canonical_dir
     }
 
-    chezmoi-add $data_root $canonical_nu_config
-    chezmoi-add $data_root $canonical_nu_env
-    chezmoi-add $data_root ($canonical_nushell | path join "modules")
-    chezmoi-add $data_root ($canonical_nushell | path join "autoload")
+    chezmoi-add $data_root $canonical_nu_config $force_source
+    chezmoi-add $data_root $canonical_nu_env $force_source
+    chezmoi-add $data_root ($canonical_nushell | path join "modules") $force_source
+    chezmoi-add $data_root ($canonical_nushell | path join "autoload") $force_source
 
     if $context.features.git_config {
         print ""
@@ -200,8 +205,8 @@ def main [] {
 
         let git_home = ((nu-home) | path join ".gitconfig")
         let git_xdg = ((nu-home) | path join ".config" "git" "config")
-        chezmoi-add $data_root $git_home
-        chezmoi-add $data_root $git_xdg
+        chezmoi-add $data_root $git_home $force_source
+        chezmoi-add $data_root $git_xdg $force_source
     }
 
     if $context.features.ssh_config {
@@ -209,7 +214,7 @@ def main [] {
         print "--- SSH config only ---"
 
         let ssh_config = ((nu-home) | path join ".ssh" "config")
-        chezmoi-add $data_root $ssh_config
+        chezmoi-add $data_root $ssh_config $force_source
     }
 
     if $context.features.wezterm {
@@ -223,7 +228,7 @@ def main [] {
             copy-file-if-needed $legacy_wezterm $canonical_wezterm
         }
 
-        chezmoi-add $data_root $canonical_wezterm
+        chezmoi-add $data_root $canonical_wezterm $force_source
     }
 
     if $context.features.starship {
@@ -231,7 +236,7 @@ def main [] {
         print "--- Starship ---"
 
         let canonical_starship = ($canonical_config | path join "starship.toml")
-        chezmoi-add $data_root $canonical_starship
+        chezmoi-add $data_root $canonical_starship $force_source
     }
 
     if $context.features.rust {
@@ -239,7 +244,7 @@ def main [] {
         print "--- Cargo ---"
 
         let cargo_config = ((nu-home) | path join ".cargo" "config.toml")
-        chezmoi-add $data_root $cargo_config
+        chezmoi-add $data_root $cargo_config $force_source
     }
 
     if $context.features.julia {
@@ -247,7 +252,7 @@ def main [] {
         print "--- Julia ---"
 
         let julia_startup = ((nu-home) | path join ".julia" "config" "startup.jl")
-        chezmoi-add $data_root $julia_startup
+        chezmoi-add $data_root $julia_startup $force_source
     }
 
     print ""

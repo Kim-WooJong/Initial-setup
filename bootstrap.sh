@@ -4,6 +4,7 @@ set -u
 MODE="auto"
 DATA_DIR=""
 PROFILE=""
+CONFIG_POLICY="ask"
 DRY_RUN=0
 NO_AUTO_SYNC=0
 SKIP_VSCODE=0
@@ -50,6 +51,10 @@ while [ "$#" -gt 0 ]; do
             PROFILE="$2"
             shift 2
             ;;
+        --config-policy)
+            CONFIG_POLICY="$2"
+            shift 2
+            ;;
         --dry-run)
             DRY_RUN=1
             shift
@@ -68,6 +73,7 @@ Usage:
   ./bootstrap.sh [--mode auto|initial|existing]
                  [--data-dir PATH]
                  [--profile workstation|laptop|server|minimal]
+                 [--config-policy ask|push-local|pull-private|review|backup-private|preview]
                  [--no-auto-sync]
                  [--dry-run]
                  [--skip-vscode]
@@ -246,6 +252,8 @@ NU_ARGS=(
     "$ROOT/setup.nu"
     "--mode"
     "$MODE"
+    "--config-policy"
+    "$CONFIG_POLICY"
 )
 
 if [ -n "$DATA_DIR" ]; then

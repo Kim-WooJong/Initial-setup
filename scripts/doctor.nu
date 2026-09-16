@@ -32,7 +32,7 @@ def schema-version [] {
     | into int
 }
 
-def run-script [tools_root: path name: string] {
+def run-script [tools_root: path name: string ...args: string] {
     let script = ($tools_root | path join "scripts" $name)
 
     if not ($script | path exists) {
@@ -40,7 +40,7 @@ def run-script [tools_root: path name: string] {
         return false
     }
 
-    ^nu $script
+    ^nu $script ...$args
     let exit_code = ($env.LAST_EXIT_CODE | default 0)
 
     if $exit_code != 0 {
@@ -133,6 +133,7 @@ def main [--fix] {
     let font_marker = ((nu-home) | path join ".config" "dotfiles" "fonts" "d2coding.nuon")
     let rust_state = ($data_root | path join "toolchains" "rust" "state.nuon")
     let julia_envs = ($data_root | path join "toolchains" "julia" "environments")
+    let local_backup_root = ((nu-home) | path join ".config" "dotfiles" "local-backups")
 
     if ($git_local | path exists) {
         print "[ok] Git machine-local override exists"
@@ -146,6 +147,30 @@ def main [--fix] {
         print "[--] SSH machine-local override missing"
     }
 
+    if $context.features.git_config {
+        print ""
+        print "Git folder identities:"
+        let git_ids_script = ($tools_root | path join "scripts" "setup-git-identities.nu")
+        ^nu $git_ids_script --check
+        let git_ids_exit = ($env.LAST_EXIT_CODE | default 0)
+
+        if $git_ids_exit != 0 {
+            print "[WARN] Git folder identity check failed"
+        }
+    }
+
+    if $context.features.ssh_config {
+        print ""
+        print "SSH key pairs:"
+        let ssh_keys_script = ($tools_root | path join "scripts" "setup-ssh-keys.nu")
+        ^nu $ssh_keys_script --check
+        let ssh_keys_exit = ($env.LAST_EXIT_CODE | default 0)
+
+        if $ssh_keys_exit != 0 {
+            print "[WARN] SSH key check failed"
+        }
+    }
+
     if ($secrets | path exists) {
         print "[ok] Machine-local secrets autoload exists"
     } else {
@@ -157,6 +182,19 @@ def main [--fix] {
             print "[ok] D2Coding installation marker exists"
         } else {
             print "[--] D2Coding installation marker missing"
+        }
+    }
+
+    if $nu.os-info.name == "windows" and ($context.features.onedrive_ignore_uploads? | default false) {
+        let policy_script = ($tools_root | path join "scripts" "setup-onedrive-ignore-upload.nu")
+        ^nu $policy_script --check
+    }
+
+    if ($context.features.rclone_config? | default false) {
+        if (which rclone | is-empty) {
+            print "[--] rclone config sync enabled, but rclone is not installed"
+        } else {
+            print "[ok] rclone config synchronization enabled"
         }
     }
 
@@ -186,6 +224,18 @@ def main [--fix] {
         print "[ok] Machine-local Nushell setup exists"
     } else {
         print "[--] Machine-local Nushell setup missing"
+    }
+
+    if ($local_backup_root | path exists) {
+        let local_backups = (ls $local_backup_root | where type == dir | sort-by name | reverse)
+        if ($local_backups | is-empty) {
+            print "[--] No local configuration backups"
+        } else {
+            print ("[ok] Local configuration backups: " + (($local_backups | length) | into string))
+            print ("[ok] Latest local backup: " + (($local_backups | first | get name) | path basename))
+        }
+    } else {
+        print "[--] No local configuration backups"
     }
 
     if ($state | path exists) {
@@ -225,9 +275,22 @@ def main [--fix] {
         run-script $tools_root "setup-platform-shims.nu" | ignore
         run-script $tools_root "enable-nushell-dotfiles.nu" | ignore
         run-script $tools_root "setup-local-overrides.nu" | ignore
+
+        if $context.features.git_config {
+            run-script $tools_root "setup-git-identities.nu" "--apply" | ignore
+        }
+
+        if $context.features.ssh_config {
+            run-script $tools_root "setup-ssh-keys.nu" "--generate" | ignore
+        }
+
         run-script $tools_root "setup-secrets.nu" | ignore
         run-script $tools_root "setup-machine-local.nu" | ignore
         run-script $tools_root "cleanup-direnv.nu" | ignore
+
+        if $nu.os-info.name == "windows" and ($context.features.onedrive_ignore_uploads? | default false) {
+            run-script $tools_root "setup-onedrive-ignore-upload.nu" | ignore
+        }
 
         if $context.features.neovim {
             run-script $tools_root "install-neovim.nu" | ignore

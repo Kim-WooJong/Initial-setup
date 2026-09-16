@@ -1,0 +1,17 @@
+{
+    install_gui_apps: false
+    features: {
+        neovim: true
+        fonts: false
+        cli_tools: true
+        vscode: false
+        wezterm: false
+        starship: true
+        rust: true
+        julia: true
+        git_config: true
+        ssh_config: true
+        rclone_config: true
+        onedrive_ignore_uploads: false
+    }
+}

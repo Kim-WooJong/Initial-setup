@@ -189,14 +189,35 @@ export def dotpush [] {
 
 export def dotpull [
     --prune
+    --force
+    --backup
 ] {
     let script = (tool-script "sync-down.nu")
 
-    if $prune {
-        ^nu $script --prune
-    } else {
-        ^nu $script
+    if $backup {
+        ^nu (tool-script "backup-local-config.nu") --label "before-private-pull"
+
+        let backup_exit = ($env.LAST_EXIT_CODE | default 0)
+        if $backup_exit != 0 {
+            error make { msg: "Local backup failed; private pull was not started." }
+        }
     }
+
+    mut args = [$script]
+
+    if $prune {
+        $args = ($args | append "--prune")
+    }
+
+    if $force or $backup {
+        $args = ($args | append "--force")
+    }
+
+    ^nu ...$args
+}
+
+export def dotresolve [] {
+    ^nu (tool-script "resolve-config.nu")
 }
 
 export def dotsync [] {
@@ -397,6 +418,47 @@ export def dotconfig [] {
     print "[info] Run `nu setup.nu` after changing profile, scheduler interval, or feature switches."
 }
 
+export def dotonedrive [
+    --apply
+] {
+    let script = (tool-script "setup-onedrive-ignore-upload.nu")
+
+    if $apply {
+        ^nu $script
+    } else {
+        ^nu $script --check
+    }
+}
+
+export def dotrclone [
+    --capture
+    --restore
+] {
+    if $capture and $restore {
+        error make { msg: "Use either --capture or --restore, not both." }
+    }
+
+    if $capture {
+        ^nu (tool-script "capture-rclone-config.nu")
+        return
+    }
+
+    if $restore {
+        ^nu (tool-script "restore-rclone-config.nu")
+        return
+    }
+
+    if (which rclone | is-empty) {
+        print "rclone: not installed"
+        return
+    }
+
+    print "Local rclone config:"
+    ^rclone config file
+    print ""
+    print ("Private copy: " + ((data-root) | path join "rclone" "rclone.conf" | into string))
+}
+
 export def dotlocal [] {
     let file = ((nu-home) | path join ".config" "dotfiles" "local.nu")
 
@@ -409,6 +471,40 @@ export def dotlocal [] {
 
 export def dotsecrets [] {
     edit-file ($nu.data-dir | path join "vendor" "autoload" "dotfiles-secrets.nu")
+}
+
+export def dotgitids [
+    --edit
+    --apply
+] {
+    let script = (tool-script "setup-git-identities.nu")
+
+    if $edit {
+        if $apply {
+            ^nu $script --edit --apply
+        } else {
+            ^nu $script --edit
+        }
+        return
+    }
+
+    if $apply {
+        ^nu $script --apply
+    } else {
+        ^nu $script --check
+    }
+}
+
+export def dotsshkeys [
+    --generate
+] {
+    let script = (tool-script "setup-ssh-keys.nu")
+
+    if $generate {
+        ^nu $script --generate
+    } else {
+        ^nu $script --check
+    }
 }
 
 export def dotgitlocal [] {
@@ -437,6 +533,53 @@ export def dotwezterm [] {
 
 export def dotstarship [] {
     edit-managed-target ((nu-home) | path join ".config" "starship.toml")
+}
+
+export def dotpreflight [
+    --diff
+] {
+    let script = (tool-script "preflight.nu")
+
+    if $diff {
+        ^nu $script --diff
+    } else {
+        ^nu $script
+    }
+}
+
+export def dotlocalbackup [
+    --label: string = "manual"
+] {
+    let script = (tool-script "backup-local-config.nu")
+    ^nu $script --label $label
+}
+
+export def dotlocalrestore [
+    --list
+    --backup: string = ""
+    --force
+] {
+    let script = (tool-script "backup-local-config.nu")
+
+    if $list {
+        ^nu $script --list
+        return
+    }
+
+    mut args = [$script]
+
+    if ($backup | is-empty) {
+        $args = ($args | append "--restore-latest")
+    } else {
+        $args = ($args | append "--restore")
+        $args = ($args | append $backup)
+    }
+
+    if $force {
+        $args = ($args | append "--force")
+    }
+
+    ^nu ...$args
 }
 
 export def newproj [

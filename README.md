@@ -1,4 +1,4 @@
-# Initial-setup v0.9.8
+# Initial-setup v0.11.3
 
 `Initial-setup` is a cross-platform bootstrap and configuration synchronization
 tool for reproducing a personal development environment on Windows, macOS, and
@@ -7,9 +7,11 @@ Linux.
 The project keeps public automation code in Git and stores personal
 configuration outside the repository in a private cloud-synchronized folder.
 
-v0.9.0 introduces a configuration-schema layer, automatic schema migration,
-machine-local tool-version snapshots, a read-only environment audit, and
-cross-platform GitHub Actions validation with real Nushell parsers.
+v0.11.3 adds bidirectional configuration reconciliation during setup. Local
+changes can now be published directly to the private drive instead of being
+limited to the private-to-local overwrite path. Review mode shows differences
+first, then asks which side should become authoritative. `dotresolve` provides
+the same workflow after setup.
 
 ```text
 New machine
@@ -53,6 +55,8 @@ PRIVATE-CLOUD-FOLDER/
 │  ├─ defaults/
 │  ├─ fonts/
 │  ├─ packages/
+│  ├─ profiles/                  # Declarative machine profiles
+│  ├─ templates/                 # Public examples only
 │  ├─ scripts/
 │  ├─ README.md
 │  └─ CHANGELOG.md
@@ -107,11 +111,17 @@ From the repository root:
 nu setup.nu
 ```
 
-For the first authoritative machine:
+On the first run, `setup.nu` now detects both local and private configuration
+and asks which side should be authoritative. The default `auto` mode no longer
+forces you directly into a single overwrite prompt.
+
+For the first authoritative machine, the legacy shorthand still works:
 
 ```nu
 nu setup.nu --mode initial
 ```
+
+This maps to `--config-policy push-local`.
 
 For another machine restoring an existing private source:
 
@@ -119,7 +129,57 @@ For another machine restoring an existing private source:
 nu setup.nu --mode existing
 ```
 
-The default mode is `auto`.
+This maps to the review path. The default mode remains `auto`.
+
+## Configuration synchronization policy
+
+A normal run:
+
+```nu
+nu setup.nu
+```
+
+now resolves synchronization direction before chezmoi is allowed to overwrite a
+managed file:
+
+```text
+1  Review differences, then choose direction
+2  Save local changes to private drive
+3  Apply private configuration to this machine
+4  Backup local, then apply private configuration
+5  Preview only
+6  Cancel
+```
+
+When both local and private configuration exist, `review` is recommended. Review
+mode runs `chezmoi status` and `chezmoi diff`, then returns to an Initial-setup
+menu where you choose either local -> private or private -> local. It no longer
+drops directly into chezmoi's `diff/overwrite/all-overwrite/skip/quit` prompt.
+
+The same behavior can be selected non-interactively:
+
+```nu
+nu setup.nu --config-policy review
+nu setup.nu --config-policy push-local
+nu setup.nu --config-policy pull-private
+nu setup.nu --config-policy backup-private
+nu setup.nu --config-policy preview
+```
+
+Policy behavior:
+
+| Policy | Result |
+|---|---|
+| `review` | Shows status/diff, then asks whether local or private configuration should win. |
+| `push-local` | Saves current managed local configuration to the private drive and makes this machine authoritative. |
+| `pull-private` | Applies the private source to this machine and makes the private source authoritative. |
+| `backup-private` | Creates a machine-local backup, then applies the private source. |
+| `preview` | Shows the setup plan plus `chezmoi status`/`diff` and exits without applying setup changes. |
+
+`keep-local` and `keep-private` remain accepted as compatibility aliases for
+`push-local` and `pull-private` respectively.
+
+---
 
 ### Fresh Windows machine
 
@@ -129,16 +189,13 @@ From PowerShell:
 .\bootstrap.ps1
 ```
 
-Optional explicit mode:
+Optional explicit mode or policy:
 
 ```powershell
 .\bootstrap.ps1 -Mode initial
-```
-
-or:
-
-```powershell
-.\bootstrap.ps1 -Mode existing
+.\bootstrap.ps1 -ConfigPolicy review
+.\bootstrap.ps1 -ConfigPolicy push-local
+.\bootstrap.ps1 -ConfigPolicy backup-private
 ```
 
 ### Fresh macOS or Linux machine
@@ -148,11 +205,14 @@ chmod +x bootstrap.sh
 ./bootstrap.sh
 ```
 
-Explicit modes:
+Explicit modes or policies:
 
 ```sh
 ./bootstrap.sh --mode initial
 ./bootstrap.sh --mode existing
+./bootstrap.sh --config-policy review
+./bootstrap.sh --config-policy push-local
+./bootstrap.sh --config-policy backup-private
 ```
 
 ---
@@ -214,6 +274,19 @@ CLI tools
 Minimal terminal-oriented environment without the larger language toolchain
 set.
 
+Profile defaults are no longer hard-coded in `setup.nu`. They are composed from:
+
+```text
+profiles/common.nuon
+profiles/workstation.nuon
+profiles/laptop.nuon
+profiles/server.nuon
+profiles/minimal.nuon
+```
+
+`common.nuon` defines the shared baseline. The selected profile overlays only
+the values that differ, which keeps profile changes declarative and reviewable.
+
 ---
 
 ## Dry run
@@ -231,6 +304,13 @@ Example:
 nu setup.nu --profile server --dry-run
 ```
 
+`--config-policy preview` is a first-run-oriented alternative that also shows
+`chezmoi status` and the managed-file diff when a private source exists:
+
+```nu
+nu setup.nu --config-policy preview
+```
+
 ---
 
 ## Machine-local configuration
@@ -245,8 +325,8 @@ Typical structure:
 
 ```nu
 {
-    app_version: "0.9.8"
-    schema_version: 2
+    app_version: "0.11.3"
+    schema_version: 4
     data_root: "..."
     tools_root: "..."
 
@@ -283,6 +363,8 @@ Typical structure:
         julia: true
         git_config: true
         ssh_config: true
+        rclone_config: true
+        onedrive_ignore_uploads: true
     }
 }
 ```
@@ -307,16 +389,16 @@ Application releases and machine-config structure now have independent
 versions:
 
 ```text
-VERSION         0.9.8
-SCHEMA_VERSION  2
+VERSION         0.11.3
+SCHEMA_VERSION  4
 ```
 
 Machine config stores both values:
 
 ```nu
 {
-    app_version: "0.9.8"
-    schema_version: 2
+    app_version: "0.11.3"
+    schema_version: 4
     ...
 }
 ```
@@ -341,9 +423,15 @@ legacy config / schema 0
 schema 1
         ↓
 schema 2
+        ↓
+schema 3
+        ↓
+schema 4
 ```
 
 Schema 2 adds `sync.prune_extras`, defaulting to `false`.
+Schema 3 adds `features.rclone_config`, defaulting to `true`.
+Schema 4 adds `features.onedrive_ignore_uploads`.
 
 Before the first schema migration, Initial-setup creates:
 
@@ -433,7 +521,6 @@ dotaudit
 GitHub Actions:
 
 ```text
-.github/workflows/ci.yml
 ```
 
 CI validates the project on:
@@ -466,6 +553,145 @@ Run the repository validator locally:
 ```nu
 nu scripts/validate-project.nu
 ```
+
+
+---
+
+## OneDrive upload exclusions on Windows
+
+v0.9.10 manages the Microsoft OneDrive policy that excludes selected file
+patterns from upload.
+
+Managed registry path:
+
+```text
+HKLM\SOFTWARE\Policies\Microsoft\OneDrive\EnableODIgnoreListFromGPO
+```
+
+Managed string values:
+
+```text
+1 = *.log
+2 = *.tmp
+3 = *.cache
+4 = *.bak
+```
+
+The source list is stored in:
+
+```text
+defaults/onedrive-ignore-upload-patterns.txt
+```
+
+The policy is enabled by default for `workstation` and `laptop` profiles and
+disabled by default for `server` and `minimal`.
+
+Feature switch:
+
+```nu
+features: {
+    onedrive_ignore_uploads: true
+}
+```
+
+Initial-setup only manages the numbered values corresponding to its pattern
+list. Additional values already present under the OneDrive policy key are
+preserved.
+
+Because this is an HKLM policy, changing it requires Administrator rights.
+Normal setup does not force elevation. If the policy is already correct, it is
+left unchanged. If it needs a change and setup is not elevated, Initial-setup
+prints a warning and continues.
+
+Check policy status:
+
+```nu
+dotonedrive
+```
+
+Apply it from an elevated Windows terminal:
+
+```nu
+dotonedrive --apply
+```
+
+After changing the policy, restart the OneDrive sync app for the new policy to
+take effect.
+
+
+---
+
+## rclone configuration synchronization
+
+v0.9.9 can synchronize the active rclone configuration file without managing
+or starting any rclone mount.
+
+Feature switch:
+
+```nu
+features: {
+    rclone_config: true
+}
+```
+
+Initial-setup asks rclone for the active configuration path:
+
+```sh
+rclone config file
+```
+
+and synchronizes only that file with:
+
+```text
+PRIVATE-DATA-ROOT/
+└─ rclone/
+   └─ rclone.conf
+```
+
+Behavior:
+
+```text
+initial / dotpush
+    local active rclone.conf
+        → private rclone/rclone.conf
+
+existing / dotpull
+    private rclone/rclone.conf
+        → local active rclone.conf
+```
+
+Already-identical files are skipped.
+
+No mount behavior is managed:
+
+- no `rclone mount`
+- no drive-letter configuration
+- no VFS cache setup
+- no rclone service
+- no rclone mount scheduled task
+
+Initial-setup also does not install rclone. If rclone is unavailable on a
+machine, config capture/restore is skipped.
+
+Manual commands:
+
+```nu
+dotrclone
+dotrclone --capture
+dotrclone --restore
+```
+
+### Security
+
+`rclone.conf` can contain OAuth tokens, passwords, or other credentials. The
+copy is therefore stored only in the private data root and never in the public
+Initial-setup Git repository.
+
+If stronger at-rest protection is required, use rclone's own configuration
+encryption.
+
+Some rclone backends may not support reusing exactly the same authentication
+configuration across machines.
 
 
 ---
@@ -835,6 +1061,48 @@ Edit local overrides with:
 dotgitlocal
 ```
 
+Folder-specific identities are machine-local and can be configured without
+changing the shared Git config:
+
+```nu
+dotgitids --edit
+dotgitids --apply
+dotgitids
+```
+
+The local manifest is:
+
+```text
+~/.config/dotfiles/git-identities.nuon
+```
+
+A public example is kept at `templates/git-identities.nuon.example`. The live
+manifest stays machine-local because folder roots and SSH-key paths can differ
+between computers.
+
+Example schema:
+
+```nu
+{
+    version: 1
+    identities: [
+        {
+            name: "work"
+            enabled: true
+            paths: ["~/Work/"]
+            user_name: "Your Name"
+            email: "you@work.example"
+            ssh_key: "~/.ssh/id_ed25519_work"
+        }
+    ]
+}
+```
+
+Initial-setup generates Git `includeIf "gitdir/i:..."` rules and per-identity
+config files under `~/.config/git/identities/`. The manifest and generated
+identity files remain machine-local. The repository only contains
+`templates/git-identities.nuon.example`.
+
 ### SSH
 
 Shared configuration:
@@ -855,7 +1123,23 @@ Edit with:
 dotsshlocal
 ```
 
-Private SSH keys are not synchronized.
+Private SSH keys are not synchronized. Initial-setup can audit conventional
+`id_*` keys plus keys referenced by `git-identities.nuon`:
+
+```nu
+dotsshkeys
+```
+
+To recreate missing `.pub` files from existing private keys when this can be
+done non-interactively:
+
+```nu
+dotsshkeys --generate
+```
+
+Encrypted private keys are never modified. If an empty-passphrase export is not
+possible, Initial-setup reports the key and leaves manual `ssh-keygen -y`
+recovery to the user.
 
 ---
 
@@ -985,16 +1269,35 @@ Conflict marker:
 ~/.config/dotfiles/SYNC-CONFLICT.txt
 ```
 
-Resolve using local state:
+Resolve interactively after reviewing the differences:
 
 ```nu
-dotpush
+dotresolve
 ```
 
-Resolve using cloud state:
+`dotresolve` offers:
+
+```text
+1  Save this machine -> private drive
+2  Apply private drive -> this machine
+3  Backup this machine, then apply private drive
+4  Cancel
+```
+
+Direct commands remain available:
 
 ```nu
+# Local managed files -> private drive
+dotpush
+
+# Private drive -> local, using normal chezmoi safety checks
 dotpull
+
+# Explicitly accept the private version
+dotpull --force
+
+# Backup local config first, then accept the private version
+dotpull --backup
 ```
 
 ---
@@ -1005,6 +1308,7 @@ dotpull
 dotstatus
 dotdiff
 dotsync
+dotresolve
 dotpush
 dotpull
 ```
@@ -1048,6 +1352,66 @@ important destructive operations.
 
 ---
 
+## Local configuration backup and restore
+
+`dotsnapshot` protects the private synchronized source. v0.11.3 adds a separate
+backup for the **live configuration on the current machine**, which is useful
+before accepting private-source changes. SSH private keys and dedicated secret
+files are not included. Ordinary configuration files are copied verbatim, so
+secrets should not be embedded directly in those files. `rclone.conf` is not
+placed in these general local backups because it commonly contains credentials;
+manage it with `dotrclone` and the existing private rclone workflow.
+
+Create a local backup:
+
+```nu
+dotlocalbackup
+dotlocalbackup --label before-refactor
+```
+
+List backups:
+
+```nu
+dotlocalrestore --list
+```
+
+Preview restoration of the latest backup:
+
+```nu
+dotlocalrestore
+```
+
+Preview a specific backup:
+
+```nu
+dotlocalrestore --backup <backup-name>
+```
+
+Actually restore it:
+
+```nu
+dotlocalrestore --backup <backup-name> --force
+```
+
+Local backups are stored under:
+
+```text
+~/.config/dotfiles/local-backups/
+```
+
+The same `maintenance.snapshot_keep` retention count used by normal snapshots
+is also applied to local-configuration backups.
+
+Before applying configuration on an established machine, inspect the current
+state with:
+
+```nu
+dotpreflight
+dotpreflight --diff
+```
+
+---
+
 ## Doctor and repair
 
 Check the environment:
@@ -1063,9 +1427,10 @@ dotdoctor --fix
 ```
 
 Doctor covers the machine-config schema, managed configuration structure,
-platform shims, local overrides, secrets integration, optional tools,
-synchronization state, and the scheduler. `dotdoctor --fix` runs config
-migration before the repair pass.
+platform shims, local overrides, folder-specific Git identities, SSH key-pair
+state, secrets integration, optional tools, synchronization state, and the
+scheduler. `dotdoctor --fix` runs config migration before the repair pass and
+reapplies the Git identity dispatcher / recoverable SSH public keys.
 
 ---
 
@@ -1289,12 +1654,16 @@ Synchronization
   dotstatus
   dotdiff
   dotsync
+  dotresolve
   dotpush
   dotpull
 
 Recovery / validation
   dotsnapshot
   dotrollback
+  dotlocalbackup
+  dotlocalrestore
+  dotpreflight
   dotdoctor
   dotaudit
   dotmigrate
@@ -1314,6 +1683,8 @@ Machine-local
   dotconfig
   dotlocal
   dotsecrets
+  dotgitids
+  dotsshkeys
   dotgitlocal
   dotsshlocal
 
@@ -1340,16 +1711,28 @@ Locations
 
 ## Fresh-machine workflow
 
-First authoritative machine:
+First run with guided policy selection:
 
 ```nu
-nu setup.nu --mode initial
+nu setup.nu
 ```
 
-Additional machine:
+First authoritative machine without a prompt:
 
 ```nu
-nu setup.nu --mode existing
+nu setup.nu --config-policy push-local
+```
+
+Additional machine with direction review:
+
+```nu
+nu setup.nu --config-policy review
+```
+
+Additional machine with an automatic local safety backup:
+
+```nu
+nu setup.nu --config-policy backup-private
 ```
 
 Normal subsequent maintenance:

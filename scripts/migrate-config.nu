@@ -52,10 +52,35 @@ def migrate-1-to-2 [config: record] {
     | upsert schema_version 2
 }
 
+def migrate-2-to-3 [config: record] {
+    let old_features = ($config.features? | default {})
+    let new_features = ($old_features | upsert rclone_config ($old_features.rclone_config? | default true))
+
+    $config
+    | upsert features $new_features
+    | upsert schema_version 3
+}
+
+def migrate-3-to-4 [config: record] {
+    let old_features = ($config.features? | default {})
+    let profile = ($config.machine.profile? | default "workstation")
+    let default_enabled = ($profile == "workstation" or $profile == "laptop")
+    let new_features = (
+        $old_features
+        | upsert onedrive_ignore_uploads ($old_features.onedrive_ignore_uploads? | default $default_enabled)
+    )
+
+    $config
+    | upsert features $new_features
+    | upsert schema_version 4
+}
+
 def migrate-step [config: record from_schema: int] {
     match $from_schema {
         0 => { migrate-0-to-1 $config }
         1 => { migrate-1-to-2 $config }
+        2 => { migrate-2-to-3 $config }
+        3 => { migrate-3-to-4 $config }
         _ => {
             error make {
                 msg: (

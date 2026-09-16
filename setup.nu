@@ -1,5 +1,12 @@
 #!/usr/bin/env nu
 
+const CORE_MODULE = path self ./scripts/modules/core.nu
+const PROFILES_MODULE = path self ./scripts/modules/profiles.nu
+const SETUP_POLICY_MODULE = path self ./scripts/modules/setup-policy.nu
+
+use $CORE_MODULE [nu-home machine-config-path detect-machine-name]
+use $PROFILES_MODULE [profile-defaults]
+use $SETUP_POLICY_MODULE [config-policy-names normalize-config-policy choose-config-policy choose-reviewed-policy local-config-exists private-config-exists]
 # ============================================================
 # Initial-setup
 #
@@ -18,141 +25,10 @@ def section [title: string] {
     print ""
 }
 
-def nu-home [] {
-    let home_path = ($nu | get --optional home-path)
-
-    if $home_path != null {
-        return $home_path
-    }
-
-    let home_dir = ($nu | get --optional home-dir)
-
-    if $home_dir != null {
-        return $home_dir
-    }
-
-    error make {
-        msg: "Unable to determine the Nushell home directory."
-    }
-}
-
 def require [name: string] {
     if (which $name | is-empty) {
         error make {
             msg: ("Required command not found: " + $name)
-        }
-    }
-}
-
-def machine-config-path [] {
-    nu-home
-    | path join ".config" "dotfiles" "config.nuon"
-}
-
-def detect-machine-name [] {
-    let computer_name = ($env.COMPUTERNAME? | default "" | str trim)
-
-    if not ($computer_name | is-empty) {
-        return $computer_name
-    }
-
-    let host_name = ($env.HOSTNAME? | default "" | str trim)
-
-    if not ($host_name | is-empty) {
-        return $host_name
-    }
-
-    if not (which hostname | is-empty) {
-        let external_name = (^hostname | str trim)
-
-        if not ($external_name | is-empty) {
-            return $external_name
-        }
-    }
-
-    "unknown-machine"
-}
-
-def profile-defaults [profile: string] {
-    match $profile {
-        "workstation" => {
-            {
-                install_gui_apps: true
-                features: {
-                    neovim: true
-                    fonts: true
-                    cli_tools: true
-                    vscode: true
-                    wezterm: true
-                    starship: true
-                    rust: true
-                    julia: true
-                    git_config: true
-                    ssh_config: true
-                }
-            }
-        }
-
-        "laptop" => {
-            {
-                install_gui_apps: true
-                features: {
-                    neovim: true
-                    fonts: true
-                    cli_tools: true
-                    vscode: true
-                    wezterm: true
-                    starship: true
-                    rust: true
-                    julia: true
-                    git_config: true
-                    ssh_config: true
-                }
-            }
-        }
-
-        "server" => {
-            {
-                install_gui_apps: false
-                features: {
-                    neovim: true
-                    fonts: false
-                    cli_tools: true
-                    vscode: false
-                    wezterm: false
-                    starship: true
-                    rust: true
-                    julia: true
-                    git_config: true
-                    ssh_config: true
-                }
-            }
-        }
-
-        "minimal" => {
-            {
-                install_gui_apps: false
-                features: {
-                    neovim: true
-                    fonts: false
-                    cli_tools: true
-                    vscode: false
-                    wezterm: false
-                    starship: true
-                    rust: false
-                    julia: false
-                    git_config: true
-                    ssh_config: true
-                }
-            }
-        }
-
-        _ => {
-            error make {
-                msg: (
-                    "Unknown profile '" + $profile + "'. Use workstation, laptop, server, or minimal."
-                )
-            }
         }
     }
 }
@@ -283,6 +159,8 @@ def build-machine-config [
             julia: (feature-value $old_features $preset_features "julia" $reset_to_profile)
             git_config: (feature-value $old_features $preset_features "git_config" $reset_to_profile)
             ssh_config: (feature-value $old_features $preset_features "ssh_config" $reset_to_profile)
+            rclone_config: (feature-value $old_features $preset_features "rclone_config" $reset_to_profile)
+            onedrive_ignore_uploads: (feature-value $old_features $preset_features "onedrive_ignore_uploads" $reset_to_profile)
         }
     }
 }
@@ -332,18 +210,6 @@ def resolve-data-root [requested: string] {
     $DEFAULT_DATA_ROOT | path expand
 }
 
-def private-source-has-user-config [data_root: path] {
-    let markers = [
-        ($data_root | path join "home" "dot_config" "nvim" "init.lua")
-        ($data_root | path join "home" "dot_config" "nushell" "config.nu")
-        ($data_root | path join "home" "dot_config" "nushell" "env.nu")
-        ($data_root | path join "home" "dot_gitconfig")
-        ($data_root | path join "home" "private_dot_ssh" "config")
-    ]
-
-    $markers | any { |item| $item | path exists }
-}
-
 def resolve-mode [
     requested: string
     data_root: path
@@ -358,7 +224,7 @@ def resolve-mode [
         }
 
         "auto" => {
-            if (private-source-has-user-config $data_root) {
+            if (private-config-exists $data_root) {
                 "existing"
             } else {
                 "initial"
@@ -373,6 +239,78 @@ def resolve-mode [
             }
         }
     }
+}
+
+def validate-config-policy [policy: string] {
+    let allowed = (config-policy-names)
+
+    if not ($policy in $allowed) {
+        error make {
+            msg: (
+                "Unknown config policy '" + $policy + "'. Use " + ($allowed | str join ", ") + "."
+            )
+        }
+    }
+}
+
+def resolve-config-policy [
+    requested_policy: string
+    requested_mode: string
+    first_run: bool
+    data_root: path
+] {
+    validate-config-policy $requested_policy
+
+    if $requested_policy != "ask" {
+        return (normalize-config-policy $requested_policy)
+    }
+
+    if $requested_mode == "initial" {
+        return "push-local"
+    }
+
+    if $requested_mode == "existing" {
+        return "review"
+    }
+
+    let local_exists = (local-config-exists)
+    let private_exists = (private-config-exists $data_root)
+
+    # When both sides exist, always resolve direction before invoking chezmoi.
+    # This prevents the raw overwrite-only chezmoi prompt from becoming the
+    # primary synchronization UX on later setup runs.
+    if $local_exists and $private_exists {
+        return (choose-config-policy $data_root)
+    }
+
+    if $private_exists {
+        return "pull-private"
+    }
+
+    if $local_exists or $first_run {
+        return "push-local"
+    }
+
+    "standard"
+}
+
+def mode-for-policy [
+    policy: string
+    fallback_mode: string
+] {
+    match $policy {
+        "push-local" => { "initial" }
+        "pull-private" => { "existing" }
+        "review" => { "existing" }
+        "backup-private" => { "existing" }
+        "preview" => { $fallback_mode }
+        "standard" => { $fallback_mode }
+        _ => { $fallback_mode }
+    }
+}
+
+def policy-needs-private-source [policy: string] {
+    $policy in ["pull-private" "review" "backup-private"]
 }
 
 def run-script [
@@ -403,12 +341,20 @@ def run-script [
     }
 }
 
-def apply-private-source [data_root: path] {
-    let args = [
+def apply-private-source [
+    data_root: path
+    policy: string = "standard"
+] {
+    mut args = [
         "--source"
         ($data_root | into string)
-        "apply"
     ]
+
+    if $policy in ["pull-private" "backup-private" "push-local"] {
+        $args = ($args | append "--force")
+    }
+
+    $args = ($args | append "apply")
 
     ^chezmoi ...$args
 
@@ -421,9 +367,42 @@ def apply-private-source [data_root: path] {
     }
 }
 
+def preview-private-source [data_root: path] {
+    section "Private configuration preview"
+
+    if not (private-config-exists $data_root) {
+        print "No existing private configuration was detected."
+        print "This machine would become the initial configuration source."
+        return
+    }
+
+    if (which chezmoi | is-empty) {
+        print "[warn] chezmoi is not installed; a detailed diff cannot be shown."
+        return
+    }
+
+    print "chezmoi status:"
+    let status_args = [
+        "--source"
+        ($data_root | into string)
+        "status"
+    ]
+    ^chezmoi ...$status_args
+
+    print ""
+    print "chezmoi diff:"
+    let diff_args = [
+        "--source"
+        ($data_root | into string)
+        "diff"
+    ]
+    ^chezmoi ...$diff_args
+}
+
 def print-dry-run [
     context: record
     mode: string
+    policy: string = "standard"
 ] {
     section "Dry run"
 
@@ -433,6 +412,7 @@ def print-dry-run [
     print $context
     print ""
     print ("Mode          : " + $mode)
+    print ("Config policy : " + $policy)
     print ("Profile       : " + $context.machine.profile)
     print ("Private data  : " + $context.data_root)
     print ("Auto sync     : " + ($context.sync.enabled | into string))
@@ -447,8 +427,9 @@ def print-dry-run [
     print "  - import or apply configuration"
     print "  - configure platform shims"
     print "  - configure local Git / SSH overrides"
+    print "  - apply folder-specific Git identities and recover SSH public keys"
     print "  - configure local secrets autoload"
-    print "  - capture/restore Rust and Julia environment state"
+    print "  - capture/restore Rust, Julia, and rclone configuration state"
     print "  - configure Starship / WezTerm when enabled"
     print "  - initialize sync baseline"
     print "  - install automatic sync scheduler when enabled"
@@ -460,12 +441,14 @@ def main [
     --mode: string = "auto"
     --data-dir: string = ""
     --profile: string = ""
+    --config-policy: string = "ask"
     --no-auto-sync
     --dry-run
 ] {
     section ("Initial-setup " + (app-version))
 
     let scripts = ($TOOLS_ROOT | path join "scripts")
+    let first_run = (not ((machine-config-path) | path exists))
 
     if not $dry_run {
         run-script "Migrating machine config schema" ($scripts | path join "migrate-config.nu")
@@ -473,14 +456,57 @@ def main [
 
     let data_root = (resolve-data-root $data_dir)
     let proposed_context = (build-machine-config $data_root $no_auto_sync $profile)
-    let resolved_mode = (resolve-mode $mode $data_root)
+    let auto_mode = (resolve-mode $mode $data_root)
+    validate-config-policy $config_policy
 
     if $dry_run {
-        print-dry-run $proposed_context $resolved_mode
+        let dry_policy = (if $config_policy == "ask" { "no-change-preview" } else { $config_policy })
+        print-dry-run $proposed_context $auto_mode $dry_policy
+        preview-private-source $data_root
+        return
+    }
+
+    mut config_policy = (resolve-config-policy $config_policy $mode $first_run $data_root)
+
+    if $config_policy == "cancel" {
+        section "Setup cancelled"
+        print "No setup changes were applied."
+        return
+    }
+
+    if (policy-needs-private-source $config_policy) and not (private-config-exists $data_root) {
+        error make {
+            msg: ("Config policy '" + $config_policy + "' requires an existing private configuration source. Use push-local or preview instead.")
+        }
+    }
+
+    if $config_policy == "preview" {
+        let preview_mode = (mode-for-policy $config_policy $auto_mode)
+        print-dry-run $proposed_context $preview_mode $config_policy
+        preview-private-source $data_root
         return
     }
 
     require chezmoi
+
+    if $config_policy == "review" {
+        preview-private-source $data_root
+        $config_policy = (choose-reviewed-policy)
+
+        if $config_policy == "cancel" {
+            section "Setup cancelled"
+            print "No setup changes were applied."
+            return
+        }
+    }
+
+    let resolved_mode = (mode-for-policy $config_policy $auto_mode)
+
+    section "Configuration policy"
+    print ("Policy        : " + $config_policy)
+    print ("Resolved mode : " + $resolved_mode)
+    print ("Local config  : " + (if (local-config-exists) { "detected" } else { "not detected" }))
+    print ("Private config: " + (if (private-config-exists $data_root) { "detected" } else { "not detected" }))
 
     # Kept intentionally on one line for Nushell 0.109 compatibility.
     save-machine-config $proposed_context
@@ -526,13 +552,21 @@ def main [
 
     run-script "Preparing machine-local Nushell setup" ($scripts | path join "setup-machine-local.nu")
 
+    if ($features.onedrive_ignore_uploads? | default false) {
+        run-script "Configuring OneDrive upload exclusions" ($scripts | path join "setup-onedrive-ignore-upload.nu")
+    }
+
     section ("Selected mode: " + $resolved_mode)
 
     if $resolved_mode == "initial" {
-        run-script "Importing existing local configuration" ($scripts | path join "migrate-dotfiles.nu")
+        if $config_policy == "push-local" {
+            run-script "Importing local configuration (local wins)" ($scripts | path join "migrate-dotfiles.nu") "--force-source"
+        } else {
+            run-script "Importing existing local configuration" ($scripts | path join "migrate-dotfiles.nu")
+        }
 
         section "Applying imported/private configuration"
-        apply-private-source $data_root
+        apply-private-source $data_root $config_policy
 
         run-script "Configuring platform-specific paths" ($scripts | path join "setup-platform-shims.nu")
         run-script "Enabling Nushell dotfiles commands" ($scripts | path join "enable-nushell-dotfiles.nu")
@@ -547,13 +581,25 @@ def main [
             run-script "Capturing language environment state" ($scripts | path join "capture-work-environment.nu")
         }
 
+        if ($features.rclone_config? | default false) {
+            run-script "Capturing rclone config" ($scripts | path join "capture-rclone-config.nu")
+        }
+
         run-script "Recording initial sync writer" ($scripts | path join "write-sync-meta.nu") "--action" "initial"
     } else {
+        if $config_policy == "backup-private" {
+            run-script "Backing up current local configuration" ($scripts | path join "backup-local-config.nu") "--label" "before-private-apply"
+        }
+
         section "Applying private cloud configuration"
-        apply-private-source $data_root
+        apply-private-source $data_root $config_policy
 
         if $features.rust or $features.julia {
             run-script "Restoring language environment state" ($scripts | path join "restore-work-environment.nu")
+        }
+
+        if ($features.rclone_config? | default false) {
+            run-script "Restoring rclone config" ($scripts | path join "restore-rclone-config.nu")
         }
 
         run-script "Configuring platform-specific paths" ($scripts | path join "setup-platform-shims.nu")
@@ -564,6 +610,14 @@ def main [
             run-script "Applying VS Code settings" ($scripts | path join "apply-vscode-config.nu")
             run-script "Installing VS Code extensions" ($scripts | path join "install-vscode-extensions.nu")
         }
+    }
+
+    if $features.git_config {
+        run-script "Applying folder-specific Git identities" ($scripts | path join "setup-git-identities.nu") "--apply"
+    }
+
+    if $features.ssh_config {
+        run-script "Checking SSH keys and recovering public keys" ($scripts | path join "setup-ssh-keys.nu") "--generate"
     }
 
     if $features.starship {
@@ -606,6 +660,7 @@ def main [
     print ""
     print "  dotcapture / dotrestoreenv"
     print "  dotconfig / dotsecrets"
-    print "  dotgitlocal / dotsshlocal"
+    print "  dotgitids / dotsshkeys / dotgitlocal / dotsshlocal"
+    print "  dotpreflight / dotlocalbackup / dotlocalrestore"
     print "  newproj"
 }

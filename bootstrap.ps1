@@ -8,6 +8,9 @@ param(
     [ValidateSet("", "workstation", "laptop", "server", "minimal")]
     [string]$Profile = "",
 
+    [ValidateSet("ask", "push-local", "pull-private", "review", "backup-private", "preview", "keep-local", "keep-private")]
+    [string]$ConfigPolicy = "ask",
+
     [switch]$NoAutoSync,
 
     [switch]$DryRun,
@@ -259,7 +262,8 @@ Write-Section "Starting Nushell setup"
 
 $nuArgs = @(
     $setup,
-    "--mode", $Mode
+    "--mode", $Mode,
+    "--config-policy", $ConfigPolicy
 )
 
 if ($DataDir) {
