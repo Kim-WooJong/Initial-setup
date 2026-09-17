@@ -47,7 +47,7 @@ export def verify-release [root: path expected_digest: string] {
     let manifest = (open --raw $file | from json)
     if ($manifest.format? | default 0) != 1 { error make { msg: "Unsupported release manifest format." } }
     let version = (open --raw ($root | path join "VERSION") | into string | str trim)
-    if not ($version =~ '^0\.12\.[0-9]+$') or $version != $manifest.version { error make { msg: "Updater accepts matching 0.12.* manifests only." } }
+    if not ($version =~ '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') or $version != $manifest.version { error make { msg: "Updater requires a matching stable major.minor.patch manifest." } }
     for row in $manifest.files {
         validate-relative $row.path | ignore
         if ($row.path | str starts-with ".git/") or ($row.path | str starts-with ".github/") or $row.path == "RELEASE-MANIFEST.json" {

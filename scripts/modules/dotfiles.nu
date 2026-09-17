@@ -50,7 +50,11 @@ def tools-root [] {
 }
 
 def tool-script [name: string] {
-    tools-root | path join "scripts" $name
+    let script = (tools-root | path join "scripts" $name)
+    if not ($script | path exists) or ($script | path type) != "file" {
+        error make {msg: ("TOOL_SCRIPT_MISSING: " + ($script | into string) + "\nThe checkout may have moved or the archive may be incomplete. Run scripts/refresh-commands.nu from the new complete checkout; do not rerun setup just to repair this path.")}
+    }
+    $script
 }
 
 def fingerprint [kind: string] {
@@ -61,7 +65,7 @@ def fingerprint [kind: string] {
         $kind
     ]
 
-    ^nu ...$args | str trim
+    ^$nu.current-exe --no-config-file ...$args | str trim
 }
 
 def edit-file [target: path] {
@@ -74,52 +78,21 @@ def edit-file [target: path] {
     ^nvim $target
 }
 
-def edit-managed-target [target: path] {
-    let root = (data-root)
-
-    let source_args = [
-        "--source"
-        ($root | into string)
-        "source-path"
-        ($target | into string)
-    ]
-
-    let source = (^chezmoi ...$source_args | str trim | path expand)
-
-    if not ($source | path exists) {
-        error make {
-            msg: ("Managed source does not exist: " + ($source | into string))
-        }
+# This module is copied into the local Nushell configuration by setup/refresh.
+# Put the implementation in a checkout script so later bug fixes are not frozen
+# in the copied command module. Default editing never publishes implicitly.
+def edit-managed-target [target: path --push --path] {
+    if $path { return ($target | path expand --no-symlink) }
+    let script = (tool-script "edit-managed.nu")
+    if not ($script | path exists) {
+        error make {msg: "edit-managed.nu is missing from tools_root. Run scripts/refresh-commands.nu from the updated checkout and restart Nushell."}
     }
-
-    ^nvim $source
-
-    let editor_exit = ($env.LAST_EXIT_CODE | default 0)
-
-    if $editor_exit != 0 {
-        error make {
-            msg: "Neovim exited with an error."
-        }
-    }
-
-    let apply_args = [
-        "--source"
-        ($root | into string)
-        "apply"
-        ($target | into string)
-    ]
-
-    ^chezmoi ...$apply_args
-
-    let apply_exit = ($env.LAST_EXIT_CODE | default 0)
-
-    if $apply_exit != 0 {
-        error make {
-            msg: ("chezmoi apply failed: " + ($target | into string))
-        }
-    }
-
-    ^nu (tool-script "sync-up.nu")
+    let exe = $nu.current-exe
+    mut args = ["--no-config-file" $script ($target | into string)]
+    if $push { $args = ($args | append "--push") }
+    ^$exe ...$args
+    let code = ($env.LAST_EXIT_CODE | default 1)
+    if $code != 0 { error make {msg: "Managed editor command did not complete; see the preceding diagnostic. Any local edit is preserved."} }
 }
 
 export def dotstatus [] {
@@ -191,7 +164,8 @@ export def dotdiff [] {
 }
 
 export def dotpush [] {
-    ^nu (tool-script "sync-up.nu")
+    let exe = $nu.current-exe
+    ^$exe --no-config-file (tool-script "sync-up.nu")
 }
 
 export def dotpull [
@@ -204,7 +178,7 @@ export def dotpull [
     let script = (tool-script "sync-down.nu")
 
     if $backup {
-        ^nu (tool-script "backup-local-config.nu") --label "before-private-pull"
+        ^$nu.current-exe --no-config-file (tool-script "backup-local-config.nu") --label "before-private-pull"
 
         let backup_exit = ($env.LAST_EXIT_CODE | default 0)
         if $backup_exit != 0 {
@@ -224,20 +198,20 @@ export def dotpull [
         $args = ($args | append "--force")
     }
 
-    ^nu ...$args
+    ^$nu.current-exe --no-config-file ...$args
 }
 
 export def dotresolve [--policy] {
     let script = (tool-script "resolve-config.nu")
     if $policy {
-        ^nu $script --policy
+        ^$nu.current-exe --no-config-file $script --policy
     } else {
-        ^nu $script
+        ^$nu.current-exe --no-config-file $script
     }
 }
 
 export def dotsync [] {
-    ^nu (tool-script "auto-sync.nu")
+    ^$nu.current-exe --no-config-file (tool-script "auto-sync.nu")
 }
 
 export def dotsnapshot [
@@ -249,7 +223,7 @@ export def dotsnapshot [
         $label
     ]
 
-    ^nu ...$args
+    ^$nu.current-exe --no-config-file ...$args
 }
 
 export def dotrollback [
@@ -259,23 +233,23 @@ export def dotrollback [
     let script = (tool-script "rollback.nu")
 
     if $list {
-        ^nu $script --list
+        ^$nu.current-exe --no-config-file $script --list
         return
     }
 
     if ($snapshot | is-empty) {
-        ^nu $script
+        ^$nu.current-exe --no-config-file $script
     } else {
-        ^nu $script --snapshot $snapshot
+        ^$nu.current-exe --no-config-file $script --snapshot $snapshot
     }
 }
 
 export def dotversion [] {
-    ^nu (tool-script "version-info.nu")
+    ^$nu.current-exe --no-config-file (tool-script "version-info.nu")
 }
 
 export def dotrepo [] {
-    ^nu (tool-script "repo-status.nu")
+    ^$nu.current-exe --no-config-file (tool-script "repo-status.nu")
 }
 
 export def dotrelease [
@@ -299,7 +273,7 @@ export def dotrelease [
         $args = ($args | append "--no-tag")
     }
 
-    ^nu ...$args
+    ^$nu.current-exe --no-config-file ...$args
 }
 
 export def dotcleanup [
@@ -308,41 +282,47 @@ export def dotcleanup [
     let script = (tool-script "cleanup-direnv.nu")
 
     if $force {
-        ^nu $script --force
+        ^$nu.current-exe --no-config-file $script --force
     } else {
-        ^nu $script
+        ^$nu.current-exe --no-config-file $script
     }
 }
 
 export def dotaudit [] {
-    ^nu (tool-script "audit.nu")
+    ^$nu.current-exe --no-config-file (tool-script "audit.nu")
 }
 
 export def dotstate [] {
-    ^nu (tool-script "capture-tool-state.nu")
+    ^$nu.current-exe --no-config-file (tool-script "capture-tool-state.nu")
 }
 
 export def dotmigrate [--check] {
     let script = (tool-script "migrate-config.nu")
 
     if $check {
-        ^nu $script --check
+        ^$nu.current-exe --no-config-file $script --check
     } else {
-        ^nu $script
+        ^$nu.current-exe --no-config-file $script
     }
 }
 
 export def dotchecklist [] {
-    ^nu (tool-script "post-setup-checklist.nu")
+    ^$nu.current-exe --no-config-file (tool-script "post-setup-checklist.nu")
 }
 
 export def dotcapture [] {
-    ^nu (tool-script "capture-tool-state.nu")
-    ^nu (tool-script "sync-up.nu")
+    ^$nu.current-exe --no-config-file (tool-script "capture-tool-state.nu")
+    if ($env.LAST_EXIT_CODE | default 1) != 0 {
+        error make {msg: "CAPTURE_FAILED: synchronization was not started; review the capture error above."}
+    }
+    ^$nu.current-exe --no-config-file (tool-script "sync-up.nu")
+    if ($env.LAST_EXIT_CODE | default 1) != 0 {
+        error make {msg: "CAPTURE_SYNC_FAILED: local capture remains, but synchronization did not complete."}
+    }
 }
 
 export def dotrestoreenv [] {
-    ^nu (tool-script "restore-work-environment.nu")
+    ^$nu.current-exe --no-config-file (tool-script "restore-work-environment.nu")
 }
 
 export def dotdoctor [
@@ -351,9 +331,9 @@ export def dotdoctor [
     let script = (tool-script "doctor.nu")
 
     if $fix {
-        ^nu $script --fix
+        ^$nu.current-exe --no-config-file $script --fix
     } else {
-        ^nu $script
+        ^$nu.current-exe --no-config-file $script
     }
 }
 
@@ -382,7 +362,7 @@ export def dotupdate [
         $args = ($args | append "--all")
     }
 
-    ^nu ...$args
+    ^$nu.current-exe --no-config-file ...$args
 }
 
 export def dotreport [
@@ -391,9 +371,9 @@ export def dotreport [
     let script = (tool-script "report.nu")
 
     if $save {
-        ^nu $script --save
+        ^$nu.current-exe --no-config-file $script --save
     } else {
-        ^nu $script
+        ^$nu.current-exe --no-config-file $script
     }
 }
 
@@ -440,9 +420,9 @@ export def dotonedrive [
     let script = (tool-script "setup-onedrive-ignore-upload.nu")
 
     if $apply {
-        ^nu $script
+        ^$nu.current-exe --no-config-file $script
     } else {
-        ^nu $script --check
+        ^$nu.current-exe --no-config-file $script --check
     }
 }
 
@@ -455,12 +435,12 @@ export def dotrclone [
     }
 
     if $capture {
-        ^nu (tool-script "secret-vault.nu") capture rclone
+        ^$nu.current-exe --no-config-file (tool-script "secret-vault.nu") capture rclone
         return
     }
 
     if $restore {
-        ^nu (tool-script "secret-vault.nu") restore rclone
+        ^$nu.current-exe --no-config-file (tool-script "secret-vault.nu") restore rclone
         return
     }
 
@@ -479,7 +459,7 @@ export def dotlocal [] {
     let file = ((nu-home) | path join ".config" "dotfiles" "local.nu")
 
     if not ($file | path exists) {
-        ^nu (tool-script "setup-machine-local.nu")
+        ^$nu.current-exe --no-config-file (tool-script "setup-machine-local.nu")
     }
 
     edit-file $file
@@ -497,17 +477,17 @@ export def dotgitids [
 
     if $edit {
         if $apply {
-            ^nu $script --edit --apply
+            ^$nu.current-exe --no-config-file $script --edit --apply
         } else {
-            ^nu $script --edit
+            ^$nu.current-exe --no-config-file $script --edit
         }
         return
     }
 
     if $apply {
-        ^nu $script --apply
+        ^$nu.current-exe --no-config-file $script --apply
     } else {
-        ^nu $script --check
+        ^$nu.current-exe --no-config-file $script --check
     }
 }
 
@@ -517,9 +497,9 @@ export def dotsshkeys [
     let script = (tool-script "setup-ssh-keys.nu")
 
     if $generate {
-        ^nu $script --generate
+        ^$nu.current-exe --no-config-file $script --generate
     } else {
-        ^nu $script --check
+        ^$nu.current-exe --no-config-file $script --check
     }
 }
 
@@ -531,24 +511,24 @@ export def dotsshlocal [] {
     edit-file ((nu-home) | path join ".ssh" "config.local")
 }
 
-export def dotnvim [] {
-    edit-managed-target ((nu-home) | path join ".config" "nvim")
+export def dotnvim [--push --path] {
+    edit-managed-target ((nu-home) | path join ".config" "nvim") --push=$push --path=$path
 }
 
-export def dotnu [] {
-    edit-managed-target ((nu-home) | path join ".config" "nushell" "config.nu")
+export def dotnu [--push --path] {
+    edit-managed-target ((nu-home) | path join ".config" "nushell" "config.nu") --push=$push --path=$path
 }
 
-export def dotenv [] {
-    edit-managed-target ((nu-home) | path join ".config" "nushell" "env.nu")
+export def dotenv [--push --path] {
+    edit-managed-target ((nu-home) | path join ".config" "nushell" "env.nu") --push=$push --path=$path
 }
 
-export def dotwezterm [] {
-    edit-managed-target ((nu-home) | path join ".config" "wezterm" "wezterm.lua")
+export def dotwezterm [--push --path] {
+    edit-managed-target ((nu-home) | path join ".config" "wezterm" "wezterm.lua") --push=$push --path=$path
 }
 
-export def dotstarship [] {
-    edit-managed-target ((nu-home) | path join ".config" "starship.toml")
+export def dotstarship [--push --path] {
+    edit-managed-target ((nu-home) | path join ".config" "starship.toml") --push=$push --path=$path
 }
 
 
@@ -574,11 +554,11 @@ export def dotrun [
         $args = ($args | append $run_id)
     }
 
-    ^nu ...$args
+    ^$nu.current-exe --no-config-file ...$args
 }
 
 export def dotvalidate [] {
-    ^nu (tool-script "validate-project.nu")
+    ^$nu.current-exe --no-config-file (tool-script "validate-project.nu")
 }
 
 export def dottest [
@@ -596,7 +576,7 @@ export def dottest [
         $args = ($args | append "--keep")
     }
 
-    ^nu ...$args
+    ^$nu.current-exe --no-config-file ...$args
 }
 
 export def dotpreflight [
@@ -605,9 +585,9 @@ export def dotpreflight [
     let script = (tool-script "preflight.nu")
 
     if $diff {
-        ^nu $script --diff
+        ^$nu.current-exe --no-config-file $script --diff
     } else {
-        ^nu $script
+        ^$nu.current-exe --no-config-file $script
     }
 }
 
@@ -615,7 +595,7 @@ export def dotlocalbackup [
     --label: string = "manual"
 ] {
     let script = (tool-script "backup-local-config.nu")
-    ^nu $script --label $label
+    ^$nu.current-exe --no-config-file $script --label $label
 }
 
 export def dotlocalrestore [
@@ -626,7 +606,7 @@ export def dotlocalrestore [
     let script = (tool-script "backup-local-config.nu")
 
     if $list {
-        ^nu $script --list
+        ^$nu.current-exe --no-config-file $script --list
         return
     }
 
@@ -643,7 +623,7 @@ export def dotlocalrestore [
         $args = ($args | append "--force")
     }
 
-    ^nu ...$args
+    ^$nu.current-exe --no-config-file ...$args
 }
 
 export def newproj [
@@ -659,7 +639,7 @@ export def newproj [
         $path
     ]
 
-    ^nu ...$args
+    ^$nu.current-exe --no-config-file ...$args
 }
 
 export def dotdata [] {
@@ -674,7 +654,7 @@ export def dotplan [--direction: string = "none" --no-save] {
     let script = (tool-script "plan.nu")
     mut args = [$script "--direction" $direction]
     if $no_save { $args = ($args | append "--no-save") }
-    ^nu ...$args
+    ^$nu.current-exe --no-config-file ...$args
 }
 
 export def dotapply [--plan: string = "" --yes] {
@@ -685,27 +665,50 @@ export def dotapply [--plan: string = "" --yes] {
         $args = ($args | append $plan)
     }
     if $yes { $args = ($args | append "--yes") }
-    ^nu ...$args
+    ^$nu.current-exe --no-config-file ...$args
 }
 
 export def dotverify [--plan: string = ""] {
     let script = (tool-script "verify-plan.nu")
-    if ($plan | is-empty) { ^nu $script } else { ^nu $script --plan $plan }
+    if ($plan | is-empty) { ^$nu.current-exe --no-config-file $script } else { ^$nu.current-exe --no-config-file $script --plan $plan }
 }
 
 export def dottoolchain [--status --apply --lock-current] {
     let script = (tool-script "toolchain-state.nu")
-    if $lock_current { ^nu $script --lock-current } else if $apply { ^nu $script --apply } else { ^nu $script --status }
+    if $lock_current { ^$nu.current-exe --no-config-file $script --lock-current } else if $apply { ^$nu.current-exe --no-config-file $script --apply } else { ^$nu.current-exe --no-config-file $script --status }
 }
 
 export def dotmergecfg [--check --force] {
     let script = (tool-script "setup-merge-tool.nu")
-    if $check { ^nu $script --check } else if $force { ^nu $script --force } else { ^nu $script }
+    if $check { ^$nu.current-exe --no-config-file $script --check } else if $force { ^$nu.current-exe --no-config-file $script --force } else { ^$nu.current-exe --no-config-file $script }
 }
 
 # Arguments are forwarded as a list; no shell expansion/evaluation is used.
-export def --wrapped dotvault [...args: string] { ^nu --no-config-file (tool-script "secret-vault.nu") ...$args }
-export def --wrapped dotbackend [...args: string] { ^nu --no-config-file (tool-script "backend-control.nu") ...$args }
-export def --wrapped dotupgrade [...args: string] { ^nu --no-config-file (tool-script "safe-upgrade.nu") ...$args }
+export def --wrapped dotvault [...args: string] { let exe = $nu.current-exe; ^$exe --no-config-file (tool-script "secret-vault.nu") ...$args }
+export def --wrapped dotbackend [...args: string] { let exe = $nu.current-exe; ^$exe --no-config-file (tool-script "backend-control.nu") ...$args }
+export def --wrapped dotupgrade [...args: string] { ^$nu.current-exe --no-config-file (tool-script "safe-upgrade.nu") ...$args }
 
-export def --wrapped dotsecuritytest [...args: string] { ^nu --no-config-file (tool-script "security-self-test.nu") ...$args }
+export def --wrapped dotsecuritytest [...args: string] { ^$nu.current-exe --no-config-file (tool-script "security-self-test.nu") ...$args }
+
+# Verify/update the managed runtime without synchronizing settings.
+export def dotnuupdate [--check --shell] {
+    if $check and $shell { error make {msg: "Choose --check or --shell."} }
+    let exe = $nu.current-exe
+    let script = (tool-script "update-nushell.nu")
+    if $check { ^$exe --no-config-file $script --check } else if $shell { ^$exe --no-config-file $script --shell } else { ^$exe --no-config-file $script }
+}
+
+# Explicit cloud-mirror -> local-workspace import. Native Nu records on success.
+export def --wrapped dotcloud [action: string = "help" ...args: string] {
+    let exe = $nu.current-exe
+    let script = (tool-script "cloud-wins.nu")
+    if $action == "help" or "--help" in $args {
+        ^$exe --no-config-file $script $action ...$args
+        return
+    }
+    let result = (do { ^$exe --no-config-file $script $action ...$args } | complete)
+    let diagnostic = (try { $result.stderr | into string } catch { "Unable to decode child diagnostic." })
+    if not ($diagnostic | is-empty) { print --stderr $diagnostic }
+    if $result.exit_code != 0 { error make {msg: "dotcloud failed; see the preceding diagnostic. No success is assumed."} }
+    $result.stdout | into string | from json
+}

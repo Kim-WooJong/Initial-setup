@@ -1,4 +1,6 @@
 #!/usr/bin/env nu
+const CLOUD_CONFIG = path self ./modules/cloud-wins-config.nu
+use $CLOUD_CONFIG [cloud-mode-active load-cloud-config]
 const PROVIDER = path self ./modules/sync-provider.nu
 const SAFETY = path self ./modules/safety.nu
 const CORE = path self ./modules/core.nu
@@ -9,15 +11,26 @@ use $CORE [error-message]
 def main [action: string = "status" --kind: string = "directory" --remote: string = "" --expected: string = "" --force] {
     if $action == "status" {
         let config = (load-provider)
-        let head = (provider-head $config)
+        let head = (stable-provider-head $config)
         let state = (load-provider-state $config)
         let local_provider_lock = if $config.kind == "directory" { provider-local-lock-path $config } else { null }
         let legacy_lock = if $config.kind == "directory" { legacy-directory-lock-path $config } else { null }
+        let export_check = (try {
+            if (cloud-mode-active) { error make {msg: "cloud-wins is active: publishing is disabled."} }
+            audit-export $config.data_root
+            {allowed: true blocker: ""}
+        } catch {|err| {allowed: false blocker: (error-message $err "Export audit failed.")} })
         print {
+            cloud_wins: (load-cloud-config)
             provider: $config.kind remote: $config.remote current_revision: $head.revision
             baseline_revision: ($state.revision? | default "uninitialized")
-            remote_changed: ($state == null or ($state.revision? | default "") != $head.revision)
-            workspace_hash: (workspace-hash $config.data_root)
+            current_tree_hash: $head.tree_hash
+            baseline_tree_hash: ($state.tree_hash? | default "uninitialized")
+            remote_changed: ($state == null or ($state.revision? | default "") != $head.revision or ($state.tree_hash? | default "") != $head.tree_hash)
+            data_root: $config.data_root
+            export_allowed: $export_check.allowed
+            export_blocker: $export_check.blocker
+            workspace_hash: (if $config.kind == "directory" { $head.tree_hash } else { workspace-hash $config.data_root })
             cooperative_store_lock: ($config.kind == "local")
             provider_lock_scope: (match $config.kind {
                 "directory" => "operation-lock-only"
@@ -28,7 +41,7 @@ def main [action: string = "status" --kind: string = "directory" --remote: strin
             legacy_cloud_lock_present: ($legacy_lock != null and ($legacy_lock | path exists))
             atomic_remote_compare_and_swap: false
         }
-        if $config.kind == "directory" {
+        if $config.kind == "directory" and not (cloud-mode-active) {
             print "The cloud client controls upload/download. Same-machine serialization uses operation.lock only; cross-machine conflicts use the saved revision/tree fingerprint."
             if $legacy_lock != null and ($legacy_lock | path exists) {
                 print ("[legacy] Ignored old cloud lock entry: " + ($legacy_lock | into string))
@@ -38,6 +51,7 @@ def main [action: string = "status" --kind: string = "directory" --remote: strin
         if $config.kind == "rclone" { print "Optimistic checks are not a distributed transaction. Concurrent revisions are retained; no automatic revision deletion occurs." }
         return
     }
+    if (cloud-mode-active) { error make {msg: "Deactivate cloud-wins before changing/initializing/acknowledging the provider."} }
     let lock = (operation-lock)
     try {
         match $action {
@@ -59,7 +73,7 @@ def main [action: string = "status" --kind: string = "directory" --remote: strin
             "acknowledge" => {
                 if ($expected | is-empty) { error make { msg: "Supply the exact current_revision from dotbackend status using --expected. This explicitly permits a later local-over-remote push." } }
                 let config = (load-provider)
-                let head = (provider-head $config)
+                let head = (stable-provider-head $config)
                 if $head.revision != $expected { error make { msg: "Remote revision no longer matches the reviewed revision." } }
                 assert-same-head $config $head
                 record-provider-state $config $head

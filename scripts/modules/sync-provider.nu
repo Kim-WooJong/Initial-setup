@@ -3,6 +3,8 @@
 # local     = an explicit filesystem/NAS revision store
 # rclone    = an explicit configured rclone revision store
 # rclone has no universal compare-and-swap; pre/post checks are optimistic only.
+const CLOUD_CONFIG = path self ./cloud-wins-config.nu
+use $CLOUD_CONFIG [assert-cloud-workspace]
 const CORE = path self ./core.nu
 const SAFETY = path self ./safety.nu
 use $CORE [machine-context nu-home error-message]
@@ -17,6 +19,7 @@ export def load-provider [] {
     let config = if ($file | path exists) { open --raw $file | from nuon } else { {version: 1 kind: "directory" remote: ""} }
     if ($config.version? | default 0) != 1 or not ($config.kind in ["directory" "local" "rclone"]) { error make { msg: "Unsupported sync provider configuration." } }
     let ctx = (machine-context)
+    assert-cloud-workspace $ctx
     let root = ($ctx.data_root | path expand)
     if $config.kind == "local" {
         let remote = ($config.remote | path expand)
@@ -146,6 +149,29 @@ export def provider-head [config: record] {
     $head | upsert empty false
 }
 
+# A cloud-client-synchronized directory is not an atomic snapshot. The client
+# may replace placeholder/files while we are hashing them, so require two
+# consecutive identical observations before using the value as a concurrency
+# decision. local/rclone providers already expose an explicit HEAD and do not
+# need this sampling step.
+export def stable-provider-head [config: record] {
+    if $config.kind != "directory" { return (provider-head $config) }
+
+    mut previous = (provider-head $config)
+    for attempt in 1..3 {
+        sleep 250ms
+        let current = (provider-head $config)
+        if $current.revision == $previous.revision and $current.tree_hash == $previous.tree_hash {
+            return $current
+        }
+        $previous = $current
+    }
+
+    error make {
+        msg: "Private cloud mirror is still changing locally. Wait for the cloud client to settle, then retry dotpush/dotpull."
+    }
+}
+
 export def load-provider-state [config: record] {
     let file = (provider-state-path)
     if not ($file | path exists) { return null }
@@ -163,22 +189,31 @@ export def record-provider-state [config: record head: record] {
 }
 
 export def assert-expected-head [config: record] {
-    let head = (provider-head $config)
+    let head = (stable-provider-head $config)
     let state = (load-provider-state $config)
     if $state == null {
         if not $head.empty { error make { msg: "No trusted baseline exists. Pull first, or inspect dotbackend status and explicitly acknowledge its revision." } }
     } else if $state.revision != $head.revision or $state.tree_hash != $head.tree_hash {
-        error make { msg: "Private source changed since this machine last synchronized. Push stopped before capture/upload; run dotbackend status and reconcile first." }
+        error make {
+            msg: ([
+                "Private source changed since this machine last synchronized."
+                ("Baseline revision: " + ($state.revision? | default "<missing>"))
+                ("Current revision : " + $head.revision)
+                ("Data root        : " + ($config.data_root | into string))
+                "Push stopped before capture/upload. Run dotbackend status and dotpreflight --diff before reconciling."
+            ] | str join (char nl))
+        }
     }
     $head
 }
 
 export def assert-same-head [config: record expected: record] {
-    let current = (provider-head $config)
+    let current = (stable-provider-head $config)
     if $current.revision != $expected.revision or $current.tree_hash != $expected.tree_hash {
         error make { msg: "Remote changed during the operation. HEAD was not intentionally advanced; staged data is retained." }
     }
 }
+
 
 export def provider-local-lock-path [config: record] {
     let id = (provider-id $config)

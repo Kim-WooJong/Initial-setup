@@ -16,7 +16,7 @@ def winget-package-state [
     let script = ($TOOLS_ROOT | path join "scripts" "winget-package-state.nu")
     let args = [$script $mode $package_id "--source" $source]
 
-    ^nu ...$args | ignore
+    ^$nu.current-exe --no-config-file ...$args | ignore
     let exit_code = ($env.LAST_EXIT_CODE | default 2)
 
     match $exit_code {
@@ -46,7 +46,28 @@ def run-program [label: string program: string args: list] {
     $exit_code
 }
 
+
+def linux-is-root [] {
+    if (which id | is-empty) { return false }
+    let result = (do { ^id -u } | complete)
+    $result.exit_code == 0 and (($result.stdout | str trim) == "0")
+}
+
+def linux-run-root [label: string program: string args: list] {
+    if (linux-is-root) { return (run-program $label $program $args) }
+    if (which sudo | is-empty) {
+        print ("[warn] " + $label + " requires root privileges and sudo is unavailable.")
+        return 1
+    }
+    run-program $label "sudo" ([$program] | append $args)
+}
+
 def main [] {
+    if (($env.INITIAL_SETUP_SKIP_VSCODE? | default "") == "1") {
+        print "[skip] VS Code installation disabled by bootstrap option."
+        return
+    }
+
     if not (which code | is-empty) {
         print "[ok] VS Code already installed"
         return
@@ -116,14 +137,13 @@ def main [] {
         "linux" => {
             if not (which snap | is-empty) {
                 let args = [
-                    "snap"
                     "install"
                     "code"
                     "--classic"
                 ]
 
                 let exit_code = (
-                    run-program "Install VS Code with snap" "sudo" $args
+                    linux-run-root "Install VS Code with snap" "snap" $args
                 )
 
                 if $exit_code == 0 {

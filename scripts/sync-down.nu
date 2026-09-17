@@ -8,6 +8,7 @@ def main [--prune --force --allow-protected --source-only --discard-source] {
     if $allow_protected { $args = ($args | append "--allow-protected") }
     if $source_only { $args = ($args | append "--source-only") }
     if $discard_source { $args = ($args | append "--discard-source") }
-    ^nu --no-config-file $TRANSPORT ...$args
+    let exe = $nu.current-exe
+    ^$exe --no-config-file $TRANSPORT ...$args
     if ($env.LAST_EXIT_CODE | default 1) != 0 { error make { msg: "Pull stopped; inspect the reported conflict or transport error." } }
 }

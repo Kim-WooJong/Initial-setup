@@ -1,310 +1,50 @@
 # Initial-setup Roadmap
 
-This roadmap focuses on stability first, then a gradual migration toward a more reliable rclone-based synchronization workflow.
-
-## Current Direction
-
-The project is in a **stabilization phase**.
-
-Near-term priorities:
-
-- keep normal setup predictable and repeatable
-- reduce unnecessary complexity
-- improve recovery and conflict handling
-- validate behavior on real Windows, macOS, and Linux systems
-- avoid large architectural changes until the current workflow is proven stable
-
-The current default synchronization backend remains `directory`.
-
----
-
-## 0.12.x Stabilization
-
-Before moving toward 1.0, the project should continue improving reliability rather than adding many new features.
-
-### Priorities
-
-- fix runtime and cross-platform compatibility issues
-- keep repeated `nu setup.nu` runs idempotent
-- improve lock diagnostics and stale-lock handling
-- validate transaction resume and rollback behavior
-- keep README and command documentation concise
-- add regression tests for bugs found on real machines
-- verify Windows behavior as the primary reference environment
-
-### Exit Criteria
-
-The 0.12.x line is considered stable when:
-
-- a clean Windows machine can bootstrap and complete setup
-- running setup again does not damage or duplicate configuration
-- interrupted setup can be resumed or safely restarted
-- private-source conflicts are detected before destructive changes
-- local backup and rollback work reliably
-- directory-provider synchronization no longer depends on cloud-synced lock files
-
----
-
-# rclone Provider Migration
-
-The long-term goal is to make `rclone` the preferred synchronization provider while keeping the current `directory` backend as a fallback.
-
-Migration should be gradual and reversible.
-
-## Phase 1 — Probe and Read-Only Validation
-
-Goal: verify that the configured rclone remote is reliable before allowing it to become part of the normal write path.
-
-Planned checks:
-
-- remote exists and is reachable
-- authentication works
-- expected directory can be listed
-- small test objects can be read safely
-- remote metadata can be retrieved
-- failures are reported clearly without modifying local configuration
-
-Example future commands:
-
-```nu
-dotbackend probe-rclone
-dotbackend status
-```
-
-No existing directory-based synchronization should change during this phase.
-
----
-
-## Phase 2 — Shadow Synchronization
-
-Goal: compare rclone transfers against the existing directory backend without making rclone authoritative.
-
-Concept:
-
-```text
-Local managed state
-        |
-        +--> directory provider      (primary)
-        |
-        +--> rclone shadow store     (verification only)
-```
-
-The project should compare:
-
-- file inventory
-- SHA-256 hashes
-- revision metadata
-- upload/download integrity
-- behavior after interrupted transfers
-
-A mismatch must be reported, not automatically corrected.
-
-### Required Tests
-
-- normal push
-- normal pull
-- interrupted upload
-- interrupted download
-- unavailable network
-- Unicode paths
-- paths containing spaces
-- large files
-- repeated identical synchronization
-
----
-
-## Phase 3 — rclone as Primary Provider
-
-Goal: allow the user to explicitly promote rclone to the primary provider.
-
-Target flow:
-
-```text
-dotpush
-  |
-  +--> calculate local manifest
-  +--> verify expected remote revision
-  +--> upload immutable revision
-  +--> verify uploaded hashes
-  +--> publish HEAD last
-  +--> record new local baseline
-```
-
-A failed upload must never replace the last valid remote `HEAD`.
-
-A stale machine must not overwrite a newer revision.
-
-Example configuration:
-
-```nu
-dotbackend configure --kind rclone --remote "remote:Initial-setup"
-```
-
-Promotion should remain explicit. Existing users should never be migrated automatically.
-
----
-
-## Phase 4 — Directory Provider as Fallback
-
-Once rclone has been proven reliable across supported platforms:
-
-- `rclone` becomes the recommended provider
-- `directory` remains available for users who prefer a desktop cloud client
-- `local` remains available for NAS and shared filesystems
-
-Target provider roles:
-
-| Provider | Intended Use |
-|---|---|
-| `rclone` | Recommended remote synchronization |
-| `directory` | Cloud-client-managed local mirror |
-| `local` | NAS / shared filesystem / local storage |
-
-No provider should be removed solely because another becomes preferred.
-
----
-
-# Concurrency and Data Safety
-
-rclone synchronization must continue using **optimistic concurrency** rather than pretending to provide a universal distributed lock.
-
-Example:
-
-```text
-Machine A reads revision A
-Machine B pushes revision B
-Machine A tries to push from revision A
-                |
-                +--> reject push
-                     remote changed
-```
-
-Before rclone becomes the recommended provider, the project must verify:
-
-1. stale-baseline pushes are rejected
-2. remote `HEAD` is updated only after upload verification
-3. failed transfers keep the previous valid revision
-4. concurrent revisions are not silently deleted
-5. local secrets never appear in transfer manifests
-6. encrypted vault data remains encrypted in remote storage
-
----
-
-# Secret Management
-
-The current security model should remain conservative.
-
-Planned direction:
-
-- keep SSH private keys machine-local
-- keep credentials out of Git
-- use encrypted vault storage only for explicitly registered secrets
-- avoid automatic secret capture
-- require explicit restore destinations on each machine
-
-Future work may improve age/SOPS integration, but convenience should not weaken the current trust model.
-
----
-
-# Validation Strategy
-
-Validation should remain separated from normal daily setup.
-
-### Normal use
-
-```nu
-nu setup.nu
-```
-
-### Development and debugging
-
-```nu
-dotvalidate
-dottest --sandbox
-```
-
-### Release gate
-
-A release should require:
-
-- project validation
-- parser/module validation
-- sandbox regression tests
-- security tests
-- release manifest generation
-- checksum verification
-
-Real-machine testing remains important because static validation cannot replace Windows/macOS/Linux integration testing.
-
----
-
-# 1.0.0 Readiness Criteria
-
-Initial-setup should reach 1.0 only after the following workflows are consistently reliable.
-
-## Clean Installation
-
-```text
-Fresh machine
-    |
-bootstrap
-    |
-setup
-    |
-private configuration restored
-    |
-audit passes
-```
-
-## Repeated Setup
-
-Running setup multiple times should:
-
-- preserve existing user data
-- avoid duplicate configuration
-- skip already completed work where appropriate
-- detect unexpected changes before overwriting them
-
-## Recovery
-
-The project must reliably support:
-
-- transaction resume
-- local configuration backup
-- snapshot restore
-- rollback after partial failure
-- conflict review before destructive synchronization
-
-## Cross-Platform
-
-The core workflow should be verified on:
-
-- Windows
-- macOS
-- Linux
-
-Windows should remain a first-class target rather than relying on WSL-only behavior.
-
-## Documentation
-
-Before 1.0:
-
-- README stays short and task-oriented
-- CHANGELOG contains release history
-- ROADMAP contains future architecture
-- troubleshooting covers only recurring real-world problems
-
----
-
-## Beyond 1.0
-
-Possible future work, only if it provides clear practical value:
-
-- improved lock metadata and stale-lock diagnostics
-- stronger provider health reporting
-- optional machine overlay tooling
-- improved encrypted secret workflows
-- safer self-update and rollback
-- additional package-manager adapters
-
-The priority after 1.0 should remain **reliability over feature count**.
+## 0.13.x — Cargo runtime and stabilization
+
+Implemented in 0.13.0: crates.io stable/non-yanked selection, exact Cargo builds,
+side-by-side installation, cached reuse, native seed bootstrap, failure-before-sync
+and cross-minor project version comparison. Existing private schema remains 5.
+
+Release validation still needs real Cargo/compiler and Windows/macOS/Linux
+integration evidence. Authoring verification for 0.13.0 covers the POSIX native
+helper with mocked tools and static/artifact checks, not a live Nushell build.
+Next work: test cold builds, unchanged-version reuse, failed compiler/network,
+Windows executable-in-use handling, and the 0.12-to-0.13 command refresh path.
+Keep normal setup free of repository-wide scans. Update checks run when commands
+run, not as a background service. New upstream stable versions can still introduce
+incompatibilities: document and test them instead of suppressing errors.
+
+## 0.13.2 — explicit cloud mirror import
+
+Implemented in source: optional dotcloud review/approval, local-only target, separate
+plan/backup journal state, explicit activation, guarded dotpull, push/auto/prune
+blockers and recovery. This is not a server-freshness API or an exact deleting mirror.
+Private schema remains 5; directory remains the default provider.
+
+Pending validation: execute the 26 authored Rust tests and Nu integration fixtures
+with a real toolchain; then verify native Windows/macOS/Linux file semantics, cloud
+placeholders, interrupted operations and protected live application. The initial
+published source has no generated Cargo.lock; pin/review dependencies with a real
+Cargo resolver before treating builds as reproducible across machines.
+
+## rclone migration (planned; directory stays default)
+
+| Phase | Work | Acceptance criteria |
+|---|---|---|
+| Read-only probe | Inspect an existing remote without writes. | Clear authentication/list/read failures; a read does not prove write permission. |
+| Shadow store | Copy reviewed snapshots into a separate test store. | Round-trip inventory/SHA-256 match; production configuration is unchanged. |
+| Explicit promotion | Opt into rclone as primary. | Interrupted transfers, stale baselines, Unicode paths and two-writer races tested on all platforms. |
+| Retained fallback | Keep directory/local providers. | User-approved fallback cannot silently overwrite a newer store. |
+
+Check expected revision, upload an immutable revision, verify contents, publish
+HEAD last, then record the baseline. These are optimistic checks, not universal
+compare-and-swap. Failures around HEAD may be ambiguous: read back and reconcile;
+retain competing revisions. No unreviewed plaintext credentials in payloads.
+
+## 1.0 readiness
+
+Require repeatable clean install, repeated setup, conflict rejection, backup,
+resume and rollback results on native Windows, macOS and Linux. Review the older
+auto-sync scheduler lock: elapsed time alone must not authorize deletion.
+Keep README short, history in CHANGELOG and plans here. No docs/ or .github/ tree.

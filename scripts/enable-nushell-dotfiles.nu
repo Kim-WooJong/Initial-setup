@@ -70,6 +70,7 @@ def main [] {
     }
 
     let import_line = "use ~/.config/nushell/modules/dotfiles.nu *"
+    let platform_line = "source-env ~/.config/dotfiles/platform.nu"
     let local_line = "source ~/.config/dotfiles/local.nu"
     mut current = (open --raw $config_file)
 
@@ -84,6 +85,20 @@ def main [] {
 
         $current = (
             $current + $separator + "# Dotfiles management" + (char nl) + $import_line + (char nl)
+        )
+    }
+
+    if ($nu.os-info.name in ["linux" "macos"]) and not ($current | str contains $platform_line) {
+        let separator = (
+            if ($current | str trim | is-empty) {
+                ""
+            } else {
+                char nl
+            }
+        )
+
+        $current = (
+            $current + $separator + "# Machine-local PATH bridge" + (char nl) + $platform_line + (char nl)
         )
     }
 

@@ -59,6 +59,19 @@ def main [] {
         fail "SCHEMA_VERSION must be at least 5."
     }
 
+    let cloud_package = (open --raw ($TOOLS_ROOT | path join "tools" "cloudwins" "Cargo.toml") | from toml)
+    if $cloud_package.package.version != $version { fail "Cloud-wins Cargo version does not match VERSION." }
+    for row in [
+        {file: "scripts/sync-transport-main.nu" token: "cloud-mode-active"}
+        {file: "scripts/auto-sync-worker.nu" token: "cloud-mode-active"}
+        {file: "scripts/modules/sync-provider.nu" token: "assert-cloud-workspace"}
+        {file: "scripts/backend-control.nu" token: "cloud-mode-active"}
+        {file: "setup-main.nu" token: "cloud-mode-active"}
+        {file: "scripts/self-test.nu" token: "cloud-wins-test.nu"}
+        {file: "scripts/release.nu" token: "--require-engine"}
+    ] {
+        if not (open --raw ($TOOLS_ROOT | path join $row.file) | str contains $row.token) { fail ("Missing cloud-wins integration: " + $row.file) }
+    }
     let github_dir = ($TOOLS_ROOT | path join ".github")
 
     if ($github_dir | path exists) {
@@ -72,6 +85,16 @@ def main [] {
     }
 
     for required in [
+        "verify.nu"
+        "scripts/diagnose-project.nu"
+        "scripts/preflight.nu"
+        "scripts/setup-entry.nu"
+        "scripts/verify-all.nu"
+        "scripts/entrypoint-test.nu"
+        "scripts/subprocess-chain-test.nu"
+        "scripts/run-state-test.nu"
+        "scripts/refresh-commands-test.nu"
+        "START_HERE.md"
         "VERSION"
         "RELEASE-MANIFEST.json"
         "scripts/modules/safety.nu"
@@ -84,6 +107,9 @@ def main [] {
         "scripts/backend-control.nu"
         "scripts/safe-upgrade.nu"
         "scripts/sync-transport.nu"
+        "scripts/edit-managed.nu"
+        "scripts/edit-managed-test.nu"
+        "scripts/refresh-commands.nu"
         "scripts/sync-up-local.nu"
         "scripts/sync-down-local.nu"
         "scripts/security-self-test.nu"
@@ -108,8 +134,32 @@ def main [] {
         "templates/sync-provider.nuon.example"
         "SCHEMA_VERSION"
         "setup.nu"
+        "setup-main.nu"
+        "scripts/sync-transport-main.nu"
+        "scripts/auto-sync-main.nu"
+        "scripts/refresh-commands-main.nu"
+        "scripts/modules/nu-runtime.nu"
+        "scripts/runtime-launch.nu"
+        "scripts/update-nushell.nu"
+        "scripts/nu-runtime-test.nu"
+        "scripts/windows/prepare-nu-cargo.ps1"
+        "scripts/posix/prepare-nu-cargo.sh"
         "README.md"
         "CHANGELOG.md"
+        "START_HERE.md"
+        "bootstrap.sh"
+        "bootstrap.ps1"
+        "toolchains/nushell-release.txt"
+        "scripts/posix/prepare-nu-release.sh"
+        "scripts/posix/prepare-nu-release-test.sh"
+        "scripts/posix/bootstrap-smoke-test.sh"
+        "scripts/posix-bootstrap-test.nu"
+        "scripts/wiki-docs-test.nu"
+        "docs/WIKI.md"
+        "docs/wiki/Home.md"
+        "docs/wiki/Features-and-Roles.md"
+        "docs/wiki/Installation-Linux.md"
+        "docs/wiki/Command-Reference.md"
         "scripts/migrate-config.nu"
         "scripts/capture-tool-state.nu"
         "scripts/audit.nu"
@@ -123,6 +173,7 @@ def main [] {
         "scripts/winget-package-state.nu"
         "scripts/windows/winget-package-state.ps1"
         "scripts/modules/core.nu"
+        "scripts/modules/starship.nu"
         "scripts/modules/profiles.nu"
         "scripts/modules/setup-policy.nu"
         "scripts/modules/run-state.nu"
@@ -148,6 +199,16 @@ def main [] {
         "scripts/backup-local-config.nu"
         "scripts/preflight.nu"
         "scripts/self-test.nu"
+        "scripts/cloud-wins.nu"
+        "scripts/cloud-wins-main.nu"
+        "scripts/cloud-wins-build.nu"
+        "scripts/cloud-wins-test.nu"
+        "scripts/modules/cloud-wins-config.nu"
+        "scripts/modules/cloud-wins-engine.nu"
+        "tools/cloudwins/Cargo.toml"
+        "tools/cloudwins/src/main.rs"
+        "tools/cloudwins/src/tests.rs"
+        "CLOUD_WINS.md"
         "scripts/resolve-config.nu"
         "scripts/run-control.nu"
         "defaults/conflict-policy.nuon"
@@ -226,7 +287,20 @@ def main [] {
         fail "Release gate must invoke self-test.nu with --sandbox."
     }
 
-    let setup_source = (open --raw ($TOOLS_ROOT | path join "setup.nu"))
+    for row in [
+        {file: "scripts/install-starship.nu" token: "resolve-starship"}
+        {file: "scripts/install-starship.nu" token: "Trying Cargo fallback"}
+        {file: "scripts/setup-starship.nu" token: "probe-starship-candidates"}
+        {file: "scripts/setup-starship.nu" token: "setup will continue"}
+        {file: "scripts/modules/starship.nu" token: "init nu"}
+        {file: "scripts/modules/starship.nu" token: "| complete"}
+    ] {
+        if not (open --raw ($TOOLS_ROOT | path join $row.file) | str contains $row.token) {
+            fail ("Missing Starship hardening integration: " + $row.file)
+        }
+    }
+
+    let setup_source = (open --raw ($TOOLS_ROOT | path join "setup-main.nu"))
 
     for required_setup_token in [
         "profiles.nu"
@@ -253,7 +327,7 @@ def main [] {
         "ensure-rclone --check"
     ] {
         if not ($setup_source | str contains $required_setup_token) {
-            fail ("setup.nu is missing v0.12.x integration: " + $required_setup_token)
+            fail ("setup.nu is missing required integration: " + $required_setup_token)
         }
     }
 
@@ -279,6 +353,8 @@ def main [] {
     let dotfiles_module = (open --raw ($TOOLS_ROOT | path join "scripts" "modules" "dotfiles.nu"))
 
     for required_sync_token in [
+        "dotcloud"
+        "cloud-wins.nu"
         "dotresolve"
         "dotpush"
         "dotpull"
@@ -631,7 +707,7 @@ def main [] {
         {file: "scripts/modules/safety.nu" tokens: ["lock-acquire" "validate-relative" "verify-tree"]}
         {file: "scripts/modules/vault.nu" tokens: ["--encrypt" "--decrypt" "recipients" "disjoint-paths" "remove_legacy"]}
         {file: "scripts/modules/sync-provider.nu" tokens: ["assert-expected-head" "assert-same-head" "--download" "revisions/" "audit-export"]}
-        {file: "scripts/sync-transport.nu" tokens: ["operation-lock" "assert-expected-head" "record-provider-state" "--source-only"]}
+        {file: "scripts/sync-transport-main.nu" tokens: ["operation-lock" "assert-expected-head" "record-provider-state" "--source-only"]}
         {file: "scripts/safe-upgrade.nu" tokens: ["verify-release" "validate-candidate" "rollback-files" "--keep" "--manifest-sha256"]}
         {file: "scripts/release.nu" tokens: ["security-self-test.nu" "--require-age" "--require-rclone" "make-release-manifest.nu"]}
         {file: "scripts/security-self-test.nu" tokens: ["RCLONE_CONFIG" "Corrupt ciphertext" "Mid-operation HEAD" "Wrong trusted manifest" "User-edited file"]}

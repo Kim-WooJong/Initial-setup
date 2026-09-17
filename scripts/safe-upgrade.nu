@@ -1,6 +1,8 @@
 #!/usr/bin/env nu
 const TEXT_CASE = path self ./modules/text-case.nu
 use $TEXT_CASE [text-lower]
+const RUNTIME = path self ./modules/nu-runtime.nu
+use $RUNTIME [runtime-version-compare]
 const ROOT = path self ..
 const CORE = path self ./modules/core.nu
 const UPGRADE = path self ./modules/upgrade.nu
@@ -93,9 +95,9 @@ def main [
             copy-release $source $candidate
         }
         let new = (verify-release $candidate (if $is_git { "" } else { $manifest_sha256 }))
-        let old_patch = ($old.version | split row "." | last | into int)
-        let new_patch = ($new.version | split row "." | last | into int)
-        if $new_patch <= $old_patch { error make { msg: "Use the rollback command for downgrades; normal updates must increase the 0.12.* patch version." } }
+        if (runtime-version-compare $new.version $old.version) <= 0 {
+            error make {msg: "Normal updates must increase major.minor.patch; use rollback for an older release."}
+        }
         $record_file = ($dir | path join "upgrade.nuon" | into string)
         $record = {version: 1 id: $id kind: (if $is_git {"git"} else {"artifact"}) target: ($ROOT | into string) status: "staged" from_version: $old.version to_version: $new.version from_commit: $from_commit to_commit: $to_commit}
         atomic-record $record_file $record

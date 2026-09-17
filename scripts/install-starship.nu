@@ -1,6 +1,7 @@
 #!/usr/bin/env nu
 
 const TOOLS_ROOT = path self ..
+use modules/starship.nu [probe-starship-candidates resolve-starship]
 
 # ============================================================
 # install-starship.nu
@@ -14,6 +15,13 @@ const TOOLS_ROOT = path self ..
 # A failed Starship installation does not stop setup.
 # ============================================================
 
+def nu-home [] {
+    let home_path = ($nu | get --optional home-path)
+    if $home_path != null { return $home_path }
+    let home_dir = ($nu | get --optional home-dir)
+    if $home_dir != null { return $home_dir }
+    error make {msg: "Unable to determine the Nushell home directory."}
+}
 
 def winget-package-state [
     mode: string
@@ -23,7 +31,7 @@ def winget-package-state [
     let script = ($TOOLS_ROOT | path join "scripts" "winget-package-state.nu")
     let args = [$script $mode $package_id "--source" $source]
 
-    ^nu ...$args | ignore
+    ^$nu.current-exe --no-config-file ...$args | ignore
     let exit_code = ($env.LAST_EXIT_CODE | default 2)
 
     match $exit_code {
@@ -58,11 +66,7 @@ def run-program [
     $exit_code
 }
 
-def starship-visible [] {
-    not (which starship | is-empty)
-}
-
-def install-with-winget [] {
+def install-with-winget [repair: bool = false] {
     if (which winget | is-empty) {
         return false
     }
@@ -70,13 +74,31 @@ def install-with-winget [] {
     let package_state = (winget-package-state "installed" "Starship.Starship")
 
     if $package_state == "yes" {
-        print "[ok] Starship WinGet package already installed; skipping reinstall"
-        return true
+        if not $repair {
+            print "[ok] Starship WinGet package already installed"
+            return true
+        }
+
+        print "[info] Starship package is installed but `starship init nu` is unhealthy."
+        print "[info] Trying a WinGet upgrade before falling back to Cargo..."
+
+        let upgrade_args = [
+            "upgrade"
+            "--id"
+            "Starship.Starship"
+            "--exact"
+            "--source"
+            "winget"
+            "--accept-package-agreements"
+            "--accept-source-agreements"
+        ]
+
+        let upgrade_code = (run-program "Upgrade Starship with winget" "winget" $upgrade_args)
+        return ($upgrade_code == 0)
     }
 
     if $package_state == "error" {
-        print "[warn] Could not determine Starship WinGet state; leaving package unchanged"
-        return true
+        print "[warn] Could not determine Starship WinGet state; trying an explicit install"
     }
 
     let args = [
@@ -131,8 +153,12 @@ def install-with-official-script [] {
         return false
     }
 
+    let bin_dir = ((nu-home) | path join ".local" "bin")
+    mkdir $bin_dir
+    let bin_literal = (($bin_dir | into string) | str replace --all '"' '\\"')
     let command = (
-        "curl -sS https://starship.rs/install.sh " + "| sh -s -- -y"
+        "curl --proto '=https' --tlsv1.2 -sSf https://starship.rs/install.sh "
+        + "| sh -s -- -y -b \"" + $bin_literal + "\""
     )
 
     let args = [
@@ -145,89 +171,116 @@ def install-with-official-script [] {
     $exit_code == 0
 }
 
+def print-unhealthy-candidates [] {
+    let probes = (probe-starship-candidates)
+
+    for probe in $probes {
+        if not $probe.healthy {
+            print ("[warn] Starship candidate failed health check: " + ($probe.path | into string))
+            if not ($probe.version | str trim | is-empty) {
+                print ("       version: " + ($probe.version | str trim))
+            }
+            if $probe.init_exit_code != null {
+                print ("       `starship init nu` exit code: " + ($probe.init_exit_code | into string))
+            }
+            let stderr = ($probe.stderr | str trim)
+            if not ($stderr | is-empty) {
+                print "       stderr:"
+                print $stderr
+            }
+        }
+    }
+}
+
+def healthy-after-attempt [] {
+    (resolve-starship) != null
+}
+
 def main [] {
-    if (starship-visible) {
-        print "[ok] Starship already installed"
+    let existing = (resolve-starship)
+    if $existing != null {
+        print ("[ok] Starship already installed and healthy: " + ($existing.version | str trim))
+        print ("[ok] Starship executable -> " + ($existing.path | into string))
         return
     }
 
-    print "=== Starship installation ==="
+    let visible_before = (probe-starship-candidates)
+    let repair = (not ($visible_before | is-empty))
+
+    if $repair {
+        print "[warn] Starship is visible but failed the Nushell initialization health check."
+        print-unhealthy-candidates
+        print ""
+    }
+
+    print "=== Starship installation / repair ==="
     print ""
 
     let installed = (
         match $nu.os-info.name {
             "windows" => {
-                let winget_ok = (
-                    install-with-winget
-                )
+                let winget_ok = (install-with-winget $repair)
 
-                if $winget_ok {
+                if $winget_ok and (healthy-after-attempt) {
                     true
                 } else {
-                    print ""
-                    print "[info] winget installation failed or is unavailable."
+                    if $winget_ok {
+                        print "[warn] WinGet completed, but no healthy Starship candidate was found yet."
+                    } else {
+                        print "[info] WinGet repair/install failed or is unavailable."
+                    }
                     print "[info] Trying Cargo fallback..."
-
-                    install-with-cargo
+                    let cargo_ok = (install-with-cargo)
+                    $cargo_ok and (healthy-after-attempt)
                 }
             }
 
             "macos" => {
-                let brew_ok = (
-                    install-with-brew
-                )
+                let brew_ok = (install-with-brew)
 
-                if $brew_ok {
+                if $brew_ok and (healthy-after-attempt) {
                     true
                 } else {
-                    print ""
-                    print "[info] Homebrew installation failed or is unavailable."
+                    print "[info] Homebrew did not produce a healthy Starship candidate."
                     print "[info] Trying the official installer..."
+                    let official_ok = (install-with-official-script)
 
-                    let official_ok = (
-                        install-with-official-script
-                    )
-
-                    if $official_ok {
+                    if $official_ok and (healthy-after-attempt) {
                         true
                     } else {
-                        print ""
                         print "[info] Trying Cargo fallback..."
-
-                        install-with-cargo
+                        let cargo_ok = (install-with-cargo)
+                        $cargo_ok and (healthy-after-attempt)
                     }
                 }
             }
 
             "linux" => {
-                let cargo_ok = (
-                    install-with-cargo
-                )
+                let official_ok = (install-with-official-script)
 
-                if $cargo_ok {
+                if $official_ok and (healthy-after-attempt) {
                     true
                 } else {
-                    print ""
-                    print "[info] Cargo installation failed or is unavailable."
-                    print "[info] Trying the official installer..."
-
-                    install-with-official-script
+                    print "[info] Official installer did not produce a healthy Starship candidate."
+                    print "[info] Trying Cargo fallback..."
+                    let cargo_ok = (install-with-cargo)
+                    $cargo_ok and (healthy-after-attempt)
                 }
             }
 
-            _ => {
-                false
-            }
+            _ => { false }
         }
     )
 
     print ""
 
     if $installed {
-        print "[ok] Starship installation completed"
-        print "[info] A shell restart may be required before Starship appears in PATH."
+        let selected = (resolve-starship)
+        print ("[ok] Healthy Starship ready: " + ($selected.version | str trim))
+        print ("[ok] Starship executable -> " + ($selected.path | into string))
     } else {
-        print "[warn] Starship could not be installed automatically."
-        print "[warn] Continuing setup without Starship."
+        print "[warn] Starship could not be made healthy automatically."
+        print-unhealthy-candidates
+        print "[warn] Starship is optional; setup will continue and the prompt integration stage will not abort the setup."
     }
 }

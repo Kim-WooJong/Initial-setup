@@ -51,7 +51,7 @@ def winget-package-state [
     let script = ($TOOLS_ROOT | path join "scripts" "winget-package-state.nu")
     let args = [$script $mode $package_id "--source" $source]
 
-    ^nu ...$args | ignore
+    ^$nu.current-exe --no-config-file ...$args | ignore
     let exit_code = ($env.LAST_EXIT_CODE | default 2)
 
     match $exit_code {
@@ -265,19 +265,30 @@ def install-macos [
 }
 
 def linux-manager [] {
-    if not (which apt-get | is-empty) {
-        return "apt"
+    for row in [
+        {command: "apt-get" name: "apt" column: 2}
+        {command: "dnf" name: "dnf" column: 3}
+        {command: "pacman" name: "pacman" column: 4}
+        {command: "zypper" name: "zypper" column: 5}
+        {command: "apk" name: "apk" column: 6}
+    ] {
+        if not (which $row.command | is-empty) { return $row }
     }
+    {command: "" name: "unsupported" column: (-1)}
+}
 
-    if not (which dnf | is-empty) {
-        return "dnf"
+def linux-is-root [] {
+    if (which id | is-empty) { return false }
+    let result = (do { ^id -u } | complete)
+    $result.exit_code == 0 and ($result.stdout | str trim) == "0"
+}
+
+def privileged-command [program: string args: list] {
+    if (linux-is-root) { return {program: $program args: $args} }
+    if (which sudo | is-empty) {
+        error make {msg: ("Root privileges are required to install Linux package with " + $program + ", but sudo is unavailable.")}
     }
-
-    if not (which pacman | is-empty) {
-        return "pacman"
-    }
-
-    "unsupported"
+    {program: "sudo" args: ([$program] | append $args)}
 }
 
 def install-linux-package [
@@ -285,62 +296,41 @@ def install-linux-package [
     package: string
     name: string
 ] {
-    if $package == "-" {
-        return false
-    }
+    if $package == "-" { return false }
 
-    let args = (
-        if $manager == "apt" {
-            [
-                "apt-get"
-                "install"
-                "-y"
-                $package
-            ]
-        } else if $manager == "dnf" {
-            [
-                "dnf"
-                "install"
-                "-y"
-                $package
-            ]
-        } else {
-            [
-                "pacman"
-                "-S"
-                "--needed"
-                "--noconfirm"
-                $package
-            ]
-        }
-    )
-
-    let exit_code = (run-program ("Install " + $name) "sudo" $args)
-
+    let args = (match $manager {
+        "apt" => { ["install" "-y" $package] }
+        "dnf" => { ["install" "-y" $package] }
+        "pacman" => { ["-S" "--needed" "--noconfirm" $package] }
+        "zypper" => { ["--non-interactive" "install" $package] }
+        "apk" => { ["add" "--no-cache" $package] }
+        _ => { return false }
+    })
+    let program = (match $manager {
+        "apt" => "apt-get"
+        "dnf" => "dnf"
+        "pacman" => "pacman"
+        "zypper" => "zypper"
+        "apk" => "apk"
+        _ => ""
+    })
+    let elevated = (privileged-command $program $args)
+    let exit_code = (run-program ("Install " + $name) $elevated.program $elevated.args)
     $exit_code == 0
 }
 
 def install-linux [
     names: list
 ] {
-    let manager = (
-        linux-manager
-    )
+    let manager_info = (linux-manager)
+    let manager = $manager_info.name
 
     if $manager == "unsupported" {
         print "[warn] No supported Linux package manager for manifest."
         return
     }
 
-    let column = (
-        if $manager == "apt" {
-            2
-        } else if $manager == "dnf" {
-            3
-        } else {
-            4
-        }
-    )
+    let column = $manager_info.column
 
     let file = (
         $TOOLS_ROOT

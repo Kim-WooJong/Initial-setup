@@ -133,7 +133,15 @@ def main [] { [(case-backend) ("AbC" | text-lower) ("AbC" | text-upper)] | to js
     let stub = 'export def text-lower []: string -> string { "fixture-lower" }
 export def text-upper []: string -> string { "fixture-upper" }'
     let exe = $nu.current-exe
-    for fixture in [
+    # The table is finite. Exercise every pre-0.114 minor through the REAL
+    # constant expression; these synthetic inputs do not replace a runtime matrix.
+    let old_minors = (0..113 | each {|minor|
+        {version: ("0." + ($minor | into string) + ".0") expected: "legacy"}
+    })
+    let edge_versions = [
+        {version: "0.99.0" expected: "legacy"}
+        {version: "0.100.0" expected: "legacy"}
+        {version: "0.108.0" expected: "legacy"}
         {version: "0.109.1" expected: "legacy"}
         {version: "0.109.12" expected: "legacy"}
         {version: "0.110.0" expected: "legacy"}
@@ -149,7 +157,9 @@ export def text-upper []: string -> string { "fixture-upper" }'
         {version: "0.116.0" expected: "modern"}
         {version: "0.1000.0" expected: "modern"}
         {version: "1.0.0" expected: "modern"}
-    ] {
+    ]
+    let fixtures = ($old_minors | append $edge_versions | uniq-by version)
+    for fixture in $fixtures {
         let literal = ('"' + $fixture.version + '"')
         $source | str replace "(version).version" $literal | save --force ($root | path join "text-case.nu")
         let active = if $fixture.expected == "modern" { "case-modern.nu" } else { "case-legacy.nu" }
@@ -181,17 +191,23 @@ export def text-upper []: string -> string { "fixture-upper" }'
     expect ($actual.stderr | output-text | str trim | is-empty) "Actual active adapter emits no warning"
 }
 
-def main [--keep] {
+# --case-only runs just the selector/native-case regression without the full
+# repository scan, runtime download, installation or configuration mutation.
+def main [--keep --case-only] {
     let base = ($env.TEMP? | default ($env.TMPDIR? | default "/tmp") | path expand)
     let sandbox = ($base | path join ("initial-setup-syntax-" + (random uuid)))
     mkdir $sandbox
     try {
-        fixtures $sandbox
+        if not $case_only { fixtures $sandbox }
         case-selector-fixtures $sandbox
     } catch {|err|
         print ("[kept] Syntax-test fixtures and diagnostics: " + ($sandbox | into string))
         error make {msg: $err.msg}
     }
     if $keep { print ("[kept] " + ($sandbox | into string)) } else { rm --recursive --force $sandbox }
-    print "[ok] Syntax-validator regression tests passed."
+    if $case_only {
+        print "[ok] Case-selector regression tests passed. No setup or synchronization was run."
+    } else {
+        print "[ok] Syntax-validator regression tests passed."
+    }
 }

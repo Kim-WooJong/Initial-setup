@@ -1,222 +1,75 @@
-# Initial-setup v0.12.25
+# Initial-setup v0.15.0
 
-Cross-platform development environment bootstrap and configuration synchronization for Windows, macOS, and Linux.
+Initial-setup is a cross-platform development-environment bootstrap and configuration synchronization project for Windows, Linux, macOS, and WSL.
 
-The project manages package installation, dotfiles, Git/SSH settings, toolchains, backups, recovery, and private configuration synchronization from a single entry point.
+## Start here
 
-## Quick Start
-
-### Windows
-
-If Nushell is already installed:
-
-```powershell
-cd C:\path\to\Initial-setup
-nu --no-config-file .\setup.nu
-```
-
-On a new machine without Nushell:
-
-```powershell
-cd C:\path\to\Initial-setup
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\bootstrap.ps1
-```
-
-### macOS / Linux
-
-If Nushell is already installed:
-
-```bash
-nu --no-config-file setup.nu
-```
-
-Or use the bootstrap script:
-
-```bash
-chmod +x bootstrap.sh
-./bootstrap.sh
-```
-
-## First Setup
-
-The normal entry point is:
+From the project root, run:
 
 ```nu
 nu setup.nu
 ```
 
-During first setup, choose how local and private configuration should be reconciled:
+This is the canonical entry point. If the current machine already has a compatible Nushell, Git, and chezmoi, setup starts directly. If prerequisites are missing or Nushell is too old, `setup.nu` delegates to the platform bootstrap, prepares the host, and returns to the same setup flow.
 
-- **Review** — inspect differences before choosing a direction
-- **Push local** — save this machine's configuration to the private source
-- **Pull private** — apply the private source to this machine
-- **Backup + pull** — back up local configuration, then apply private configuration
-- **Preview** — show planned changes without applying them
+If Nushell is not installed at all on Linux or macOS, bootstrap it from the project root:
 
-You can also select a profile:
-
-```nu
-nu setup.nu --profile workstation
-nu setup.nu --profile laptop
-nu setup.nu --profile server
-nu setup.nu --profile minimal
+```sh
+bash bootstrap.sh
 ```
 
-## Common Commands
+On Windows without Nushell, run `bootstrap.ps1` from PowerShell.
+
+## What setup configures
+
+- Nushell command environment and project commands
+- chezmoi-managed configuration
+- Rust and Julia toolchains
+- rclone-backed/private configuration workflows
+- Neovim, Starship, VS Code, WezTerm, and CLI tools according to profile
+- Git identity and SSH configuration helpers
+- snapshots, rollback, diagnostics, and synchronization state
+- optional automatic synchronization
+- Cloud-wins recovery/import workflow
+
+## Useful commands
 
 ```nu
-dotpush                 # Save local managed configuration to the private source
-dotpull                 # Apply private configuration to this machine
-dotresolve              # Resolve local/private conflicts
-dotpreflight --diff     # Review configuration differences
-dotaudit                # Audit the managed environment
-dotdoctor               # Check environment health
-dotsshkeys              # Check SSH key pairs
-dotlocalbackup          # Back up machine-local configuration
-dotlocalrestore         # Restore a local configuration backup
-dotrun --list           # Show setup transaction history
-```
-
-## Synchronization Providers
-
-Initial-setup supports three provider types:
-
-- **directory** — existing cloud-synchronized folder
-- **local** — local disk, NAS, or shared filesystem
-- **rclone** — revision-based remote storage through rclone
-
-The current default remains the `directory` provider.
-
-For directory providers:
-
-- same-machine serialization uses `operation.lock`
-- cross-machine changes are detected using revision/tree fingerprints
-- old `.initial-setup-write.lock` files from earlier releases are ignored
-
-Check the current provider with:
-
-```nu
-dotbackend status
-```
-
-The planned migration toward rclone as the primary provider is documented in [ROADMAP.md](ROADMAP.md).
-
-## Secrets
-
-Machine-local secrets are not stored as plaintext in the project repository.
-
-Secret management uses the local vault workflow:
-
-```nu
-dotvault status
-dotvault init
-```
-
-SSH private keys remain machine-local.
-
-## Backup and Recovery
-
-Create a snapshot:
-
-```nu
+dotdoctor
+dotstatus
+dotpreflight --diff
+dotsync
+dotpush
+dotpull
 dotsnapshot
-```
-
-Restore a snapshot:
-
-```nu
 dotrollback
-```
-
-Resume an interrupted setup:
-
-```nu
-nu setup.nu --resume
-```
-
-Inspect previous runs:
-
-```nu
-dotrun --list
-dotrun --status
-dotrun --logs
+dotcloud status
 ```
 
 ## Validation
 
-Normal setup does **not** scan every project source file before running.
-
-For development or debugging, run validation explicitly:
-
 ```nu
-dotvalidate
-dottest --sandbox
+nu setup.nu --diagnose
+nu setup.nu --check
 ```
 
-Or start setup with full validation:
+`--diagnose` reports required files and release-manifest differences without turning setup into a read-only mode. `--check` performs strict release validation. Normal `nu setup.nu` continues to the existing configuration review flow, where chezmoi status/diff is shown before a destructive synchronization direction is chosen.
 
-```nu
-nu setup.nu --validate
-```
+## Documentation
 
-Full validation is still required by the release workflow.
+The documentation is maintained as an English wiki under [`docs/wiki`](docs/wiki/Home.md). Start with:
 
-## Troubleshooting
+- [Wiki Home](docs/wiki/Home.md)
+- [First Run](docs/wiki/First-Run.md)
+- [Features and Roles](docs/wiki/Features-and-Roles.md)
+- [Command Reference](docs/wiki/Command-Reference.md)
+- [Synchronization](docs/wiki/Synchronization.md)
+- [Recovery and Safety](docs/wiki/Recovery-and-Safety.md)
+- [Troubleshooting](docs/wiki/Troubleshooting.md)
 
-### A lock already exists
+## Design rules
 
-Inspect current locks:
-
-```nu
-nu --no-config-file scripts/lock-status.nu
-```
-
-Do not delete active lock files blindly.
-
-### Unexpected private-source changes
-
-Review them first:
-
-```nu
-dotpreflight --diff
-dotresolve
-```
-
-### Setup stopped midway
-
-Resume the recorded transaction:
-
-```nu
-nu setup.nu --resume
-```
-
-### rclone is missing
-
-Normal setup attempts to install rclone automatically when required.
-
-You can also check/install it directly:
-
-```nu
-nu --no-config-file scripts/install-rclone.nu --check
-nu --no-config-file scripts/install-rclone.nu
-```
-
-## Project Files
-
-```text
-setup.nu        Main entry point
-profiles/       Machine role profiles
-packages/       Package manifests
-scripts/        Setup, sync, backup, and recovery tools
-templates/      Local configuration templates
-CHANGELOG.md    Version history
-ROADMAP.md      Future development plan
-```
-
-## Notes
-
-- Keep private keys, tokens, passwords, and other credentials out of the repository.
-- Use `dotlocalbackup` before large manual configuration changes.
-- Use `dotpreflight --diff` before accepting unexpected private-source changes.
-- See [CHANGELOG.md](CHANGELOG.md) for detailed release history.
-- See [ROADMAP.md](ROADMAP.md) for planned synchronization and stabilization work.
+- `nu setup.nu` remains the stable user-facing entry point.
+- Setup never silently deletes target-only files during Cloud-wins operations.
+- Existing local/private configuration is reviewed before destructive direction changes.
+- Version-specific audit or migration documents are not generated. Long-lived behavior belongs in the wiki and release history belongs in `CHANGELOG.md`.

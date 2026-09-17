@@ -102,7 +102,7 @@ def main [
 
     if $resume {
         let resumable = (resolve-resume-run $run_id)
-        ^nu ($TOOLS_ROOT | path join "setup.nu") --resume --run-id $resumable
+        ^$nu.current-exe --no-config-file ($TOOLS_ROOT | path join "setup.nu") --resume --run-id $resumable
         return
     }
 
@@ -120,14 +120,14 @@ def main [
             let snapshot = (matching-snapshot $selected)
             if $snapshot != null {
                 print ("Restoring private configuration snapshot for run " + $selected)
-                ^nu --no-config-file ($TOOLS_ROOT | path join "scripts" "rollback.nu") --snapshot ($snapshot | path basename) --source-only
+                ^$nu.current-exe --no-config-file ($TOOLS_ROOT | path join "scripts" "rollback.nu") --snapshot ($snapshot | path basename) --source-only
                 if ($env.LAST_EXIT_CODE | default 1) != 0 { error make {msg: "Private source rollback failed."} }
             } else {
                 print "[info] No private snapshot existed for this run; restoring the local backup next."
             }
 
             print ("Restoring the independent live-configuration backup for run " + $selected)
-            ^nu --no-config-file ($TOOLS_ROOT | path join "scripts" "backup-local-config.nu") --restore ($backup | path basename) --force
+            ^$nu.current-exe --no-config-file ($TOOLS_ROOT | path join "scripts" "backup-local-config.nu") --restore ($backup | path basename) --force
             if ($env.LAST_EXIT_CODE | default 1) != 0 { error make {msg: "Live-configuration rollback failed."} }
             finish-run $selected "rolled-back"
             release-lease $lease

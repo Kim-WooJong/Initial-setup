@@ -48,7 +48,7 @@ def conflict-file [] {
 
 def fingerprint [kind: string] {
     let script = ($TOOLS_ROOT | path join "scripts" "sync-fingerprint.nu")
-    let result = (do { ^nu --no-config-file $script --kind $kind } | complete)
+    let result = (do { ^$nu.current-exe --no-config-file $script --kind $kind } | complete)
     if $result.exit_code != 0 { error make { msg: "Fingerprint unavailable; synchronization baseline was not advanced." } }
     let value = ($result.stdout | str trim)
     if not ($value =~ '^[a-f0-9]{64}$') and not ($kind == "cloud" and ($value | is-empty)) {

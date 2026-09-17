@@ -1,4 +1,6 @@
 #!/usr/bin/env nu
+const CLOUD_CONFIG = path self ./modules/cloud-wins-config.nu
+use $CLOUD_CONFIG [cloud-mode-active]
 const PROCESS_OUTPUT = path self ./modules/process-output.nu
 use $PROCESS_OUTPUT [output-text]
 
@@ -62,12 +64,12 @@ def log [
         $message
     ]
 
-    ^nu ...$args | ignore
+    ^$nu.current-exe --no-config-file ...$args | ignore
 }
 
 def fingerprint [kind: string] {
     let script = ($TOOLS_ROOT | path join "scripts" "sync-fingerprint.nu")
-    let result = (do { ^nu --no-config-file $script --kind $kind } | complete)
+    let result = (do { ^$nu.current-exe --no-config-file $script --kind $kind } | complete)
     if $result.exit_code != 0 { error make { msg: "Fingerprint unavailable; synchronization baseline was not advanced." } }
     let value = ($result.stdout | str trim)
     if not ($value =~ '^[a-f0-9]{64}$') and not ($kind == "cloud" and ($value | is-empty)) {
@@ -78,7 +80,7 @@ def fingerprint [kind: string] {
 
 def run-script [name: string] {
     let script = ($TOOLS_ROOT | path join "scripts" $name)
-    let result = (do { ^nu $script } | complete)
+    let result = (do { ^$nu.current-exe --no-config-file $script } | complete)
 
     let stderr = ($result.stderr? | output-text | str trim)
     if $result.exit_code != 0 and not ($stderr | is-empty) {
@@ -177,6 +179,7 @@ def resolve-both-changed [
 }
 
 def main [] {
+    if (cloud-mode-active) { return }
     let context = (machine-context)
 
     if $context == null {

@@ -71,30 +71,17 @@ export def detect-machine-name [] {
 # these helpers make explicit failure envelopes distinguishable from success output.
 export def error-message [value: any fallback: string = "Operation failed."] {
     let kind = ($value | describe)
-
-    if $kind == "nothing" {
-        return $fallback
-    }
-
     if $kind == "string" {
-        let text = ($value | str trim)
-        if not ($text | is-empty) { return $text }
-        return $fallback
+        if not ($value | str trim | is-empty) { return $value }
     }
-
     if ($kind | str starts-with "record") {
-        let candidate = ($value | get --optional msg)
-        if $candidate != null {
-            let text = (try { $candidate | into string | str trim } catch { "" })
-            if not ($text | is-empty) { return $text }
+        for key in ["msg" "rendered"] {
+            let candidate = ($value | get --optional $key)
+            if ($candidate | describe) == "string" {
+                if not ($candidate | str trim | is-empty) { return $candidate }
+            }
         }
     }
-
-    let rendered = (try { $value | to nuon | str trim } catch { "" })
-    if not ($rendered | is-empty) and $rendered != "null" {
-        return $rendered
-    }
-
     $fallback
 }
 
@@ -107,7 +94,7 @@ export def failure-envelope [value: any] {
 
 export def captured-failure [value: any] {
     let kind = ($value | describe)
-    let values = if ($kind | str starts-with "list") { $value } else { [$value] }
+    let values = if ($kind | str starts-with "list") or ($kind | str starts-with "table") { $value } else { [$value] }
 
     for item in $values {
         let item_kind = ($item | describe)

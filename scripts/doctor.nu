@@ -47,7 +47,7 @@ def run-script [tools_root: path name: string ...args: string] {
         return false
     }
 
-    ^nu $script ...$args
+    ^$nu.current-exe --no-config-file $script ...$args
     let exit_code = ($env.LAST_EXIT_CODE | default 0)
 
     if $exit_code != 0 {
@@ -72,7 +72,11 @@ def main [--fix] {
 
     if not ($config_file | path exists) {
         print "[FAIL] Machine config is missing"
-        print "[info] Run nu setup.nu first."
+        if $nu.os-info.name in ["linux" "macos"] {
+            print "[info] From the Initial-setup project root run: nu setup.nu"
+        } else {
+            print "[info] From the Initial-setup project root run: nu setup.nu"
+        }
         return
     }
 
@@ -142,6 +146,9 @@ def main [--fix] {
     let tool_state = ((nu-home) | path join ".config" "dotfiles" "state" "tools.nuon")
     let windows_sync_launcher = ((nu-home) | path join ".config" "dotfiles" "scheduler" "auto-sync-hidden.vbs")
     let machine_local_setup = ((nu-home) | path join ".config" "dotfiles" "local.nu")
+    let platform_env = ((nu-home) | path join ".config" "dotfiles" "platform.nu")
+    let linux_sync_service = ((nu-home) | path join ".config" "systemd" "user" "dotfiles-auto-sync.service")
+    let linux_sync_timer = ((nu-home) | path join ".config" "systemd" "user" "dotfiles-auto-sync.timer")
     let font_marker = ((nu-home) | path join ".config" "dotfiles" "fonts" "d2coding.nuon")
     let rust_state = ($data_root | path join "toolchains" "rust" "state.nuon")
     let julia_envs = ($data_root | path join "toolchains" "julia" "environments")
@@ -163,7 +170,7 @@ def main [--fix] {
         print ""
         print "Git folder identities:"
         let git_ids_script = ($tools_root | path join "scripts" "setup-git-identities.nu")
-        ^nu $git_ids_script --check
+        ^$nu.current-exe --no-config-file $git_ids_script --check
         let git_ids_exit = ($env.LAST_EXIT_CODE | default 0)
 
         if $git_ids_exit != 0 {
@@ -175,7 +182,7 @@ def main [--fix] {
         print ""
         print "SSH key pairs:"
         let ssh_keys_script = ($tools_root | path join "scripts" "setup-ssh-keys.nu")
-        ^nu $ssh_keys_script --check
+        ^$nu.current-exe --no-config-file $ssh_keys_script --check
         let ssh_keys_exit = ($env.LAST_EXIT_CODE | default 0)
 
         if $ssh_keys_exit != 0 {
@@ -199,7 +206,7 @@ def main [--fix] {
 
     if $nu.os-info.name == "windows" and ($context.features.onedrive_ignore_uploads? | default false) {
         let policy_script = ($tools_root | path join "scripts" "setup-onedrive-ignore-upload.nu")
-        ^nu $policy_script --check
+        ^$nu.current-exe --no-config-file $policy_script --check
     }
 
     if ($context.features.rclone_config? | default false) {
@@ -253,6 +260,37 @@ def main [--fix] {
         print "[ok] Machine-local Nushell setup exists"
     } else {
         print "[--] Machine-local Nushell setup missing"
+    }
+
+    if $nu.os-info.name in ["linux" "macos"] {
+        if ($platform_env | path exists) {
+            print "[ok] POSIX user-tool PATH bridge exists"
+        } else {
+            print "[--] POSIX user-tool PATH bridge missing"
+        }
+    }
+
+    if $nu.os-info.name == "linux" and $context.sync.enabled {
+        if ($linux_sync_service | path exists) and ($linux_sync_timer | path exists) {
+            print "[ok] Linux auto-sync systemd unit files exist"
+        } else {
+            print "[--] Linux auto-sync systemd unit files missing"
+        }
+
+        if (which systemctl | is-empty) {
+            print "[--] systemctl not available; use dotsync manually"
+        } else {
+            let status = (try {
+                do { ^systemctl --user is-active dotfiles-auto-sync.timer } | complete
+            } catch {
+                {exit_code: 1 stdout: "" stderr: ""}
+            })
+            if $status.exit_code == 0 and (($status.stdout | str trim) == "active") {
+                print "[ok] Linux auto-sync timer is active"
+            } else {
+                print "[--] Linux auto-sync timer is not active; manual dotsync remains available"
+            }
+        }
     }
 
     if ($local_backup_root | path exists) {

@@ -16,7 +16,7 @@ def winget-package-state [
     let script = ($TOOLS_ROOT | path join "scripts" "winget-package-state.nu")
     let args = [$script $mode $package_id "--source" $source]
 
-    ^nu ...$args | ignore
+    ^$nu.current-exe --no-config-file ...$args | ignore
     let exit_code = ($env.LAST_EXIT_CODE | default 2)
 
     match $exit_code {

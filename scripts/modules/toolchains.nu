@@ -2,6 +2,8 @@ const PROCESS_OUTPUT = path self ./process-output.nu
 use $PROCESS_OUTPUT [output-text]
 # Toolchain desired-state lock and drift helpers.
 
+const RUNTIME = path self ./nu-runtime.nu
+use $RUNTIME [runtime-session-valid]
 const TOOLS_ROOT = path self ../..
 const LOCK_FILE = path self ../../toolchains/lock.nuon
 
@@ -60,7 +62,7 @@ export def current-toolchain-versions [] {
         rust_channel: (parse-rust-channel (command-output "rustup" ["show" "active-toolchain"]))
         julia: (parse-tool-version "julia" (command-output "julia" ["--version"]))
         julia_channel: (parse-julia-channel (command-output "juliaup" ["status"]))
-        nushell: ($env.NU_VERSION? | default "")
+        nushell: (version).version
     }
 }
 
@@ -109,7 +111,9 @@ export def toolchain-status [] {
     [
         (one-status "rust" ($lock.rust? | default {}) $current.rust $current.rust_channel)
         (one-status "julia" ($lock.julia? | default {}) $current.julia $current.julia_channel)
-        (one-status "nushell" ($lock.nushell? | default {}) $current.nushell)
+        ((one-status "nushell" {mode: "minimum" value: "0.109.1"} $current.nushell)
+            | upsert manager "cargo-latest"
+            | upsert freshness (if (runtime-session-valid) { "checked-this-operation" } else { "not-queried" }))
     ]
 }
 
@@ -118,7 +122,8 @@ export def write-current-lock [] {
     let existing = (load-toolchain-lock)
     let rust_spec = (if ($current.rust | is-empty) { $existing.rust? | default { mode: "channel" value: "stable" } } else { { mode: "exact" value: $current.rust } })
     let julia_spec = (if ($current.julia | is-empty) { $existing.julia? | default { mode: "channel" value: "release" } } else { { mode: "exact" value: $current.julia } })
-    let nu_spec = (if ($current.nushell | is-empty) { $existing.nushell? | default { mode: "minimum" value: "0.109.1" } } else { { mode: "exact" value: $current.nushell } })
+    let nu_spec = {mode: "minimum" value: "0.109.1"}
+    print "[info] Nushell follows Cargo latest; only Rust/Julia are pinned by --lock-current."
     {
         version: 1
         rust: $rust_spec

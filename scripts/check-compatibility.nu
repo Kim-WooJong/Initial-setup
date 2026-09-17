@@ -21,13 +21,15 @@ def interpreter [path: path family: string] {
     let major = ($parts.0 | into int)
     let minor = ($parts.1 | into int)
     let patch = ($parts.2 | split row "-" | first | split row "+" | first | into int)
-    let supported = if $family == "baseline" {
+    let supported = if $family == "seed" {
+        $major == 0 and $minor < 109 and ($minor > 106 or ($minor == 106 and $patch >= 1))
+    } else if $family == "baseline" {
         $major == 0 and $minor < 114 and ($minor > 109 or ($minor == 109 and $patch >= 1))
     } else {
         $major > 0 or ($major == 0 and $minor >= 114)
     }
     if not $supported {
-        error make {msg: ("Wrong " + $family + " interpreter: " + $info.version + ". Use 0.109.1-0.113.x for baseline and >=0.114.0 for modern.")}
+        error make {msg: ("Wrong " + $family + " interpreter: " + $info.version + ". Use 0.106.1-0.108.x for seed, 0.109.1-0.113.x for baseline, and >=0.114.0 for modern.")}
     }
     {family: $family exe: $exe version: $info.version}
 }
@@ -35,8 +37,9 @@ def interpreter [path: path family: string] {
 # Example:
 # nu scripts/check-compatibility.nu /path/to/nu-0.109.1 /path/to/nu-0.115.1 --report-dir ../nu-matrix
 # Reports distinguish this two-binary matrix from a one-interpreter syntax check.
-def main [baseline: path modern: path --report-dir: path] {
-    let interpreters = [(interpreter $baseline "baseline") (interpreter $modern "modern")]
+def main [baseline: path modern: path --report-dir: path --seed: path] {
+    mut interpreters = [(interpreter $baseline "baseline") (interpreter $modern "modern")]
+    if $seed != null { $interpreters = ($interpreters | prepend (interpreter $seed "seed")) }
     let directory = if $report_dir == null {
         let base = ($env.TEMP? | default ($env.TMPDIR? | default "/tmp"))
         $base | path join ("initial-setup-compatibility-" + (random uuid))
@@ -46,11 +49,17 @@ def main [baseline: path modern: path --report-dir: path] {
     for engine in $interpreters {
         print ("[interpreter] " + $engine.family + " " + $engine.version)
         let syntax_report = ($directory | path join ($engine.family + "-syntax.json"))
-        let steps = [
+        let steps = if $engine.family == "seed" {
+            [
+                {name: "setup-help" args: [($ROOT | path join "setup.nu") "--help"]}
+                {name: "setup-diagnose" args: [($ROOT | path join "setup.nu") "--diagnose"]}
+                {name: "runtime-help" args: [($ROOT | path join "scripts" "update-nushell.nu") "--help"]}
+            ]
+        } else { [
             {name: "syntax" args: [($ROOT | path join "scripts" "validate-syntax.nu") "--deny-warnings" "--report" $syntax_report]}
             {name: "syntax-fixtures" args: [($ROOT | path join "scripts" "syntax-self-test.nu")]}
             {name: "regressions" args: [($ROOT | path join "scripts" "regression-test.nu")]}
-        ]
+        ] }
         for step in $steps {
             let result = (invoke-nu $engine.exe $step.args)
             let file = ($directory | path join ($engine.family + "-" + $step.name + ".log"))
@@ -63,7 +72,7 @@ def main [baseline: path modern: path --report-dir: path] {
         }
     }
     let failed = ($results | where exit_code != 0 | length)
-    {format: 1 platform: $nu.os-info.name matrix_complete: ($failed == 0) failed: $failed results: $results}
+    {format: 2 platform: $nu.os-info.name seed_requested: ($seed != null) seed_scope: "Entry diagnostics/help only; no business-module or updater execution claim" matrix_complete: ($failed == 0) failed: $failed results: $results}
     | to json | save --force ($directory | path join "matrix.json")
     print ("[reports] " + ($directory | into string))
     if $failed > 0 { exit 1 }

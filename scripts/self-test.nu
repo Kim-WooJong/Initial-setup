@@ -73,7 +73,9 @@ def temp-base [] {
 def main [
     --sandbox
     --keep
+    --setup-only
 ] {
+    # Dedicated editor regression uses its own temporary HOME.
     let validator = ($TOOLS_ROOT | path join "scripts" "validate-project.nu")
     let setup = ($TOOLS_ROOT | path join "setup.nu")
 
@@ -85,12 +87,26 @@ def main [
         return
     }
 
-    run-nu "syntax-validator regression fixtures" [($TOOLS_ROOT | path join "scripts" "syntax-self-test.nu")] | ignore
-    run-nu "language and failure-path regressions" [($TOOLS_ROOT | path join "scripts" "regression-test.nu")] | ignore
-    run-nu "offline rclone dependency regressions" [($TOOLS_ROOT | path join "scripts" "rclone-install-test.nu")] | ignore
-    run-nu "binary subprocess diagnostic regressions" [($TOOLS_ROOT | path join "scripts" "process-output-test.nu") "--external"] | ignore
-    run-nu "offline lock lifecycle and diagnostic regressions" [($TOOLS_ROOT | path join "scripts" "lock-test.nu")] | ignore
-
+    if not $setup_only {
+        run-nu "capture/sync failure propagation" [($TOOLS_ROOT | path join "scripts" "subprocess-chain-test.nu")] | ignore
+        run-nu "entrypoint diagnostics" [($TOOLS_ROOT | path join "scripts" "entrypoint-test.nu")] | ignore
+        run-nu "active cloud command refresh" [($TOOLS_ROOT | path join "scripts" "refresh-commands-test.nu")] | ignore
+        run-nu "run-state checkpoint integrity" [($TOOLS_ROOT | path join "scripts" "run-state-test.nu")] | ignore
+        run-nu "syntax-validator regression fixtures" [($TOOLS_ROOT | path join "scripts" "syntax-self-test.nu")] | ignore
+        run-nu "offline latest-Nushell runtime regressions" [($TOOLS_ROOT | path join "scripts" "nu-runtime-test.nu")] | ignore
+        if $nu.os-info.name != "windows" {
+            ^bash ($TOOLS_ROOT | path join "scripts" "posix" "prepare-nu-cargo-test.sh")
+            if ($env.LAST_EXIT_CODE | default 1) != 0 { fail "Cargo native bootstrap fixture failed." }
+        }
+        run-nu "language and failure-path regressions" [($TOOLS_ROOT | path join "scripts" "regression-test.nu")] | ignore
+        run-nu "offline rclone dependency regressions" [($TOOLS_ROOT | path join "scripts" "rclone-install-test.nu")] | ignore
+        run-nu "binary subprocess diagnostic regressions" [($TOOLS_ROOT | path join "scripts" "process-output-test.nu") "--external"] | ignore
+        run-nu "offline lock lifecycle and diagnostic regressions" [($TOOLS_ROOT | path join "scripts" "lock-test.nu")] | ignore
+        run-nu "cloud-wins control/optional engine regressions" [($TOOLS_ROOT | path join "scripts" "cloud-wins-test.nu")] | ignore
+    
+        run-nu "local editor regression" [($TOOLS_ROOT | path join "scripts" "edit-managed-test.nu")] | ignore
+        run-nu "local vault initialization regressions" [($TOOLS_ROOT | path join "scripts" "vault-init-test.nu")] | ignore
+    }
     let stamp = (random uuid)
     let sandbox_root = ((temp-base) | path join ("initial-setup-selftest-" + $stamp))
     let sandbox_home = ($sandbox_root | path join "home")

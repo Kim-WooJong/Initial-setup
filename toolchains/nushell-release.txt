@@ -1,0 +1,10 @@
+# version|target|sha256
+# Pinned official Nushell release used by the POSIX bootstrap fast path.
+0.115.1|x86_64-unknown-linux-gnu|d11d825241f6504a3617c535fa725a9dd6d009c86d7b19fb3168b47635b9d8b0
+0.115.1|x86_64-unknown-linux-musl|8a9722177ddd421eba927b4baae4ae341a4d1c3434504be7b1b17d998bafdd87
+0.115.1|aarch64-unknown-linux-gnu|5c4a5bca0af5b070e903a68fa014cc24e6419d0ac9cec03a2948494b2d310e08
+0.115.1|aarch64-unknown-linux-musl|86a869f44c2abd37f4a4c215af78c8da058812b76fa131476d28e62fc0262a91
+0.115.1|armv7-unknown-linux-gnueabihf|b31c59f19c4040c20f52e16325646d66b303c505a7d07405683fccf128a47f51
+0.115.1|armv7-unknown-linux-musleabihf|6f86c2f74dd547d20d0965c23e2a696e4b8f64e485e6411d7f467382b77f9660
+0.115.1|x86_64-apple-darwin|0292f4b92af29cfe5d9c4b2ec06eeb325b705d1d6c19536a8bec2b75859b3485
+0.115.1|aarch64-apple-darwin|2e6ed1eb043869ff05b5f2448a8c443e4d3a93557ba4303b21008a0523c96734

@@ -1,9 +1,9 @@
-# name|command|apt_package|dnf_package|pacman_package
-ripgrep|rg|ripgrep|ripgrep|ripgrep
-fd|fd|fd-find|fd-find|fd
-fzf|fzf|fzf|fzf|fzf
-bat|bat|bat|bat|bat
-zoxide|zoxide|zoxide|zoxide|zoxide
-git-delta|delta|git-delta|git-delta|git-delta
-lazygit|lazygit|-|lazygit|lazygit
-rclone|rclone|rclone|rclone|rclone
+# name|command|apt_package|dnf_package|pacman_package|zypper_package|apk_package
+ripgrep|rg|ripgrep|ripgrep|ripgrep|ripgrep|ripgrep
+fd|fd|fd-find|fd-find|fd|fd|fd
+fzf|fzf|fzf|fzf|fzf|fzf|fzf
+bat|bat|bat|bat|bat|bat|bat
+zoxide|zoxide|zoxide|zoxide|zoxide|zoxide|zoxide
+git-delta|delta|git-delta|git-delta|git-delta|git-delta|git-delta
+lazygit|lazygit|-|lazygit|lazygit|lazygit|lazygit
+rclone|rclone|rclone|rclone|rclone|rclone|rclone

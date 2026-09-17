@@ -23,7 +23,7 @@ def winget-package-state [
     let script = ($TOOLS_ROOT | path join "scripts" "winget-package-state.nu")
     let args = [$script $mode $package_id "--source" $source]
 
-    ^nu ...$args | ignore
+    ^$nu.current-exe --no-config-file ...$args | ignore
     let exit_code = ($env.LAST_EXIT_CODE | default 2)
 
     match $exit_code {
@@ -142,6 +142,22 @@ def install-with-brew [] {
     $exit_code == 0
 }
 
+
+def linux-is-root [] {
+    if (which id | is-empty) { return false }
+    let result = (do { ^id -u } | complete)
+    $result.exit_code == 0 and (($result.stdout | str trim) == "0")
+}
+
+def linux-run-root [label: string program: string args: list] {
+    if (linux-is-root) { return (run-program $label $program $args) }
+    if (which sudo | is-empty) {
+        print ("[warn] " + $label + " requires root privileges and sudo is unavailable.")
+        return 1
+    }
+    run-program $label "sudo" ([$program] | append $args)
+}
+
 def linux-has-gui [] {
     let display = (
         $env.DISPLAY?
@@ -163,16 +179,15 @@ def install-linux [] {
         return true
     }
 
-    if not (which pacman | is-empty) and not (which sudo | is-empty) {
+    if not (which pacman | is-empty) {
         let args = [
-            "pacman"
             "-S"
             "--needed"
             "--noconfirm"
             "wezterm"
         ]
 
-        let exit_code = (run-program "Install WezTerm with pacman" "sudo" $args)
+        let exit_code = (linux-run-root "Install WezTerm with pacman" "pacman" $args)
 
         if $exit_code == 0 {
             return true

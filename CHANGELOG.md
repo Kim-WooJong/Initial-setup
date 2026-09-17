@@ -1,7 +1,162 @@
 # Changelog
 
+## 0.15.0
+
+- Hardened Starship setup on Windows, Linux, and macOS. A PATH-visible executable is no longer accepted until both `starship --version` and `starship init nu` succeed.
+- Added candidate discovery for PATH, Cargo, user-local, WinGet, and Scoop locations so a stale PATH entry cannot hide a healthy installation.
+- Capture and print the actual `starship init nu` exit code and stderr instead of replacing the root cause with a generic setup error.
+- Preserve the existing Nushell Starship autoload until a complete new init script has been generated successfully.
+- Treat Starship as optional consistently: a broken prompt integration warns and setup continues instead of aborting the entire machine setup.
+- On Windows, an unhealthy WinGet installation is offered an upgrade attempt before falling back to Cargo.
+
+## 0.14.2
+
+- Restored normal `nu setup.nu` behavior: startup blocks only on files required to execute safely, then continues to the existing configuration review/diff flow.
+- Release-manifest drift is advisory in `--diagnose` and strict only in `--check`/the verification suite.
+- Replaced the ambiguous diagnostic `read_only` field with `diagnostic_only` and `setup_blocked`; diagnostics no longer imply a synchronization policy.
+- Removed the obsolete `install.sh`. Linux/macOS systems without Nushell use `bash bootstrap.sh`.
+- Regenerated the release manifest so removed files cannot cause a false `MISSING_OR_NONREGULAR` startup failure.
+
+## 0.14.1
+
+- Restored `nu setup.nu` as the canonical Windows/Linux/macOS setup entry point.
+- Added automatic prerequisite routing from `setup.nu` when Nu, Git, or chezmoi is not ready.
+- Kept `install.sh` only as a fallback for machines without Nushell.
+- Reused a compatible existing Nushell on Windows instead of rebuilding it unnecessarily.
+- Converted maintained Markdown documentation to English and consolidated long-lived guidance into the wiki.
+- Removed version-specific audit, migration, and testing documents from the release.
+
+## [0.14.0] - 2026-09-18
+
+- Promoted Linux to a first-class quick-start target with `sh install.sh`, automatic workstation/server profile selection (WSL defaults to server), and script-relative entrypoint routing.
+- Added apt/dnf/pacman/zypper/apk support alignment, root-aware privilege handling, Debian `fdfind`/`batcat` shims, and a machine-local PATH bridge for `~/.local/bin`, Cargo and Juliaup.
+- Added pinned official Nushell release binaries as the fast POSIX bootstrap path with SHA-256 verification; Cargo compilation remains the fallback.
+- Made Linux auto-sync tolerant of WSL/containers without a working `systemctl --user`; manual `dotsync` remains available and `dotdoctor` reports scheduler state.
+- Changed Linux Starship bootstrap to prefer the user-local official installer before Cargo compilation.
+- Added offline POSIX one-command quick-start, official-release selector, and Cargo-selector tests; integrated documentation coverage into verification.
+- Added a Wiki under `docs/wiki/` covering installation, feature roles, architecture, profiles, all exported commands, synchronization, Cloud-wins, recovery, troubleshooting and internal components.
+- Private schema remains 5; no automatic destructive migration is introduced.
+
+## 0.13.3
+
+- Diagnose missing/mixed release files before setup; provide a flat-root ZIP and
+  standalone cwd/project-root/runtime diagnostics without network/config writes.
+- Preserve existing `dotpreflight --diff`; new diagnostics live separately.
+- Use the current Nu executable for child invocations; align native seed minimum
+  at 0.106.1 and keep compatible read-only work available without registry access.
+- Repair active cloud-wins command-refresh recovery snapshots across checkout moves;
+  preserve backups and refuse unrelated machine-context edits.
+- Read compatible 0.13.2 format-2 recovery journals after upgrades; require fresh
+  current-version plans for new applies.
+- Reject empty-directory namespace collisions; harden file observation, bounded
+  JSON reading, target-storage preflight and copied build-input verification.
+- Validate run IDs, write checkpoints atomically, retain primary errors on cleanup.
+- Stop synchronization after failed capture; propagate incomplete environment capture/restore.
+- Add per-stage verification reports, explicit incomplete/blocked states, optional
+  seed matrix tests, four Nu regression suites and ten Rust regression cases.
+- Actual authoring checks: POSIX bootstrap mocks, shell syntax, native lock cases,
+  static/reference checks and archive/patch audits. Nu/Rust/Windows/macOS/live Proton
+  runtime execution was unavailable in that build environment. Schema remains 5.
+
+## 0.13.2
+
+- Integrate optional `dotcloud` into the uploaded 0.13.1 project; keep private schema 5 and existing directory/local/rclone paths.
+- Add Rust cloudwins format-2 plan/apply/verify/ready/status/rollback with separate local state, whole-inventory SHA-256 checks, explicit plan/run confirmations, non-deleting overlay, verified staging/backups and write-ahead recovery.
+- Read-only previews do not create the target or overwrite payloads; plans and operation leases may write local control metadata. Cloud mirror stability is not proof of server freshness.
+- Add preview-first configure/activate/deactivate, saved machine policy, interruption-safe fail-closed activation, push/backend/setup blockers, disabled auto worker and configured/explicit prune rejection. Normal dotpull requires an approved local workspace and retains existing protected-file/backup checks.
+- Build the optional helper in source-hash keyed local cache, retaining a first-build Cargo.lock and binary receipt. No generated/pinned release Cargo.lock or compiled binary is included.
+- Add 26 authored Rust tests, isolated Nu control/engine regressions and explicit verify-0.13.2.nu; retain old release gates and add required cloud engine tests. Release version bumps also update the Rust package version.
+- Preserve offline local recovery through the existing validated runtime cache; no cloud-source reads are required by the rollback engine.
+- Add root-level usage/migration/testing notes, retaining the no docs/ or .github/ repository policy.
+- Verification disclosure: POSIX mocked bootstrap tests and static/artifact checks only in the authoring environment. Rust compile/tests, Nu parser/runtime and native Windows/macOS/Proton integration were not executed here.
 
 
+
+## [0.13.1] - 2026-09-17
+
+- Fixed `nu-runtime.nu` assigning a record into a variable inferred as `nothing` by declaring the selector as `any`.
+- Fixed the OneDrive policy helper argument path so immutable arguments are captured safely by `do { ... } | complete`.
+- Administrator-required OneDrive policy exit code 11 remains a warning and no longer aborts normal setup.
+- Protected-file conflicts during private-authoritative setup now show the actual diff and ask whether to keep the local file, overwrite it from the private source, or cancel.
+- Local protected-file choices are backed up before apply and restored afterward, including when `chezmoi apply` fails.
+- Fixed the same mutable-capture pattern in the edit-managed regression test.
+
+## [0.13.0] - 2026-09-17
+
+- Replaced official-release binary downloads with Cargo builds of the newest stable, non-yanked `nu` found in the official crates.io sparse index. Build an exact version with `--locked --bin nu --registry crates-io`; never silently select an older MSRV-compatible crate.
+- Use isolated Cargo installation roots under `CARGO_HOME/initial-setup/nu`, verify version/startup and Cargo tracking, and reuse checksum-checked receipts. Preserve running executables, older builds and old 0.12 downloaded caches. Shared Cargo build cache replaces redundant project update locks.
+- Prepare stable Rust through Rustup for new builds without changing an existing default/project override; system Rust must meet the selected MSRV. Build prerequisites remain explicit. Cargo/network/verification failures stop sync.
+- Native Windows/POSIX bootstrap can compile the first Nu without an existing Nu parser. Removed Nu binary extractors and WinGet/Homebrew/extra-repository Nu installation paths. Preview does not install dependencies or runtimes.
+- Added `dotnuupdate --shell`; session reuse is Cargo-specific and limited to child operations. Idle scheduler cycles do not query/build; actual push/pull checks the registry. No always-running updater is added.
+- Fixed the self-updater's 0.12-only manifest and patch-number comparison. New code compares complete stable versions; first migration from an old 0.12 updater must use a full ZIP/patch. Existing setup run-version checks and schema 5 remain.
+- Nushell uses the Cargo freshness policy, while toolchain lock-current preserves only the parser minimum for Nu. Rust/Julia version locking stays independent.
+- Replaced binary-asset tests with registry-selection, exact Cargo argv, cache integrity, failed-build preservation and launcher regression fixtures. Native POSIX preparation tests (10 mock-tool scenarios) ran successfully; full Nu/Cargo and Windows/macOS integration was not executed because those runtimes/network were unavailable in the authoring environment.
+- README/ROADMAP remain concise and English. No docs/, .github/, secret migration, forced push or baseline acknowledgement added.
+
+## [0.12.32] - 2026-09-17
+
+- Fixed the text-case adapter's parse-time selector: replaced regex matching with membership in a literal list of all pre-0.114 minor versions (0 through 113). No numeric conversion or runtime command is used in the selector.
+- Extended the real-module constant/import regression to every pre-0.114 minor and boundary/prerelease/future-version inputs. Added an optional `syntax-self-test.nu --case-only` path for local, offline diagnostics.
+- Latest-stable runtime preparation, checksum checks, sync/vault/lock behavior and optional startup validation are unchanged. No docs/ or .github/ added.
+- Authoring checks: literal-table coverage, source diff and release artifacts verified. Actual Nushell/Windows execution was not run: no Nu executable was available and the official binary download could not be obtained.
+
+## [0.12.31] - 2026-09-17
+
+- Fixed the runtime bootstrap comparator using an unparenthesized negative return value that Nushell parsed as an unknown `-1` flag. It now returns `(-1)`.
+- Added focused integer/order regression cases for older, equal and newer major/minor/patch versions, and a parser-acceptance fixture for the negative return expression.
+- No change to update selection, checksum verification, sync safety checks or normal-startup validation policy. No docs/ or .github/ directory added.
+- Authoring verification: targeted source scan and artifact checks only. Nushell regressions were not run (runtime unavailable; GitHub DNS resolution failed).
+
+## [0.12.30] - 2026-09-17
+
+- Setup and explicit push/pull now check the latest official stable Nushell release before loading business modules or acquiring operation locks. Nested scripts reuse the selected executable and child PATH.
+- Install older runtimes side by side in user-local storage from official GitHub release assets; require their SHA-256 digest, exact executable version and isolated execution check. Do not overwrite a running or package-managed nu binary.
+- Added runtime-only update/check commands and a guarded compatibility launcher. Network, metadata, checksum or install failure stops synchronization; no silent outdated-runtime fallback.
+- Idle automatic-sync cycles use a compatible current/cached runtime, while actual push/pull still checks latest stable. No per-minute release polling when nothing needs syncing.
+- Correctly select the legacy case adapter for every 0.x minor below 114, including 0.108. No non-const numeric conversion is used.
+- Bootstrap uses an existing Nu only as a seed, prepares/rechecks the selected runtime and preserves argument forwarding. Ancient seeds require native bootstrap/PATH repair before using the Nu launcher.
+- Added offline release-selection/launcher regressions and POSIX/Windows single-binary extractors. Explicit validation/release gates remain; normal setup does not scan the whole repository.
+- Authoring verification: POSIX extractor behavior, shell syntax, static contracts and patch/artifact checks were run. Nushell and Windows PowerShell integration tests were not run because these executables could not be obtained in the authoring environment.
+
+## [0.12.29] - 2026-09-17
+
+- Vault initialization and restore no longer load sync-provider configuration; capture/migration retain their existing revision and locking guards.
+- Added `dotvault init --check` for read-only local path and age/age-keygen prerequisite checks. No package is installed automatically.
+- Vault failures print the original rendered diagnostic and the initialization stage, release both held locks, and exit nonzero without another misleading footer error.
+- Decode public-key/path command output strictly as UTF-8; optional rclone-path discovery failure no longer invalidates a usable identity.
+- Protect a staged policy before committing it, reuse an existing identity on retry, and never overwrite an existing vault policy.
+- Added isolated vault-init regressions to the explicit sandbox workflow. Runtime tests were authored but could not be run in the authoring environment (Nushell unavailable).
+
+## [0.12.28] - 2026-09-17
+
+- Separate managed editor commands from synchronization: local editing is the default, with explicit --push and --path options.
+- Delegate editor behavior to edit-managed.nu, check source-path exit/empty output, avoid implicit pull, and reject template capture that re-add cannot perform.
+- Add a local-only refresh-commands.nu tool with backups, command-module checksum verification, tools_root update and lock cleanup. Restart the shell after refreshing.
+- Show both baseline/current tree hashes and independent export-audit blockers in backend status; matching revisions alone never imply export readiness.
+- Normalize sync errors to known text fields, preserve the real cause when auxiliary logging fails, and recognize failure envelopes in tables.
+- Use the current Nushell executable on the direct push/transport entry paths.
+- Add isolated local-editor/refresh regressions; retain the optional normal-setup validation policy.
+- Keep README/ROADMAP concise and English; no docs directory or .github directory is added.
+- Verification limit: this patch was statically reviewed and packaged, but its Nushell/Windows/chezmoi integration tests were not executed in the authoring environment.
+
+## [0.12.27] - 2026-09-17
+
+- Stabilized directory-provider concurrency checks by requiring consecutive identical cloud-mirror snapshots before comparing against the saved baseline.
+- dotbackend status and push now use the same stable provider-head logic; real mismatches report baseline/current revisions and the data root.
+- Removed the docs/ directory and generated test-report files; README, ROADMAP, and CHANGELOG remain the maintained documentation.
+
+
+
+
+
+
+## [0.12.26] - 2026-09-17
+
+- Fixed `dotnu`, `dotenv`, `dotnvim`, `dotwezterm`, and `dotstarship` editing the private chezmoi source before synchronization.
+- Managed editor commands now edit the live/local target first; `dotpush` verifies the provider baseline before `chezmoi re-add` captures the local change.
+- This prevents a user's own edit from being misclassified as a concurrent private-source change.
+- Simplified `sync-transport.nu` failure reporting so the original synchronization error is printed immediately and is no longer re-rendered through a typed message conversion.
+- If synchronization fails after editing, the local edit is preserved.
 
 ## [0.12.25] - 2026-09-17
 

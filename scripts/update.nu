@@ -41,7 +41,7 @@ def winget-package-state [
     let script = ($TOOLS_ROOT | path join "scripts" "winget-package-state.nu")
     let args = [$script $mode $package_id "--source" $source]
 
-    ^nu ...$args | ignore
+    ^$nu.current-exe --no-config-file ...$args | ignore
     let exit_code = ($env.LAST_EXIT_CODE | default 2)
 
     match $exit_code {
@@ -83,7 +83,7 @@ def run-script [
 ] {
     let script = ($TOOLS_ROOT | path join "scripts" $name)
 
-    ^nu $script ...$args
+    ^$nu.current-exe --no-config-file $script ...$args
 
     let exit_code = ($env.LAST_EXIT_CODE | default 0)
 
@@ -100,6 +100,29 @@ def useful-lines [file: path] {
     | lines
     | each { |line| $line | str trim }
     | where { |line| not ($line | is-empty) and not ($line | str starts-with "#") }
+}
+
+
+def linux-is-root [] {
+    if (which id | is-empty) {
+        return false
+    }
+
+    let result = (do { ^id -u } | complete)
+    $result.exit_code == 0 and (($result.stdout | str trim) == "0")
+}
+
+def privileged-linux [label: string program: string args: list] {
+    if (linux-is-root) {
+        return (run-external $label $program $args)
+    }
+
+    if (which sudo | is-empty) {
+        print ("[warn] sudo is required to " + ($label | str downcase) + "; skipping.")
+        return false
+    }
+
+    run-external $label "sudo" ([$program] | append $args)
 }
 
 def update-windows [] {
@@ -183,51 +206,61 @@ def update-linux [] {
         | each { |line| $line | split row "|" }
     )
 
-    if not (which apt-get | is-empty) {
-        run-external "APT update" "sudo" ["apt-get" "update"] | ignore
+    let manager = if not (which apt-get | is-empty) {
+        {name: "apt" column: 2}
+    } else if not (which dnf | is-empty) {
+        {name: "dnf" column: 3}
+    } else if not (which pacman | is-empty) {
+        {name: "pacman" column: 4}
+    } else if not (which zypper | is-empty) {
+        {name: "zypper" column: 5}
+    } else if not (which apk | is-empty) {
+        {name: "apk" column: 6}
+    } else {
+        null
+    }
 
-        let packages = (
-            $rows
-            | each { |row| $row | get 2 }
-            | where { |item| $item != "-" }
-            | uniq
-        )
-
-        if not ($packages | is-empty) {
-            let args = (["apt-get" "install" "--only-upgrade" "-y"] | append $packages)
-            run-external "Upgrade managed APT tools" "sudo" $args | ignore
-        }
-
+    if $manager == null {
+        print "[warn] No supported Linux package manager found; CLI package update skipped."
         return
     }
 
-    if not (which dnf | is-empty) {
-        let packages = (
-            $rows
-            | each { |row| $row | get 3 }
-            | where { |item| $item != "-" }
-            | uniq
-        )
+    let column = $manager.column
+    let packages = (
+        $rows
+        | each { |row| $row | get --optional $column }
+        | where { |item| $item != null and $item != "-" and not ($item | is-empty) }
+        | uniq
+    )
 
-        if not ($packages | is-empty) {
-            let args = (["dnf" "upgrade" "-y"] | append $packages)
-            run-external "Upgrade managed DNF tools" "sudo" $args | ignore
+    match $manager.name {
+        "apt" => {
+            privileged-linux "APT update" "apt-get" ["update"] | ignore
+            if not ($packages | is-empty) {
+                privileged-linux "Upgrade managed APT tools" "apt-get" (["install" "--only-upgrade" "-y"] | append $packages) | ignore
+            }
         }
-
-        return
-    }
-
-    if not (which pacman | is-empty) {
-        let packages = (
-            $rows
-            | each { |row| $row | get 4 }
-            | where { |item| $item != "-" }
-            | uniq
-        )
-
-        if not ($packages | is-empty) {
-            let args = (["pacman" "-S" "--needed" "--noconfirm"] | append $packages)
-            run-external "Refresh managed pacman tools" "sudo" $args | ignore
+        "dnf" => {
+            if not ($packages | is-empty) {
+                privileged-linux "Upgrade managed DNF tools" "dnf" (["upgrade" "-y"] | append $packages) | ignore
+            }
+        }
+        "pacman" => {
+            if not ($packages | is-empty) {
+                privileged-linux "Refresh managed pacman tools" "pacman" (["-S" "--needed" "--noconfirm"] | append $packages) | ignore
+            }
+        }
+        "zypper" => {
+            privileged-linux "Refresh zypper metadata" "zypper" ["--non-interactive" "refresh"] | ignore
+            if not ($packages | is-empty) {
+                privileged-linux "Upgrade managed zypper tools" "zypper" (["--non-interactive" "update"] | append $packages) | ignore
+            }
+        }
+        "apk" => {
+            privileged-linux "Refresh apk metadata" "apk" ["update"] | ignore
+            if not ($packages | is-empty) {
+                privileged-linux "Upgrade managed apk tools" "apk" (["upgrade"] | append $packages) | ignore
+            }
         }
     }
 }

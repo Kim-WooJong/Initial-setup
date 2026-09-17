@@ -17,7 +17,7 @@ use $PROVIDER [load-provider assert-expected-head assert-same-head provider-head
 
 def run-script [name: string ...args: string] {
     let script = ($TOOLS_ROOT | path join "scripts" $name)
-    ^nu $script ...$args
+    ^$nu.current-exe --no-config-file $script ...$args
 
     let exit_code = ($env.LAST_EXIT_CODE | default 0)
     if $exit_code != 0 {

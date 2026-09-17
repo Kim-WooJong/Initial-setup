@@ -130,17 +130,17 @@ def test-suite [sandbox: path require_age: bool require_rclone: bool] {
     let previous = ($sandbox | path join "release-old")
     let candidate = ($sandbox | path join "release-new")
     let installed = ($sandbox | path join "installed")
-    fixture-release $previous "0.12.9" "# previous\n"
-    fixture-release $candidate "0.12.10" "# candidate\n"
+    fixture-release $previous "0.12.32" "# previous\n"
+    fixture-release $candidate "0.13.0" "# candidate\n"
     let digest = (open --raw ($candidate | path join "RELEASE-MANIFEST.json") | hash sha256)
     let old = (verify-release $previous "")
     let new = (verify-release $candidate $digest)
     rejects "Wrong trusted manifest digest blocks an update" { verify-release $candidate ("wrong" | hash sha256) }
     copy-release $previous $installed
     promote-files $installed $candidate $old $new
-    expect ((verify-release $installed "").version == "0.12.10") "File promotion installs the validated inventory"
+    expect ((verify-release $installed "").version == "0.13.0") "File promotion installs the validated inventory"
     rollback-files $installed $previous $candidate
-    expect ((verify-release $installed "").version == "0.12.9") "File fallback restores the previous inventory"
+    expect ((verify-release $installed "").version == "0.12.32") "File fallback restores the previous inventory"
     promote-files $installed $candidate $old $new
     "user edit after promotion" | save --force ($installed | path join "tool.nu")
     rejects "Rollback preserves a later user edit" { rollback-files $installed $previous $candidate }

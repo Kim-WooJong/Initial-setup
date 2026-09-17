@@ -41,7 +41,7 @@ def run-script [
 ] {
     let script = ($tools_root | path join "scripts" $name)
 
-    ^nu $script ...$args
+    ^$nu.current-exe --no-config-file $script ...$args
 
     let exit_code = ($env.LAST_EXIT_CODE | default 0)
 
@@ -62,7 +62,7 @@ def log [level: string message: string] {
         $message
     ]
 
-    ^nu ...$args | ignore
+    ^$nu.current-exe --no-config-file ...$args | ignore
 }
 
 def main [--prune --force --allow-protected] {

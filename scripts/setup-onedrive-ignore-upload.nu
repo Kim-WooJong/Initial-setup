@@ -61,7 +61,7 @@ def main [--check] {
     let helper = ($TOOLS_ROOT | path join "scripts" "windows" "set-onedrive-ignore-upload-policy.ps1")
     let patterns = ($TOOLS_ROOT | path join "defaults" "onedrive-ignore-upload-patterns.txt")
 
-    mut args = [
+    let base_args = [
         "-NoProfile"
         "-ExecutionPolicy"
         "Bypass"
@@ -71,13 +71,27 @@ def main [--check] {
         ($patterns | into string)
     ]
 
-    if $check {
-        $args = ($args | append "-CheckOnly")
+    let args = if $check {
+        $base_args | append "-CheckOnly"
+    } else {
+        $base_args
     }
 
-    ^$shell ...$args
+    let resolved_args = $args
+    let result = (
+        do { ^$shell ...$resolved_args }
+        | complete
+    )
 
-    let exit_code = ($env.LAST_EXIT_CODE | default 2)
+    let exit_code = $result.exit_code
+
+    if not (($result.stdout? | default "") | is-empty) {
+        print $result.stdout
+    }
+
+    if not (($result.stderr? | default "") | is-empty) {
+        print $result.stderr
+    }
 
     match $exit_code {
         0 => {
@@ -96,7 +110,9 @@ def main [--check] {
         }
 
         _ => {
-            print ("[warn] OneDrive policy helper returned exit code " + ($exit_code | into string))
+            error make {
+                msg: ("OneDrive policy helper failed with exit code " + ($exit_code | into string))
+            }
         }
     }
 }

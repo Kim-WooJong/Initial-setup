@@ -4,6 +4,8 @@ use $TEXT_CASE [text-upper]
 
 const CORE_MODULE = path self ./core.nu
 use $CORE_MODULE [nu-home]
+const SAFETY_MODULE = path self ./safety.nu
+use $SAFETY_MODULE [atomic-record]
 
 export def runs-root [] {
     (nu-home) | path join ".config" "dotfiles" "runs"
@@ -14,6 +16,9 @@ def now-text [] {
 }
 
 def run-dir [run_id: string] {
+    if not ($run_id =~ '^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$') {
+        error make {msg: "RUN_ID_INVALID: use a run identifier, not a filesystem path."}
+    }
     runs-root | path join $run_id
 }
 
@@ -39,7 +44,7 @@ def append-event [run_id: string level: string message: string] {
 def save-run [state: record] {
     let file = (run-file $state.run_id)
     mkdir ($file | path dirname)
-    $state | to nuon | save --force $file
+    atomic-record $file $state
 }
 
 export def load-run [run_id: string] {

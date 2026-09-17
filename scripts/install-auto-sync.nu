@@ -134,6 +134,20 @@ def install-windows [
     print "[ok] DotfilesAutoSync runs without a terminal window."
 }
 
+def systemd-user-available [] {
+    if (which systemctl | is-empty) {
+        return false
+    }
+
+    let result = (try {
+        do { ^systemctl --user show-environment } | complete
+    } catch {
+        {exit_code: 1 stdout: "" stderr: "systemctl --user invocation failed"}
+    })
+
+    $result.exit_code == 0
+}
+
 def install-linux [
     nu_exe: path
     sync_script: path
@@ -156,12 +170,26 @@ def install-linux [
         | path join "dotfiles-auto-sync.timer"
     )
 
+    let home = (nu-home | into string)
+    let service_path = (
+        [
+            ($home + "/.local/bin")
+            ($home + "/.cargo/bin")
+            ($home + "/.juliaup/bin")
+            "/usr/local/bin"
+            "/usr/bin"
+            "/bin"
+        ]
+        | str join ":"
+    )
+
     [
         "[Unit]"
         "Description=Conflict-safe bidirectional dotfiles sync"
         ""
         "[Service]"
         "Type=oneshot"
+        ('Environment="PATH=' + $service_path + '"')
         (
             'ExecStart="' + ($nu_exe | into string) + '" "' + ($sync_script | into string) + '"'
         )
@@ -188,21 +216,32 @@ def install-linux [
     | str join (char nl)
     | save --force $timer
 
-    let reload_args = [
-        "--user"
-        "daemon-reload"
-    ]
+    if not (systemd-user-available) {
+        print "[warn] systemd --user is not available in this Linux session."
+        print "[warn] Auto-sync unit files were created but not enabled. Setup will continue."
+        print "[info] Use `dotsync` manually, or enable the timer later after a user systemd session is available:"
+        print "       systemctl --user daemon-reload"
+        print "       systemctl --user enable --now dotfiles-auto-sync.timer"
+        return
+    }
 
-    run-program "Reload systemd user units" "systemctl" $reload_args
+    let reload = (do { ^systemctl --user daemon-reload } | complete)
 
-    let enable_args = [
-        "--user"
-        "enable"
-        "--now"
-        "dotfiles-auto-sync.timer"
-    ]
+    if $reload.exit_code != 0 {
+        print "[warn] Could not reload systemd user units; automatic sync remains disabled."
+        print "[info] Manual `dotsync` is still available."
+        return
+    }
 
-    run-program "Enable dotfiles auto-sync timer" "systemctl" $enable_args
+    let enabled = (do { ^systemctl --user enable --now dotfiles-auto-sync.timer } | complete)
+
+    if $enabled.exit_code != 0 {
+        print "[warn] Could not enable dotfiles-auto-sync.timer; automatic sync remains disabled."
+        print "[info] Manual `dotsync` is still available."
+        return
+    }
+
+    print "[ok] Linux user-systemd auto-sync timer enabled"
 }
 
 def xml-escape [value: string] {

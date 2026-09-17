@@ -11,7 +11,7 @@ def winget-package-state [
     let script = ($TOOLS_ROOT | path join "scripts" "winget-package-state.nu")
     let args = [$script $mode $package_id "--source" $source]
 
-    ^nu ...$args | ignore
+    ^$nu.current-exe --no-config-file ...$args | ignore
     let exit_code = ($env.LAST_EXIT_CODE | default 2)
 
     match $exit_code {
@@ -58,6 +58,22 @@ def run-program [label: string program: string args: list] {
     $exit_code
 }
 
+
+def linux-is-root [] {
+    if (which id | is-empty) { return false }
+    let result = (do { ^id -u } | complete)
+    $result.exit_code == 0 and ($result.stdout | str trim) == "0"
+}
+
+def run-linux-package [label: string manager: string args: list] {
+    if (linux-is-root) { return (run-program $label $manager $args) }
+    if (which sudo | is-empty) {
+        print ("[warn] " + $label + " requires root privileges and sudo is unavailable")
+        return 1
+    }
+    run-program $label "sudo" ([$manager] | append $args)
+}
+
 def main [] {
     if not (which nvim | is-empty) {
         print "[ok] Neovim already installed"
@@ -99,27 +115,27 @@ def main [] {
 
         "linux" => {
             if not (which apt-get | is-empty) {
-                run-program "Install Neovim with APT" "sudo" ["apt-get" "install" "-y" "neovim"] | ignore
+                run-linux-package "Install Neovim with APT" "apt-get" ["install" "-y" "neovim"] | ignore
                 return
             }
 
             if not (which dnf | is-empty) {
-                run-program "Install Neovim with DNF" "sudo" ["dnf" "install" "-y" "neovim"] | ignore
+                run-linux-package "Install Neovim with DNF" "dnf" ["install" "-y" "neovim"] | ignore
                 return
             }
 
             if not (which pacman | is-empty) {
-                run-program "Install Neovim with pacman" "sudo" ["pacman" "-S" "--needed" "--noconfirm" "neovim"] | ignore
+                run-linux-package "Install Neovim with pacman" "pacman" ["-S" "--needed" "--noconfirm" "neovim"] | ignore
                 return
             }
 
             if not (which zypper | is-empty) {
-                run-program "Install Neovim with zypper" "sudo" ["zypper" "install" "-y" "neovim"] | ignore
+                run-linux-package "Install Neovim with zypper" "zypper" ["--non-interactive" "install" "neovim"] | ignore
                 return
             }
 
             if not (which apk | is-empty) {
-                run-program "Install Neovim with apk" "sudo" ["apk" "add" "neovim"] | ignore
+                run-linux-package "Install Neovim with apk" "apk" ["add" "--no-cache" "neovim"] | ignore
                 return
             }
 

@@ -80,7 +80,7 @@ def update-readme-version [version: string] {
 
 def validate-release [] {
     let validator = ($TOOLS_ROOT | path join "scripts" "validate-project.nu")
-    ^nu $validator
+    ^$nu.current-exe --no-config-file $validator
 
     let validation_exit = ($env.LAST_EXIT_CODE | default 0)
 
@@ -89,7 +89,7 @@ def validate-release [] {
     }
 
     let self_test = ($TOOLS_ROOT | path join "scripts" "self-test.nu")
-    ^nu $self_test --sandbox
+    ^$nu.current-exe --no-config-file $self_test --sandbox
 
     let test_exit = ($env.LAST_EXIT_CODE | default 0)
 
@@ -97,7 +97,12 @@ def validate-release [] {
         error make { msg: "Sandbox self-test failed; release aborted." }
     }
 
-    ^nu ($TOOLS_ROOT | path join "scripts" "security-self-test.nu") --require-age --require-rclone
+    ^$nu.current-exe --no-config-file ($TOOLS_ROOT | path join "scripts" "cloud-wins-build.nu") --test
+    if ($env.LAST_EXIT_CODE | default 1) != 0 { error make {msg: "Cloud-wins Rust release gate failed."} }
+    ^$nu.current-exe --no-config-file ($TOOLS_ROOT | path join "scripts" "cloud-wins-test.nu") --require-engine
+    if ($env.LAST_EXIT_CODE | default 1) != 0 { error make {msg: "Cloud-wins integration release gate failed."} }
+
+    ^$nu.current-exe --no-config-file ($TOOLS_ROOT | path join "scripts" "security-self-test.nu") --require-age --require-rclone
     if ($env.LAST_EXIT_CODE | default 1) != 0 { error make {msg: "Security/integration release gate failed."} }
 }
 
@@ -157,12 +162,15 @@ def main [
 
     ($next + (char nl)) | save --force (version-file)
     update-readme-version $next
+    let cargo_file = ($TOOLS_ROOT | path join "tools" "cloudwins" "Cargo.toml")
+    let cargo_text = (open --raw $cargo_file)
+    ($cargo_text | str replace --regex '(?m)^version = "[0-9]+\.[0-9]+\.[0-9]+"$' ('version = "' + $next + '"')) | save --force $cargo_file
     prepend-changelog $next
-    ^nu ($TOOLS_ROOT | path join "scripts" "make-release-manifest.nu")
+    ^$nu.current-exe --no-config-file ($TOOLS_ROOT | path join "scripts" "make-release-manifest.nu")
     if ($env.LAST_EXIT_CODE | default 1) != 0 { error make {msg: "Release manifest generation failed."} }
     validate-release
 
-    git-run ("Stage release " + $next) ["add" "VERSION" "README.md" "CHANGELOG.md" "RELEASE-MANIFEST.json"]
+    git-run ("Stage release " + $next) ["add" "VERSION" "README.md" "CHANGELOG.md" "RELEASE-MANIFEST.json" "tools/cloudwins/Cargo.toml"]
     git-run ("Commit release " + $next) ["commit" "-m" ("Release v" + $next)]
 
     if not $no_tag {
