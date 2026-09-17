@@ -1,146 +1,222 @@
 # Initial-setup v0.12.25
 
-Windows, macOS, Linux 작업환경을 Nushell + chezmoi 기반으로 설치·동기화·복구하는 개인 환경 관리 프로젝트입니다.
+Cross-platform development environment bootstrap and configuration synchronization for Windows, macOS, and Linux.
 
-## Quick start
+The project manages package installation, dotfiles, Git/SSH settings, toolchains, backups, recovery, and private configuration synchronization from a single entry point.
+
+## Quick Start
 
 ### Windows
 
-Nushell이 이미 있다면:
+If Nushell is already installed:
 
 ```powershell
 cd C:\path\to\Initial-setup
 nu --no-config-file .\setup.nu
 ```
 
-새 PC라면 bootstrap부터:
+On a new machine without Nushell:
 
 ```powershell
+cd C:\path\to\Initial-setup
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\bootstrap.ps1
 ```
 
 ### macOS / Linux
+
+If Nushell is already installed:
+
+```bash
+nu --no-config-file setup.nu
+```
+
+Or use the bootstrap script:
 
 ```bash
 chmod +x bootstrap.sh
 ./bootstrap.sh
 ```
 
-Nushell이 이미 있다면:
+## First Setup
 
-```bash
-nu --no-config-file setup.nu
-```
-
-## First setup
-
-`setup.nu`가 profile과 설정 동기화 방향을 안내합니다.
-
-Profiles:
-
-- `workstation` — 일반 개발 PC
-- `laptop` — 노트북
-- `server` — GUI가 적은 서버 환경
-- `minimal` — 최소 CLI 환경
-
-설정 충돌 시 로컬을 private source에 저장하거나, private 설정을 로컬에 적용하거나, diff/backup 후 결정할 수 있습니다.
-
-## 자주 쓰는 명령
-
-| 명령 | 용도 |
-|---|---|
-| `dotpreflight --diff` | 로컬과 private 설정 차이 확인 |
-| `dotpush` | 현재 설정을 private source에 저장 |
-| `dotpull` | private 설정을 현재 PC에 적용 |
-| `dotresolve` | 충돌/3-way merge 처리 |
-| `dotdoctor` | 환경 상태 검사 |
-| `dotaudit` | 관리 대상 전체 점검 |
-| `dotlocalbackup` | 로컬 설정 백업 |
-| `dotrollback` | snapshot 복구 |
-| `dotrun --list` | setup 실행 기록 확인 |
-| `dotsshkeys` | SSH key 상태 확인 |
-| `dotvault status` | 암호화 secret 상태 확인 |
-| `dotbackend status` | 동기화 backend 상태 확인 |
-
-## Sync providers
-
-세 가지 backend를 지원합니다.
-
-- `directory` — OneDrive/Proton Drive 같은 로컬 동기화 폴더. 현재 기본 방식.
-- `local` — NAS/공유 파일시스템.
-- `rclone` — rclone remote를 직접 사용한 revision 기반 동기화.
-
-`directory` backend는 같은 PC에서 `operation.lock`만 사용하고, 다른 PC의 변경은 revision/tree hash로 감지합니다.
-
-rclone을 장기적으로 주 backend로 사용하는 계획은 [`ROADMAP.md`](ROADMAP.md)에 정리되어 있습니다.
-
-## Backup / recovery
-
-설정 변경 전에는:
+The normal entry point is:
 
 ```nu
-dotlocalbackup
+nu setup.nu
 ```
 
-setup이 중단됐으면:
+During first setup, choose how local and private configuration should be reconciled:
+
+- **Review** — inspect differences before choosing a direction
+- **Push local** — save this machine's configuration to the private source
+- **Pull private** — apply the private source to this machine
+- **Backup + pull** — back up local configuration, then apply private configuration
+- **Preview** — show planned changes without applying them
+
+You can also select a profile:
 
 ```nu
-dotrun --list
-nu setup.nu --resume --run-id <RUN_ID>
+nu setup.nu --profile workstation
+nu setup.nu --profile laptop
+nu setup.nu --profile server
+nu setup.nu --profile minimal
 ```
 
-snapshot 복구:
+## Common Commands
+
+```nu
+dotpush                 # Save local managed configuration to the private source
+dotpull                 # Apply private configuration to this machine
+dotresolve              # Resolve local/private conflicts
+dotpreflight --diff     # Review configuration differences
+dotaudit                # Audit the managed environment
+dotdoctor               # Check environment health
+dotsshkeys              # Check SSH key pairs
+dotlocalbackup          # Back up machine-local configuration
+dotlocalrestore         # Restore a local configuration backup
+dotrun --list           # Show setup transaction history
+```
+
+## Synchronization Providers
+
+Initial-setup supports three provider types:
+
+- **directory** — existing cloud-synchronized folder
+- **local** — local disk, NAS, or shared filesystem
+- **rclone** — revision-based remote storage through rclone
+
+The current default remains the `directory` provider.
+
+For directory providers:
+
+- same-machine serialization uses `operation.lock`
+- cross-machine changes are detected using revision/tree fingerprints
+- old `.initial-setup-write.lock` files from earlier releases are ignored
+
+Check the current provider with:
+
+```nu
+dotbackend status
+```
+
+The planned migration toward rclone as the primary provider is documented in [ROADMAP.md](ROADMAP.md).
+
+## Secrets
+
+Machine-local secrets are not stored as plaintext in the project repository.
+
+Secret management uses the local vault workflow:
+
+```nu
+dotvault status
+dotvault init
+```
+
+SSH private keys remain machine-local.
+
+## Backup and Recovery
+
+Create a snapshot:
+
+```nu
+dotsnapshot
+```
+
+Restore a snapshot:
 
 ```nu
 dotrollback
 ```
 
+Resume an interrupted setup:
+
+```nu
+nu setup.nu --resume
+```
+
+Inspect previous runs:
+
+```nu
+dotrun --list
+dotrun --status
+dotrun --logs
+```
+
 ## Validation
 
-일반 setup에서는 전체 소스 검사를 자동 실행하지 않습니다.
+Normal setup does **not** scan every project source file before running.
 
-개발·디버깅할 때만:
+For development or debugging, run validation explicitly:
 
 ```nu
 dotvalidate
 dottest --sandbox
 ```
 
-setup 전에 강제 검사하려면:
+Or start setup with full validation:
 
 ```nu
 nu setup.nu --validate
 ```
 
+Full validation is still required by the release workflow.
+
 ## Troubleshooting
 
-### Lock 오류
+### A lock already exists
 
-먼저 상태만 확인합니다.
+Inspect current locks:
 
 ```nu
 nu --no-config-file scripts/lock-status.nu
 ```
 
-실행 중인 setup/sync 작업이 있는 동안 lock을 삭제하지 마세요.
+Do not delete active lock files blindly.
 
-### 예상하지 못한 설정 변경
+### Unexpected private-source changes
+
+Review them first:
 
 ```nu
 dotpreflight --diff
 dotresolve
 ```
 
-### rclone / private source
+### Setup stopped midway
+
+Resume the recorded transaction:
 
 ```nu
-dotbackend status
-rclone listremotes
+nu setup.nu --resume
 ```
 
-## More
+### rclone is missing
 
-- 변경 이력: [`CHANGELOG.md`](CHANGELOG.md)
-- 향후 계획: [`ROADMAP.md`](ROADMAP.md)
+Normal setup attempts to install rclone automatically when required.
 
-대부분의 경우 **`nu setup.nu` → `dotpreflight --diff` → `dotaudit`** 정도만 기억하면 됩니다.
+You can also check/install it directly:
+
+```nu
+nu --no-config-file scripts/install-rclone.nu --check
+nu --no-config-file scripts/install-rclone.nu
+```
+
+## Project Files
+
+```text
+setup.nu        Main entry point
+profiles/       Machine role profiles
+packages/       Package manifests
+scripts/        Setup, sync, backup, and recovery tools
+templates/      Local configuration templates
+CHANGELOG.md    Version history
+ROADMAP.md      Future development plan
+```
+
+## Notes
+
+- Keep private keys, tokens, passwords, and other credentials out of the repository.
+- Use `dotlocalbackup` before large manual configuration changes.
+- Use `dotpreflight --diff` before accepting unexpected private-source changes.
+- See [CHANGELOG.md](CHANGELOG.md) for detailed release history.
+- See [ROADMAP.md](ROADMAP.md) for planned synchronization and stabilization work.
