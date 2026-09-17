@@ -1,0 +1,6 @@
+{
+    version: 1
+    rust: { mode: "exact" value: "1.90.0" }
+    julia: { mode: "exact" value: "1.11.6" }
+    nushell: { mode: "minimum" value: "0.109.1" }
+}

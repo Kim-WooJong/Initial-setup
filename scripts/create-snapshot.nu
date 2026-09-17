@@ -1,6 +1,13 @@
 #!/usr/bin/env nu
 
 def nu-home [] {
+    let test_mode = ($env.INITIAL_SETUP_TEST_MODE? | default "" | str trim)
+    let override = ($env.INITIAL_SETUP_HOME_OVERRIDE? | default "" | str trim)
+
+    if $test_mode == "1" and not ($override | is-empty) {
+        return ($override | path expand)
+    }
+
     let home_path = ($nu | get --optional home-path)
 
     if $home_path != null {
@@ -77,7 +84,7 @@ def main [
 
     let timestamp = (date now | format date "%Y%m%d-%H%M%S")
     let safe_label = (sanitize-label $label)
-    let snapshot_dir = ($snapshot_root | path join ($timestamp + "-" + $safe_label))
+    let snapshot_dir = ($snapshot_root | path join ($timestamp + "-" + $safe_label + "-" + (random uuid)))
 
     mkdir $snapshot_dir
 
@@ -85,10 +92,11 @@ def main [
     copy-if-exists ($data_root | path join "home") ($snapshot_dir | path join "home")
     copy-if-exists ($data_root | path join "vscode") ($snapshot_dir | path join "vscode")
     copy-if-exists ($data_root | path join "toolchains") ($snapshot_dir | path join "toolchains")
-    copy-if-exists ($data_root | path join "rclone") ($snapshot_dir | path join "rclone")
+    copy-if-exists ($data_root | path join "secrets") ($snapshot_dir | path join "secrets")
+    copy-if-exists ($data_root | path join ".dotfiles-sync-meta.nuon") ($snapshot_dir | path join ".dotfiles-sync-meta.nuon")
 
     {
-        version: "1"
+        version: "2"
         created_at: (date now | format date "%Y-%m-%d %H:%M:%S %z")
         label: $label
         machine: $context.machine.name

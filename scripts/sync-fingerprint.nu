@@ -1,6 +1,13 @@
 #!/usr/bin/env nu
 
 def nu-home [] {
+    let test_mode = ($env.INITIAL_SETUP_TEST_MODE? | default "" | str trim)
+    let override = ($env.INITIAL_SETUP_HOME_OVERRIDE? | default "" | str trim)
+
+    if $test_mode == "1" and not ($override | is-empty) {
+        return ($override | path expand)
+    }
+
     let home_path = ($nu | get --optional home-path)
 
     if $home_path != null {
@@ -336,47 +343,20 @@ def local-entries [] {
     $entries
 }
 
-def cloud-entries [] {
-    let context = (
-        machine-context
-    )
-
-    let data_root = (
-        $context.data_root
-        | path expand
-    )
-
-    mut entries = []
-
-    let cloud_home_path = ($data_root | path join "home")
-    $entries = (append-target $entries "cloud-home" $cloud_home_path)
-
-    if $context.features.vscode {
-        let cloud_vscode_path = ($data_root | path join "vscode")
-        $entries = (append-target $entries "cloud-vscode" $cloud_vscode_path)
-    }
-
-    if $context.features.rust or $context.features.julia {
-        let cloud_toolchains_path = ($data_root | path join "toolchains")
-        $entries = (append-target $entries "cloud-toolchains" $cloud_toolchains_path)
-    }
-
-    if ($context.features.rclone_config? | default false) {
-        let cloud_rclone_path = ($data_root | path join "rclone" "rclone.conf")
-        $entries = (append-target $entries "cloud-rclone-config" $cloud_rclone_path)
-    }
-
-    $entries
-}
+const PROVIDER_MODULE = path self ./modules/sync-provider.nu
+use $PROVIDER_MODULE [load-provider provider-head]
 
 def main [
     --kind: string
 ] {
+    if $kind == "cloud" {
+        let head = (provider-head (load-provider))
+        print $head.tree_hash
+        return
+    }
     let entries = (
         if $kind == "local" {
             local-entries
-        } else if $kind == "cloud" {
-            cloud-entries
         } else {
             error make {
                 msg: "Use --kind local or --kind cloud."

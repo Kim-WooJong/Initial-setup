@@ -3,13 +3,28 @@
 const TOOLS_ROOT = path self ..
 
 def nu-home [] {
+    let test_mode = ($env.INITIAL_SETUP_TEST_MODE? | default "" | str trim)
+    let override = ($env.INITIAL_SETUP_HOME_OVERRIDE? | default "" | str trim)
+
+    if $test_mode == "1" and not ($override | is-empty) {
+        return ($override | path expand)
+    }
+
     let home_path = ($nu | get --optional home-path)
-    if $home_path != null { return $home_path }
+
+    if $home_path != null {
+        return $home_path
+    }
 
     let home_dir = ($nu | get --optional home-dir)
-    if $home_dir != null { return $home_dir }
 
-    error make { msg: "Unable to determine the Nushell home directory." }
+    if $home_dir != null {
+        return $home_dir
+    }
+
+    error make {
+        msg: "Unable to determine the Nushell home directory."
+    }
 }
 
 def config-path [] {
@@ -18,13 +33,13 @@ def config-path [] {
 
 def app-version [] {
     open --raw ($TOOLS_ROOT | path join "VERSION")
-    | decode utf-8
+    | into string
     | str trim
 }
 
 def schema-version [] {
     open --raw ($TOOLS_ROOT | path join "SCHEMA_VERSION")
-    | decode utf-8
+    | into string
     | str trim
     | into int
 }
@@ -75,12 +90,22 @@ def migrate-3-to-4 [config: record] {
     | upsert schema_version 4
 }
 
+
+def migrate-4-to-5 [config: record] {
+    let old_machine = ($config.machine? | default {})
+    let profile = ($old_machine.profile? | default "workstation")
+    let machine = ($old_machine.name? | default "unknown-machine")
+    let layers = { common: "common" os: $nu.os-info.name role: $profile machine: $machine }
+    $config | upsert machine ($old_machine | upsert layers $layers) | upsert schema_version 5
+}
+
 def migrate-step [config: record from_schema: int] {
     match $from_schema {
         0 => { migrate-0-to-1 $config }
         1 => { migrate-1-to-2 $config }
         2 => { migrate-2-to-3 $config }
         3 => { migrate-3-to-4 $config }
+        4 => { migrate-4-to-5 $config }
         _ => {
             error make {
                 msg: (

@@ -1,0 +1,6 @@
+{
+    version: 1
+    rust: { mode: "channel" value: "stable" }
+    julia: { mode: "channel" value: "release" }
+    nushell: { mode: "minimum" value: "0.109.1" }
+}

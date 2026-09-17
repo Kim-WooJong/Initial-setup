@@ -3,6 +3,13 @@
 const TOOLS_ROOT = path self ..
 
 def nu-home [] {
+    let test_mode = ($env.INITIAL_SETUP_TEST_MODE? | default "" | str trim)
+    let override = ($env.INITIAL_SETUP_HOME_OVERRIDE? | default "" | str trim)
+
+    if $test_mode == "1" and not ($override | is-empty) {
+        return ($override | path expand)
+    }
+
     let home_path = ($nu | get --optional home-path)
 
     if $home_path != null {
@@ -40,19 +47,14 @@ def conflict-file [] {
 }
 
 def fingerprint [kind: string] {
-    let script = (
-        $TOOLS_ROOT
-        | path join "scripts" "sync-fingerprint.nu"
-    )
-
-    let args = [
-        $script
-        "--kind"
-        $kind
-    ]
-
-    ^nu ...$args
-    | str trim
+    let script = ($TOOLS_ROOT | path join "scripts" "sync-fingerprint.nu")
+    let result = (do { ^nu --no-config-file $script --kind $kind } | complete)
+    if $result.exit_code != 0 { error make { msg: "Fingerprint unavailable; synchronization baseline was not advanced." } }
+    let value = ($result.stdout | str trim)
+    if not ($value =~ '^[a-f0-9]{64}$') and not ($kind == "cloud" and ($value | is-empty)) {
+        error make { msg: "Invalid fingerprint result." }
+    }
+    $value
 }
 
 def main [] {

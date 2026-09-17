@@ -7,7 +7,7 @@ def version-file [] {
 }
 
 def app-version [] {
-    open (version-file) --raw | decode utf-8 | str trim
+    open (version-file) --raw | into string | str trim
 }
 
 def parse-version [value: string] {
@@ -69,7 +69,7 @@ def update-readme-version [version: string] {
         return
     }
 
-    let text = (open --raw $file | decode utf-8)
+    let text = (open --raw $file | into string)
     let updated = (
         $text
         | str replace --regex '^# Initial-setup v[0-9]+\.[0-9]+\.[0-9]+' ("# Initial-setup v" + $version)
@@ -79,21 +79,33 @@ def update-readme-version [version: string] {
 }
 
 def validate-release [] {
-    let script = ($TOOLS_ROOT | path join "scripts" "validate-project.nu")
-    ^nu $script
+    let validator = ($TOOLS_ROOT | path join "scripts" "validate-project.nu")
+    ^nu $validator
 
-    let exit_code = ($env.LAST_EXIT_CODE | default 0)
+    let validation_exit = ($env.LAST_EXIT_CODE | default 0)
 
-    if $exit_code != 0 {
+    if $validation_exit != 0 {
         error make { msg: "Project validation failed; release aborted." }
     }
+
+    let self_test = ($TOOLS_ROOT | path join "scripts" "self-test.nu")
+    ^nu $self_test --sandbox
+
+    let test_exit = ($env.LAST_EXIT_CODE | default 0)
+
+    if $test_exit != 0 {
+        error make { msg: "Sandbox self-test failed; release aborted." }
+    }
+
+    ^nu ($TOOLS_ROOT | path join "scripts" "security-self-test.nu") --require-age --require-rclone
+    if ($env.LAST_EXIT_CODE | default 1) != 0 { error make {msg: "Security/integration release gate failed."} }
 }
 
 def prepend-changelog [version: string] {
     let file = ($TOOLS_ROOT | path join "CHANGELOG.md")
     if not ($file | path exists) { return }
 
-    let text = (open $file --raw | decode utf-8)
+    let text = (open $file --raw | into string)
     let heading = ("## " + $version)
     if ($text | str contains $heading) { return }
 
@@ -146,9 +158,11 @@ def main [
     ($next + (char nl)) | save --force (version-file)
     update-readme-version $next
     prepend-changelog $next
+    ^nu ($TOOLS_ROOT | path join "scripts" "make-release-manifest.nu")
+    if ($env.LAST_EXIT_CODE | default 1) != 0 { error make {msg: "Release manifest generation failed."} }
     validate-release
 
-    git-run ("Stage release " + $next) ["add" "VERSION" "README.md" "CHANGELOG.md"]
+    git-run ("Stage release " + $next) ["add" "VERSION" "README.md" "CHANGELOG.md" "RELEASE-MANIFEST.json"]
     git-run ("Commit release " + $next) ["commit" "-m" ("Release v" + $next)]
 
     if not $no_tag {

@@ -14,3 +14,19 @@ Thumbs.db
 *.log
 .idea/
 .vscode/
+machine-overlay.nuon
+plans/
+
+# Machine-local security/transport state must not enter public tooling.
+vault.nuon
+sync-provider.nuon
+provider-state.nuon
+identity.txt
+secrets/
+*.age
+*.pem
+*.key
+.env
+.env.*
+transfers/
+upgrades/

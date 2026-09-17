@@ -8,6 +8,9 @@ CONFIG_POLICY="ask"
 DRY_RUN=0
 NO_AUTO_SYNC=0
 SKIP_VSCODE=0
+RESUME=0
+RUN_ID=""
+VALIDATE=0
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -67,6 +70,18 @@ while [ "$#" -gt 0 ]; do
             SKIP_VSCODE=1
             shift
             ;;
+        --resume)
+            RESUME=1
+            shift
+            ;;
+        --run-id)
+            RUN_ID="$2"
+            shift 2
+            ;;
+        --validate)
+            VALIDATE=1
+            shift
+            ;;
         -h|--help)
             cat <<'EOF'
 Usage:
@@ -76,6 +91,9 @@ Usage:
                  [--config-policy ask|push-local|pull-private|review|backup-private|preview]
                  [--no-auto-sync]
                  [--dry-run]
+                 [--resume]
+                 [--run-id ID]
+                 [--validate]
                  [--skip-vscode]
 EOF
             exit 0
@@ -272,7 +290,19 @@ if [ "$DRY_RUN" -eq 1 ]; then
     NU_ARGS+=("--dry-run")
 fi
 
-nu "${NU_ARGS[@]}"
+if [ "$RESUME" -eq 1 ]; then
+    NU_ARGS+=("--resume")
+fi
+
+if [ -n "$RUN_ID" ]; then
+    NU_ARGS+=("--run-id" "$RUN_ID")
+fi
+
+if [ "$VALIDATE" -eq 1 ]; then
+    NU_ARGS+=("--validate")
+fi
+
+nu --no-config-file "${NU_ARGS[@]}"
 STATUS=$?
 
 if [ "$STATUS" -ne 0 ]; then

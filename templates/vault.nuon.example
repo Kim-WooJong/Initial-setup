@@ -1,0 +1,11 @@
+# Machine-local: ~/.config/dotfiles/vault.nuon. Do not put secrets in this file.
+# Run `dotvault init` to generate a real identity/recipient pair first.
+{
+    version: 1
+    identity: "~/.config/dotfiles/age/identity.txt"
+    recipients: ["REPLACE_WITH_YOUR_AGE_PUBLIC_RECIPIENT"]
+    entries: [
+        { name: "rclone" local: "~/.config/rclone/rclone.conf" auto_capture: false auto_restore: false }
+        { name: "api-tokens" local: "~/.local/share/my-app/tokens.env" auto_capture: false auto_restore: false }
+    ]
+}

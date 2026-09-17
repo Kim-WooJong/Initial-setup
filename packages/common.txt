@@ -8,3 +8,4 @@ bat
 zoxide
 git-delta
 lazygit
+rclone

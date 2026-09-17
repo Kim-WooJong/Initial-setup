@@ -1,8 +1,17 @@
 #!/usr/bin/env nu
+const PROCESS_OUTPUT = path self ./modules/process-output.nu
+use $PROCESS_OUTPUT [output-text]
 
 const TOOLS_ROOT = path self ..
 
 def nu-home [] {
+    let test_mode = ($env.INITIAL_SETUP_TEST_MODE? | default "" | str trim)
+    let override = ($env.INITIAL_SETUP_HOME_OVERRIDE? | default "" | str trim)
+
+    if $test_mode == "1" and not ($override | is-empty) {
+        return ($override | path expand)
+    }
+
     let home_path = ($nu | get --optional home-path)
 
     if $home_path != null {
@@ -58,21 +67,25 @@ def log [
 
 def fingerprint [kind: string] {
     let script = ($TOOLS_ROOT | path join "scripts" "sync-fingerprint.nu")
-    let args = [
-        $script
-        "--kind"
-        $kind
-    ]
-
-    ^nu ...$args | str trim
+    let result = (do { ^nu --no-config-file $script --kind $kind } | complete)
+    if $result.exit_code != 0 { error make { msg: "Fingerprint unavailable; synchronization baseline was not advanced." } }
+    let value = ($result.stdout | str trim)
+    if not ($value =~ '^[a-f0-9]{64}$') and not ($kind == "cloud" and ($value | is-empty)) {
+        error make { msg: "Invalid fingerprint result." }
+    }
+    $value
 }
 
 def run-script [name: string] {
     let script = ($TOOLS_ROOT | path join "scripts" $name)
+    let result = (do { ^nu $script } | complete)
 
-    ^nu $script
+    let stderr = ($result.stderr? | output-text | str trim)
+    if $result.exit_code != 0 and not ($stderr | is-empty) {
+        print $stderr
+    }
 
-    $env.LAST_EXIT_CODE | default 0
+    $result.exit_code
 }
 
 def wait-stable [seconds: int] {
@@ -109,8 +122,9 @@ def write-conflict [
         "Automatic overwrite was stopped."
         ""
         "Resolve explicitly:"
-        "  dotpush   -> local configuration wins"
-        "  dotpull   -> cloud configuration wins"
+        "  dotresolve -> review/merge protected or conflicting files"
+        "  dotpush    -> local configuration wins"
+        "  dotpull    -> cloud configuration wins when no protected conflict remains"
         ""
     ]
     | str join (char nl)
@@ -137,7 +151,10 @@ def resolve-both-changed [
             return
         }
 
-        run-script "sync-up.nu" | ignore
+        let exit_code = (run-script "sync-up.nu")
+        if $exit_code != 0 {
+            write-conflict $context "Automatic prefer_local push was rejected by the transport/baseline guard." $state.local_hash $current_local $state.cloud_hash $current_cloud
+        }
         return
     }
 
@@ -149,7 +166,10 @@ def resolve-both-changed [
             return
         }
 
-        run-script "sync-down.nu" | ignore
+        let exit_code = (run-script "sync-down.nu")
+        if $exit_code != 0 {
+            write-conflict $context "Automatic prefer_cloud pull failed or was blocked by protected-file policy." $state.local_hash $current_local $state.cloud_hash $current_cloud
+        }
         return
     }
 
@@ -256,7 +276,8 @@ def main [] {
 
         if $exit_code != 0 {
             log "ERROR" "Automatic sync-down failed."
-            print "[warn] Automatic sync-down failed."
+            write-conflict $context "Automatic pull failed or was blocked by protected-file policy." $state.local_hash $current_local $state.cloud_hash $current_cloud
+            print "[warn] Automatic sync-down failed; run dotresolve."
         } else {
             log "INFO" "Automatic sync-down completed."
         }

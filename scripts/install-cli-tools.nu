@@ -5,8 +5,17 @@
 # ============================================================
 
 const TOOLS_ROOT = path self ..
+const RCLONE_INSTALL_MODULE = path self ./modules/rclone-install.nu
+use $RCLONE_INSTALL_MODULE [ensure-rclone]
 
 def nu-home [] {
+    let test_mode = ($env.INITIAL_SETUP_TEST_MODE? | default "" | str trim)
+    let override = ($env.INITIAL_SETUP_HOME_OVERRIDE? | default "" | str trim)
+
+    if $test_mode == "1" and not ($override | is-empty) {
+        return ($override | path expand)
+    }
+
     let home_path = ($nu | get --optional home-path)
 
     if $home_path != null {
@@ -424,9 +433,10 @@ def main [] {
         return
     }
 
-    let names = (
-        common-packages
-    )
+    # The setup entrypoint already ensured it; standalone manifest installation
+    # uses the same strict dependency path rather than warning-and-continuing.
+    ensure-rclone | ignore
+    let names = (common-packages | where {|name| $name != "rclone" })
 
     print "=== Package manifest ==="
     print ""

@@ -3,6 +3,13 @@
 const TOOLS_ROOT = path self ..
 
 def nu-home [] {
+    let test_mode = ($env.INITIAL_SETUP_TEST_MODE? | default "" | str trim)
+    let override = ($env.INITIAL_SETUP_HOME_OVERRIDE? | default "" | str trim)
+
+    if $test_mode == "1" and not ($override | is-empty) {
+        return ($override | path expand)
+    }
+
     let home_path = ($nu | get --optional home-path)
 
     if $home_path != null {
@@ -266,20 +273,9 @@ def main [
     }
 
     if $do_all or $repo {
-        let git_dir = ($context.tools_root | path expand | path join ".git")
-
-        if ($git_dir | path exists) and not (which git | is-empty) {
-            let args = [
-                "-C"
-                ($context.tools_root | path expand | into string)
-                "pull"
-                "--ff-only"
-            ]
-
-            run-external "Update Initial-setup repository" "git" $args | ignore
-        } else {
-            print "[skip] Initial-setup is not a Git checkout"
-        }
+        print "[safe-update] Repository files are not updated by a blind git pull."
+        print "Run dotupgrade --ref <tag> --commit <trusted-full-commit> --yes for a Git checkout."
+        print "For an extracted release, run dotupgrade --from <folder> --manifest-sha256 <trusted-digest> --yes."
     }
 
     if $do_all or $tools {

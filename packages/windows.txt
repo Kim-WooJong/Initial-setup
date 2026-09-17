@@ -6,3 +6,4 @@ bat|bat|sharkdp.bat
 zoxide|zoxide|ajeetdsouza.zoxide
 git-delta|delta|dandavison.delta
 lazygit|lazygit|JesseDuffield.lazygit
+rclone|rclone|Rclone.Rclone

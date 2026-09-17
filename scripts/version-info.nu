@@ -4,12 +4,12 @@ const TOOLS_ROOT = path self ..
 
 def app-version [] {
     let file = ($TOOLS_ROOT | path join "VERSION")
-    open $file --raw | decode utf-8 | str trim
+    open $file --raw | into string | str trim
 }
 
 def schema-version [] {
     let file = ($TOOLS_ROOT | path join "SCHEMA_VERSION")
-    open $file --raw | decode utf-8 | str trim
+    open $file --raw | into string | str trim
 }
 
 def git-output [args: list] {

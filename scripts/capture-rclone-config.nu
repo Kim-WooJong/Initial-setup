@@ -1,100 +1,16 @@
 #!/usr/bin/env nu
-
-const TOOLS_ROOT = path self ..
-
-def nu-home [] {
-    let home_path = ($nu | get --optional home-path)
-    if $home_path != null { return $home_path }
-
-    let home_dir = ($nu | get --optional home-dir)
-    if $home_dir != null { return $home_dir }
-
-    error make { msg: "Unable to determine the Nushell home directory." }
-}
-
-def machine-context [] {
-    let file = ((nu-home) | path join ".config" "dotfiles" "config.nuon")
-    open $file
-}
-
-def rclone-config-path [] {
-    let helper = ($TOOLS_ROOT | path join "scripts" "rclone-config-path.nu")
-
-    ^nu $helper
-    let exit_code = ($env.LAST_EXIT_CODE | default 2)
-
-    if $exit_code != 0 {
-        return null
-    }
-
-    let output = ($in | default "")
-    $output
-}
-
-def resolve-rclone-config [] {
-    if (which rclone | is-empty) {
-        return null
-    }
-
-    let rows = (
-        ^rclone config file
-        | lines
-        | each { |line| $line | str trim }
-        | where { |line| not ($line | is-empty) }
-    )
-
-    let exit_code = ($env.LAST_EXIT_CODE | default 1)
-
-    if $exit_code != 0 or ($rows | is-empty) {
-        return null
-    }
-
-    $rows | last
-}
-
+# rclone config file is resolved when the machine-local vault is initialized.
+const CORE = path self ./modules/core.nu
+const VAULT = path self ./modules/vault.nu
+use $CORE [machine-context]
+use $VAULT [vault-configured load-vault capture-secret]
 def main [] {
-    let context = (machine-context)
-
-    if not ($context.features.rclone_config? | default false) {
-        print "[skip] rclone config synchronization disabled"
+    if not ((machine-context).features.rclone_config? | default false) { return }
+    if not (vault-configured) { print "[skip] No plaintext rclone capture. Configure dotvault init and an encrypted rclone entry."; return }
+    let rows = ((load-vault).entries | where name == "rclone")
+    if ($rows | is-empty) or not (($rows | first).auto_capture? | default false) {
+        print "[skip] rclone encrypted auto_capture is disabled; use dotvault capture rclone explicitly."
         return
     }
-
-    if (which rclone | is-empty) {
-        print "[skip] rclone not found; config capture skipped"
-        return
-    }
-
-    let source = (resolve-rclone-config)
-
-    if $source == null or not ($source | path exists) {
-        print "[skip] rclone config file does not exist"
-        return
-    }
-
-    let destination = (
-        $context.data_root
-        | path expand
-        | path join "rclone" "rclone.conf"
-    )
-
-    mkdir ($destination | path dirname)
-
-    let source_hash = (open --raw $source | hash sha256)
-    let destination_hash = (
-        if ($destination | path exists) {
-            open --raw $destination | hash sha256
-        } else {
-            ""
-        }
-    )
-
-    if $source_hash == $destination_hash {
-        print "[skip] rclone config already captured"
-        return
-    }
-
-    cp $source $destination
-
-    print ("[capture] rclone config -> " + ($destination | into string))
+    capture-secret "rclone"
 }

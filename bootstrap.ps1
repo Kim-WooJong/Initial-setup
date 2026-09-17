@@ -15,6 +15,12 @@ param(
 
     [switch]$DryRun,
 
+    [switch]$Resume,
+
+    [string]$RunId = "",
+
+    [switch]$Validate,
+
     [switch]$SkipVSCode
 )
 
@@ -282,7 +288,19 @@ if ($DryRun) {
     $nuArgs += "--dry-run"
 }
 
-& $nu @nuArgs
+if ($Resume) {
+    $nuArgs += "--resume"
+}
+
+if ($RunId) {
+    $nuArgs += @("--run-id", $RunId)
+}
+
+if ($Validate) {
+    $nuArgs += "--validate"
+}
+
+& $nu --no-config-file @nuArgs
 $setupExitCode = $LASTEXITCODE
 
 if ($setupExitCode -ne 0) {

@@ -1,0 +1,10 @@
+{
+    version: 1
+    protected: [
+        ".ssh/config"
+        ".gitconfig"
+    ]
+    merge_preferred: [
+        ".config/nushell/config.nu"
+    ]
+}

@@ -1,0 +1,8 @@
+# Machine-local: ~/.config/dotfiles/sync-provider.nuon
+# Default, without this file, is directory (an existing cloud-client mirror).
+{ version: 1 kind: "directory" remote: "" }
+# Explicit filesystem/NAS store (must be separate from data_root):
+# { version: 1 kind: "local" remote: "/mnt/nas/initial-setup-store" }
+# Explicit transport using an already configured rclone remote:
+# { version: 1 kind: "rclone" remote: "proton:Initial-setup-store" }
+# Use a dedicated subdirectory. No arbitrary rclone flags or credentials here.

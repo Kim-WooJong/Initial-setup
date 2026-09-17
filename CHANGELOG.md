@@ -2,6 +2,347 @@
 
 
 
+
+## [0.12.25] - 2026-09-17
+
+- Rewrote README as a concise quick-start and daily-use guide.
+- Moved detailed version history to CHANGELOG only.
+- Added ROADMAP.md with the staged rclone-provider migration plan and 1.0 stability criteria.
+- No runtime behavior or schema changes.
+
+## [0.12.24] - 2026-09-17
+
+- Removed the redundant machine-local provider lock for the `directory` backend.
+- Same-machine serialization now relies only on the existing global `operation.lock`.
+- Cross-machine directory-provider conflicts continue to use revision/tree fingerprint checks.
+- Obsolete `provider-*.lock` files from v0.12.21-v0.12.23 are ignored and reported diagnostically; they are not probed or deleted automatically.
+- True shared-filesystem/NAS (`local`) providers still retain their shared cooperative lock.
+
+## [0.12.23] - 2026-09-17
+
+- Removed setup-side error-object-to-string conversion from stage and final failure handling.
+- Original caught errors are printed immediately; setup then returns only a fixed short failure message.
+- Lock-cleanup failures are printed separately and no longer participate in message aggregation or type conversion.
+- This change is intentionally limited to `setup.nu`; sync/provider behavior is unchanged.
+
+## [0.12.22] - 2026-09-17
+
+- Removed setup error-message aggregation through `str join`; the original operation failure is now rethrown directly.
+- Cleanup failures are printed as secondary warnings when another setup error already exists.
+- This prevents the teardown/error-reporting path from masking the real failure with a type mismatch.
+
+
+
+
+
+## [0.12.21] - 2026-09-17
+
+- Removed the cloud-synchronized write lock from the `directory` backend.
+- Directory/cloud-mirror providers now use a machine-local provider lock under `~/.config/dotfiles/locks/`.
+- Cross-machine protection for directory providers remains optimistic: saved revision/tree fingerprints are checked before writes.
+- Existing `.initial-setup-write.lock` entries in cloud folders are treated as legacy diagnostics only; they are never probed or deleted automatically.
+- True `local` shared-filesystem/NAS providers keep the cooperative lock in the shared filesystem.
+- Updated `dotbackend status`, `lock-status.nu`, security tests, and documentation for the new lock model.
+
+## [0.12.20] - 2026-09-17
+
+- Fixed setup failure propagation that assumed every captured value was an error record with `.msg`.
+- Added explicit failure envelopes and normalized error rendering so normal pipeline output cannot be mistaken for an operation failure.
+- Applied the same guarded-failure pattern to synchronization, rollback, vault, resolver, and safe-upgrade paths.
+- Removed repository-wide syntax/project validation from normal `nu setup.nu` and bootstrap startup.
+- Added opt-in `nu setup.nu --validate`, `bootstrap.sh --validate`, and `bootstrap.ps1 -Validate`.
+- Full syntax/project validation remains available through `dotvalidate`, `dottest --sandbox`, and the release gate.
+
+## [0.12.19] - 2026-09-17
+
+- Fixed Windows lock and secret-ACL helpers being blocked by restrictive PowerShell execution policy.
+- Project-owned `.ps1` helpers now use `-ExecutionPolicy Bypass` only for the spawned PowerShell process; no CurrentUser or LocalMachine policy is modified.
+- Added validation preventing new project-owned `-File` PowerShell calls from omitting the process-scoped override.
+- Existing lock ownership, collision detection, token verification, and protected-file behavior are unchanged.
+
+## [0.12.18] - 2026-09-17
+
+### Fixed
+- Normalize human-readable subprocess diagnostic streams before string operations.
+  `complete` may produce binary stderr, so `default ""` was not a text conversion.
+  Fix the secondary `str trim` failure in `lock-result-message`.
+- Add a dependency-free `process-output.nu` helper: text/null, UTF-8, UTF-8 BOM,
+  UTF-16 BOM, an explicit legacy encoding hint, and a marked ASCII-preserving
+  fallback. Do not guess a Windows code page or dump raw binary tokens.
+- Use the same helper in the failure messages for toolchains, rclone, conflicts,
+  auto-sync, validation, updater logs and diagnostic assertions in tests. Leave
+  configuration, crypto payloads, fingerprint and other machine-data parsing alone.
+- Write Windows lock-helper-owned stderr as UTF-8 through its process-local
+  `Console.Error` writer. Do not change the shared console code page or policy.
+- Keep the helper's exit code, collision marker check and token redaction. No
+  lock is deleted, stolen, retried or treated as successful by this change.
+
+### Tests and limits
+- Add literal byte fixtures and an optional raw child-process stderr test; wire
+  both into the existing sandbox gate. Runtime Nu/PowerShell tests are authored,
+  not executed in the release container. See docs/TEST-REPORT-0.12.18.md.
+- Keep schema 5 and the removal of `.github`.
+
+## [0.12.17] - 2026-09-17
+
+### Fixed
+- Rewrite the two lock-result messages as lists joined with an empty separator.
+  Remove six physical lines beginning with `+` that passed syntax validation
+  but violated the existing repository formatting guard.
+- Keep the formatting rule active. Its diagnostics now include a 1-based
+  physical line number and explicitly identify a repository-format failure.
+- Preserve message text, token redaction, lock lifecycle and schema 5.
+
+### Regression checks
+- Extend the existing lock test with message-separator, empty-stderr and
+  source-format regressions. These Nu tests were authored, not executed here.
+- Execute a repository-wide equivalent of all ten operator-leading line guards
+  and static comparisons of old/new message fragments. Verify patch and release
+  inventories. See the release-specific test report for execution boundaries.
+
+## [0.12.16] - 2026-09-17
+
+### Fixed
+- Stop mapping every nonzero lock-helper exit to "Operation is locked". Preserve
+  the helper diagnostic and distinguish existing-file collisions, I/O/policy
+  failures, missing executables, and post-create token verification failures.
+- Windows: report CreateNew file-exists HRESULTs separately from access, path,
+  write and flush errors. Keep execution policy unchanged and redact tokens.
+- POSIX: use a tested helper with exclusive creation, a retained descriptor,
+  explicit Bash/Dash open-failure handling, and distinct collision/I/O exits.
+- Preserve the raw-token lock format, lease checks and owner-only release. Never
+  automatically remove an old, empty, or apparently stale lock.
+
+### Diagnostics and testing
+- Add read-only `scripts/lock-status.nu` with optional, isolated `--probe` of
+  create/verify/release in the lock directory. No live lock is deleted.
+- Add `scripts/lock-test.nu` and connect it to the existing sandbox self-test.
+- Actual Linux helper tests: 20 passed, including 32 competing processes with
+  one winner, permissions under an unprivileged UID, and Bash/Dash behavior.
+- Nushell and PowerShell were not available here. No actual Nu parser, new Nu
+  tests, or Windows integration pass is claimed. See the versioned test report.
+
+## [0.12.15] - 2026-09-17
+
+### Fixed
+- Remove `into int` from the case adapter's parse-time selector. Use primitive
+  string/list/boolean operations over the documented supported legacy window;
+  retain parse-time imports and native Unicode case conversion.
+- Accept Nu 0.114.x in the modern side of `check-compatibility.nu`; previously
+  the matrix demanded 0.115+ even though the case command boundary is 0.114.
+
+### Validation
+- Audit all 100 Nu sources and 147 production constant declarations. No further
+  conversion call in a constant initializer was found by lexical inspection.
+- Add 15 synthetic-version const/import fixtures using the actual source,
+  deliberately invalid inactive adapters, plus an actual-version import smoke
+  check using the current interpreter and native adapters.
+- Add a negative non-const command fixture and verify error report continuation.
+- These Nushell tests were authored, NOT executed in the container. The complete
+  evidence/limitations are in `docs/TEST-REPORT-0.12.15.md`.
+- Keep schema 5, existing installer/sync/security policies and .github removal.
+
+## [0.12.14] - 2026-09-17
+
+### Fixed
+- Rename the private plan helper `run` to `run-plan-script` and update all eight
+  calls; never shadow Nushell's parser keyword. Plan children use the current
+  executable and no user config.
+- Replace nine shared/test case-conversion calls with a parse-time selected
+  adapter. Nu >=0.114 uses lowercase/uppercase; older supported Nu uses the
+  legacy names without loading them on new Nu. Preserve native Unicode behavior
+  and the 0.109.1 minimum rather than simply reversing the previous rename.
+- Retain stderr warnings from successful syntax/startup checks instead of
+  silently reporting only `[ok]`.
+
+### Validation
+- Add explicit inactive-adapter reporting and JSON format 3 fields; no inactive
+  file is marked as tested. Add optional `--deny-warnings`.
+- Add keyword definition/alias/export, warning capture, case dispatch, Unicode,
+  empty-string and safe-helper-name regression cases.
+- Add `check-compatibility.nu` for an explicit installed old/new interpreter
+  matrix. No binary downloads, package manager changes or live cloud operations.
+- Preserve schema 5, .github removal, and existing configuration/sync policies.
+- Actual Nushell execution was not available in the authoring container. Static
+  and packaging evidence, plus unexecuted-test boundaries, are documented in
+  `docs/TEST-REPORT-0.12.14.md`.
+
+## [0.12.13] - 2026-09-17
+
+### Fixed
+- Parenthesize both toolchain comparison values passed to `return`; prevent
+  `Extra positional argument` during parsing, including through module imports.
+- Replace seven 0.114.0-only case-conversion command references with the names
+  available on the documented Nushell 0.109.1 baseline. Newer Nu can warn about
+  deprecation without rejecting the source.
+- Stop rejecting those baseline-compatible names in the structural validator.
+- Scope the fingerprint ordering contract to the target inspection operations;
+  an earlier home-path helper must not cause a false ordering failure.
+- Treat checkout paths literally when collecting validation sources/templates,
+  rather than interpolating directory names into a glob pattern.
+
+### Validation
+- Add a standalone per-file parser worker accepting target paths as argv values;
+  keep `nu-check --debug` and module parsing enabled.
+- Collect startup/import diagnostics even after target parser failure. JSON
+  report format 2 retains existing result fields and adds per-stage diagnostics.
+- Add standalone temporary-fixture tests for valid/invalid returns, failed imports,
+  continued scanning, report generation and bracketed/quoted/Unicode paths.
+- Add real toolchain comparison fixtures and case-conversion regression checks.
+- Preserve schema 5, the rclone dependency installer, secrets/sync policy and
+  `.github` removal. No real Nushell or platform integration execution was possible
+  in the authoring container; see `docs/TEST-REPORT-0.12.13.md`.
+
+
+## [0.12.12] - 2026-09-17
+
+### Added
+- Ensure rclone is present and `rclone version` succeeds during setup, independent
+  of optional CLI/config-capture features; recheck the dependency on resume.
+- Add `scripts/install-rclone.nu` with read-only `--check` and `--dry-run` modes.
+- Use existing WinGet, Homebrew, apt-get, dnf, pacman, zypper or apk; use sudo only
+  for non-root Linux installs. Refresh the apt index before first installation.
+- Preserve a working binary/version, fail on a broken one, and fail closed on
+  ambiguous WinGet registration or a nonzero installer exit. No download-script,
+  package-manager installation, cloud login, mount driver, or upgrade fallback.
+- Refresh process PATH after install (including the setup parent), preserving its
+  existing precedence; consider Windows registered PATH and WinGet links.
+- Keep rclone in package manifests/planner even when optional CLI tools are off;
+  explicit plan application also ensures the dependency after consent/preflight.
+- Add mocked offline installer regressions to the local sandbox/release gate.
+
+### Compatibility and validation
+- Preserve schema 5, existing configuration/secret/sync policies, and `.github` removal.
+- Tests in the authoring container are static/Bash/patch/hash only. Nushell,
+  PowerShell and real package-manager installation tests were not runnable here.
+  See `docs/TEST-REPORT-0.12.12.md` for the exact validation boundary.
+
+## [0.12.11] - 2026-09-16
+
+### Fixed
+- Freeze the final setup policy before both apply-stage closures, avoiding Nushell mutable captures.
+- Move mutable lock/recovery-handle inspection outside `catch` in setup, sync transport, conflict resolution, snapshot rollback, vault and safe upgrade.
+- Attempt local and shared lock releases independently; preserve the original operation error.
+- Preserve Rust/Julia version punctuation, prereleases, dated nightly channels and Julia's default marker; handle empty/malformed tool output.
+- Propagate Rust/Julia install/default command failures rather than treating the stage as successful.
+- Generate unique, high-resolution local backup names and validate all backup payload paths/presence before changing live files.
+- Do not roll back an already committed secret merely because recovery-directory deletion failed.
+- Isolate Windows AppData and cache directories in self-tests and candidate-validation HOME environments.
+
+### Validation
+- Add standalone `scripts/validate-syntax.nu`: isolated per-file parser/startup checks, aggregate diagnostics and optional JSON report.
+- Run aggregate checks at the beginning of the project validator and before bootstraps launch setup.
+- Add `scripts/regression-test.nu` for capture, version parsing, failure-path lock cleanup and backup regressions; integrate it with sandbox/release tests.
+- Keep schema 5 and existing configuration policies; do not restore `.github`.
+- Authoring-container validation remains static/Bash/patch/hash only; Nushell and platform integration tests were not executable here.
+
+
+## [0.12.10] - 2026-09-16
+
+This package bundles the planned 0.12.7–0.12.10 development work; separate
+intermediate release artifacts were not produced.
+
+- 0.12.7 scope: add native age secret capture/restore with machine-local allowlists,
+  local identities, owner-restricted paths, and explicit verified legacy rclone migration.
+- 0.12.8 scope: add directory/local/rclone providers and immutable revision stores,
+  staged download, manifest validation, and rclone download-based upload verification.
+- 0.12.9 scope: add provider baselines before re-add/capture, HEAD pre/post checks,
+  shared local operation locks, planner revision checks, and explicit reconciliation.
+- 0.12.10 scope: add manifest/commit-pinned staged self-update, test-before-promotion,
+  retained previous tools, and edit-preserving fallback/manual rollback.
+- Preserve default directory operation, schema 5, existing profiles/toolchain locks,
+  protected targets, planner, and .github removal. Encrypted features stay opt-in.
+- Refuse plaintext rclone publication; old cloud versions and backups are not erased.
+- Stop silently ignoring automatic push rejection and external rollback failures.
+- Guard selected merges; remove the old blanket force-apply after merge-all.
+- Keep unpublished explicit-provider workspace edits dirty after setup/merge.
+- Harmonize sandbox HOME guards across standalone helpers, fix example NUON loading,
+  and use text-safe version loading instead of decoding an already-decoded string.
+- Add isolated security regression tests, release inventory generation, a local
+  dependency-required release gate, and a migration/limitations guide.
+- Validation limitation: Nushell/age/rclone/PowerShell runtime tests were not executed
+  in this build environment. See TEST-REPORT.md; static checks are not parser tests.
+
+
+
+
+## [0.12.6] - 2026-09-16
+
+- Automatically configures Neovim diff mode as chezmoi's three-way merge tool when no custom merge section exists.
+- Adds `dotmergecfg` for merge-tool inspection/application while preserving custom configuration.
+
+## [0.12.5] - 2026-09-16
+
+- Adds `toolchains/lock.nuon`, `dottoolchain`, exact lock capture, active Rust/Julia channel drift reporting, and Rust/Julia lock application.
+- Planner and verification include toolchain drift.
+
+## [0.12.4] - 2026-09-16
+
+- Adds layered profiles: common -> OS -> role -> repository machine -> machine-local overlay.
+- Bumps machine config schema to 5 and adds the 4 -> 5 migration.
+
+## [0.12.3] - 2026-09-16
+
+- Adds `dotplan`, `dotapply`, and `dotverify` desired-state workflow.
+- Saved plans combine package state, chezmoi status, protected-file conflicts, and toolchain drift.
+
+## [0.12.2] - 2026-09-16
+
+- Transaction rollback now restores local state and the private-source snapshot independently, including shared sync metadata.
+- Failed rollback attempts are recorded as `rollback-failed` instead of silently retaining the previous run status.
+- Sandbox tests now verify manifest-v2 local backup/restore behavior, including removal of files that were absent before a transaction.
+
+### Three-way conflict resolution and protected files
+- Expanded `dotresolve` with per-file `chezmoi merge`, `merge-all`, local -> private publishing, guarded private -> local pulls, and explicit per-file protected overrides.
+- Added `defaults/conflict-policy.nuon` with `.ssh/config`, `.gitconfig`, and `.config/git/config` protected by default.
+- Added machine-local conflict-policy override support at `~/.config/dotfiles/conflict-policy.nuon`.
+- `sync-down.nu` and setup private-authoritative applies now stop before overwriting protected files that differ from the private source.
+- Protected policy entries that are not managed by the active chezmoi source are ignored instead of causing false conflicts.
+
+## [0.12.1] - 2026-09-16
+
+### Run history and recoverable configuration transactions
+- Added `dotrun --list`, `--status`, `--logs`, `--resume`, and `--rollback`.
+- Setup runs now write persistent state and stage events under `~/.config/dotfiles/runs/`.
+- Transaction backups include both live local configuration and a private-source snapshot when available.
+- Rollback restores the local configuration first, then the matching private snapshot; package-manager changes are intentionally not uninstalled.
+- Local backup manifests now record previously-missing targets so rollback can remove files created by a failed transaction.
+
+## [0.12.0] - 2026-09-16
+
+### Checkpoint and resume
+- Every setup execution receives a Run ID and checkpoint state.
+- Script stages and direct configuration-apply stages record running/success/failure state.
+- Added `nu setup.nu --resume [--run-id ID]`; completed stages are skipped and the failed/interrupted stage is retried.
+- Resolved profile, data root, synchronization direction, and auto-sync setting are retained in run state so a resume uses the same setup context.
+- Setup prints the exact resume command when a checkpointed stage fails.
+
+
+
+
+## [0.11.4] - 2026-09-16
+
+### Fail-fast validation
+- `nu setup.nu` now runs the repository validator before any setup mutation.
+- Added `dotvalidate` as a first-class command for manual project validation.
+- Existing `nu-check` coverage is retained for every Nushell source and module.
+- `dotrelease` now requires both project validation and the sandbox smoke test
+  before creating a release commit/tag.
+
+### Isolated sandbox smoke testing
+- Added `dottest --sandbox` and `scripts/self-test.nu`.
+- Sandbox tests use temporary HOME/XDG config/data/state directories plus a fake
+  private source, without modifying the user's real machine configuration.
+- Smoke tests cover local/private source detection, `push-local` dry-run,
+  `pull-private` dry-run, and dry-run side-effect detection.
+- `dottest --sandbox --keep` preserves the temporary tree for inspection.
+- Added guarded `INITIAL_SETUP_TEST_MODE=1` + `INITIAL_SETUP_HOME_OVERRIDE`
+  support to shared setup/core policy helpers strictly for isolated tests.
+
+### Documentation cleanup
+- Replaced the obsolete GitHub Actions section after `.github` removal with local
+  validation and sandbox-test documentation.
+
 ## [0.11.3] - 2026-09-16
 
 - Fixed a Nushell parse error in `scripts/capture-tool-state.nu` where the `lazygit` and `rclone` version checks were accidentally merged into one call.

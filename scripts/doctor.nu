@@ -3,6 +3,13 @@
 const TOOLS_ROOT = path self ..
 
 def nu-home [] {
+    let test_mode = ($env.INITIAL_SETUP_TEST_MODE? | default "" | str trim)
+    let override = ($env.INITIAL_SETUP_HOME_OVERRIDE? | default "" | str trim)
+
+    if $test_mode == "1" and not ($override | is-empty) {
+        return ($override | path expand)
+    }
+
     let home_path = ($nu | get --optional home-path)
 
     if $home_path != null {
@@ -27,7 +34,7 @@ def machine-config-path [] {
 
 def schema-version [] {
     open --raw ($TOOLS_ROOT | path join "SCHEMA_VERSION")
-    | decode utf-8
+    | into string
     | str trim
     | into int
 }
@@ -50,6 +57,11 @@ def run-script [tools_root: path name: string ...args: string] {
 
     true
 }
+
+const PROVIDER = path self ./modules/sync-provider.nu
+const VAULT = path self ./modules/vault.nu
+use $PROVIDER [load-provider load-provider-state provider-head]
+use $VAULT [vault-configured]
 
 def main [--fix] {
     let config_file = (machine-config-path)
@@ -214,6 +226,23 @@ def main [--fix] {
         }
     }
 
+    print ""
+    print "Toolchain desired state:"
+    run-script $tools_root "toolchain-state.nu" "--status" | ignore
+
+    if $context.features.neovim and not (which chezmoi | is-empty) {
+        print ""
+        print "Chezmoi merge tool:"
+        run-script $tools_root "setup-merge-tool.nu" "--check" | ignore
+    }
+
+    let machine_overlay = ((nu-home) | path join ".config" "dotfiles" "machine-overlay.nuon")
+    if ($machine_overlay | path exists) {
+        print ("[ok] Machine profile overlay: " + ($machine_overlay | into string))
+    } else {
+        print "[--] No machine-local profile overlay"
+    }
+
     if ($tool_state | path exists) {
         print "[ok] Tool-version snapshot exists"
     } else {
@@ -296,6 +325,15 @@ def main [--fix] {
             run-script $tools_root "install-neovim.nu" | ignore
         }
 
+        if $context.features.neovim {
+            run-script $tools_root "setup-merge-tool.nu" | ignore
+        }
+
+        if $context.features.rust or $context.features.julia {
+            run-script $tools_root "install-language-tools.nu" | ignore
+            run-script $tools_root "toolchain-state.nu" "--apply" | ignore
+        }
+
         if $context.features.fonts and $context.machine.install_gui_apps {
             run-script $tools_root "install-fonts.nu" | ignore
         }
@@ -325,6 +363,25 @@ def main [--fix] {
         print "[ok] Repair pass completed"
     }
 
+    print ""
+    print "Secure synchronization:"
+    print ("Vault configured: " + ((vault-configured) | into string))
+    for optional in ["age" "age-keygen" "rclone"] {
+        print ($optional + ": " + (if (which $optional | is-empty) {"not installed"} else {"available"}))
+    }
+    try {
+        let provider = (load-provider)
+        let head = (provider-head $provider)
+        let baseline = (load-provider-state $provider)
+        print ("Provider: " + $provider.kind)
+        print ("Current revision: " + $head.revision)
+        print ("Baseline: " + ($baseline.revision? | default "uninitialized; review dotbackend status"))
+        if ($data_root | path join "rclone" "rclone.conf" | path exists) {
+            print "[WARN] Legacy plaintext rclone.conf exists; review dotvault migrate-rclone before publishing."
+        }
+    } catch {
+        print "[WARN] Provider is not reachable or has invalid metadata. No baseline was reset."
+    }
     print ""
     print "chezmoi status:"
 

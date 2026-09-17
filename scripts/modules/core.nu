@@ -1,6 +1,13 @@
 # Shared Initial-setup helpers.
 
 export def nu-home [] {
+    let test_mode = ($env.INITIAL_SETUP_TEST_MODE? | default "" | str trim)
+    let override = ($env.INITIAL_SETUP_HOME_OVERRIDE? | default "" | str trim)
+
+    if $test_mode == "1" and not ($override | is-empty) {
+        return ($override | path expand)
+    }
+
     let home_path = ($nu | get --optional home-path)
 
     if $home_path != null {
@@ -56,4 +63,61 @@ export def detect-machine-name [] {
     }
 
     "unknown-machine"
+}
+
+
+# Normalize caught values without assuming every failure is a record with `.msg`.
+# Some `try` blocks can surface strings/lists/records from normal pipeline output;
+# these helpers make explicit failure envelopes distinguishable from success output.
+export def error-message [value: any fallback: string = "Operation failed."] {
+    let kind = ($value | describe)
+
+    if $kind == "nothing" {
+        return $fallback
+    }
+
+    if $kind == "string" {
+        let text = ($value | str trim)
+        if not ($text | is-empty) { return $text }
+        return $fallback
+    }
+
+    if ($kind | str starts-with "record") {
+        let candidate = ($value | get --optional msg)
+        if $candidate != null {
+            let text = (try { $candidate | into string | str trim } catch { "" })
+            if not ($text | is-empty) { return $text }
+        }
+    }
+
+    let rendered = (try { $value | to nuon | str trim } catch { "" })
+    if not ($rendered | is-empty) and $rendered != "null" {
+        return $rendered
+    }
+
+    $fallback
+}
+
+export def failure-envelope [value: any] {
+    {
+        __initial_setup_failure: true
+        error: $value
+    }
+}
+
+export def captured-failure [value: any] {
+    let kind = ($value | describe)
+    let values = if ($kind | str starts-with "list") { $value } else { [$value] }
+
+    for item in $values {
+        let item_kind = ($item | describe)
+        if ($item_kind | str starts-with "record") {
+            let marker = ($item | get --optional __initial_setup_failure)
+            if $marker == true {
+                return ($item | get --optional error)
+            }
+        }
+    }
+
+    null
 }

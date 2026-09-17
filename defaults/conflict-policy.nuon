@@ -1,0 +1,13 @@
+{
+    version: 1
+    protected: [
+        ".ssh/config"
+        ".gitconfig"
+        ".config/git/config"
+    ]
+    merge_preferred: [
+        ".config/nushell/config.nu"
+        ".config/nushell/env.nu"
+        ".config/wezterm/wezterm.lua"
+    ]
+}

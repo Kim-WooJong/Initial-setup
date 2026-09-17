@@ -3,6 +3,13 @@
 # ============================================================
 
 def nu-home [] {
+    let test_mode = ($env.INITIAL_SETUP_TEST_MODE? | default "" | str trim)
+    let override = ($env.INITIAL_SETUP_HOME_OVERRIDE? | default "" | str trim)
+
+    if $test_mode == "1" and not ($override | is-empty) {
+        return ($override | path expand)
+    }
+
     let home_path = ($nu | get --optional home-path)
 
     if $home_path != null {
@@ -191,6 +198,8 @@ export def dotpull [
     --prune
     --force
     --backup
+    --source-only
+    --discard-source
 ] {
     let script = (tool-script "sync-down.nu")
 
@@ -208,6 +217,8 @@ export def dotpull [
     if $prune {
         $args = ($args | append "--prune")
     }
+    if $source_only { $args = ($args | append "--source-only") }
+    if $discard_source { $args = ($args | append "--discard-source") }
 
     if $force or $backup {
         $args = ($args | append "--force")
@@ -216,8 +227,13 @@ export def dotpull [
     ^nu ...$args
 }
 
-export def dotresolve [] {
-    ^nu (tool-script "resolve-config.nu")
+export def dotresolve [--policy] {
+    let script = (tool-script "resolve-config.nu")
+    if $policy {
+        ^nu $script --policy
+    } else {
+        ^nu $script
+    }
 }
 
 export def dotsync [] {
@@ -439,12 +455,12 @@ export def dotrclone [
     }
 
     if $capture {
-        ^nu (tool-script "capture-rclone-config.nu")
+        ^nu (tool-script "secret-vault.nu") capture rclone
         return
     }
 
     if $restore {
-        ^nu (tool-script "restore-rclone-config.nu")
+        ^nu (tool-script "secret-vault.nu") restore rclone
         return
     }
 
@@ -456,7 +472,7 @@ export def dotrclone [
     print "Local rclone config:"
     ^rclone config file
     print ""
-    print ("Private copy: " + ((data-root) | path join "rclone" "rclone.conf" | into string))
+    print ("Encrypted copy: " + ((data-root) | path join "secrets" "rclone.age" | into string))
 }
 
 export def dotlocal [] {
@@ -535,6 +551,54 @@ export def dotstarship [] {
     edit-managed-target ((nu-home) | path join ".config" "starship.toml")
 }
 
+
+
+export def dotrun [
+    --list
+    --status
+    --logs
+    --resume
+    --rollback
+    --run-id: string = ""
+] {
+    let script = (tool-script "run-control.nu")
+    mut args = [$script]
+
+    if $list { $args = ($args | append "--list") }
+    if $status { $args = ($args | append "--status") }
+    if $logs { $args = ($args | append "--logs") }
+    if $resume { $args = ($args | append "--resume") }
+    if $rollback { $args = ($args | append "--rollback") }
+    if not ($run_id | is-empty) {
+        $args = ($args | append "--run-id")
+        $args = ($args | append $run_id)
+    }
+
+    ^nu ...$args
+}
+
+export def dotvalidate [] {
+    ^nu (tool-script "validate-project.nu")
+}
+
+export def dottest [
+    --sandbox
+    --keep
+] {
+    let script = (tool-script "self-test.nu")
+    mut args = [$script]
+
+    if $sandbox {
+        $args = ($args | append "--sandbox")
+    }
+
+    if $keep {
+        $args = ($args | append "--keep")
+    }
+
+    ^nu ...$args
+}
+
 export def dotpreflight [
     --diff
 ] {
@@ -605,3 +669,43 @@ export def dotdata [] {
 export def dottools [] {
     ^nvim (tools-root)
 }
+
+export def dotplan [--direction: string = "none" --no-save] {
+    let script = (tool-script "plan.nu")
+    mut args = [$script "--direction" $direction]
+    if $no_save { $args = ($args | append "--no-save") }
+    ^nu ...$args
+}
+
+export def dotapply [--plan: string = "" --yes] {
+    let script = (tool-script "apply-plan.nu")
+    mut args = [$script]
+    if not ($plan | is-empty) {
+        $args = ($args | append "--plan")
+        $args = ($args | append $plan)
+    }
+    if $yes { $args = ($args | append "--yes") }
+    ^nu ...$args
+}
+
+export def dotverify [--plan: string = ""] {
+    let script = (tool-script "verify-plan.nu")
+    if ($plan | is-empty) { ^nu $script } else { ^nu $script --plan $plan }
+}
+
+export def dottoolchain [--status --apply --lock-current] {
+    let script = (tool-script "toolchain-state.nu")
+    if $lock_current { ^nu $script --lock-current } else if $apply { ^nu $script --apply } else { ^nu $script --status }
+}
+
+export def dotmergecfg [--check --force] {
+    let script = (tool-script "setup-merge-tool.nu")
+    if $check { ^nu $script --check } else if $force { ^nu $script --force } else { ^nu $script }
+}
+
+# Arguments are forwarded as a list; no shell expansion/evaluation is used.
+export def --wrapped dotvault [...args: string] { ^nu --no-config-file (tool-script "secret-vault.nu") ...$args }
+export def --wrapped dotbackend [...args: string] { ^nu --no-config-file (tool-script "backend-control.nu") ...$args }
+export def --wrapped dotupgrade [...args: string] { ^nu --no-config-file (tool-script "safe-upgrade.nu") ...$args }
+
+export def --wrapped dotsecuritytest [...args: string] { ^nu --no-config-file (tool-script "security-self-test.nu") ...$args }

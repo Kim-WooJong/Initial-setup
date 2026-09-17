@@ -6,3 +6,4 @@ bat|bat|bat|bat|bat
 zoxide|zoxide|zoxide|zoxide|zoxide
 git-delta|delta|git-delta|git-delta|git-delta
 lazygit|lazygit|-|lazygit|lazygit
+rclone|rclone|rclone|rclone|rclone

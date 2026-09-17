@@ -1,0 +1,9 @@
+{
+    # Machine-local profile overlay. Copy to:
+    # ~/.config/dotfiles/machine-overlay.nuon
+    install_gui_apps: true
+    features: {
+        vscode: true
+        wezterm: true
+    }
+}

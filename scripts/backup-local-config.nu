@@ -11,13 +11,28 @@
 # ============================================================
 
 def nu-home [] {
+    let test_mode = ($env.INITIAL_SETUP_TEST_MODE? | default "" | str trim)
+    let override = ($env.INITIAL_SETUP_HOME_OVERRIDE? | default "" | str trim)
+
+    if $test_mode == "1" and not ($override | is-empty) {
+        return ($override | path expand)
+    }
+
     let home_path = ($nu | get --optional home-path)
-    if $home_path != null { return $home_path }
+
+    if $home_path != null {
+        return $home_path
+    }
 
     let home_dir = ($nu | get --optional home-dir)
-    if $home_dir != null { return $home_dir }
 
-    error make { msg: "Unable to determine the Nushell home directory." }
+    if $home_dir != null {
+        return $home_dir
+    }
+
+    error make {
+        msg: "Unable to determine the Nushell home directory."
+    }
 }
 
 def backup-root [] {
@@ -61,11 +76,8 @@ def prune-backups [] {
 }
 
 def sanitize-label [label: string] {
-    $label
-    | str replace --all ' ' '-'
-    | str replace --all '/' '-'
-    | str replace --all '\\' '-'
-    | str replace --all ':' '-'
+    let safe = ($label | str replace --all --regex '[^A-Za-z0-9._-]' '-')
+    if ($safe | is-empty) { "backup" } else { $safe | str substring 0..63 }
 }
 
 def vscode-user-dir [] {
@@ -83,6 +95,15 @@ def vscode-user-dir [] {
 def backup-targets [] {
     let home = (nu-home)
     mut targets = [
+        { name: "machine-config", source: ($home | path join ".config" "dotfiles" "config.nuon"), stored: "machine-config.nuon" }
+        { name: "machine-local", source: ($home | path join ".config" "dotfiles" "local.nu"), stored: "machine-local.nu" }
+        { name: "sync-state", source: ($home | path join ".config" "dotfiles" "sync-state.nuon"), stored: "sync-state.nuon" }
+        { name: "sync-conflict", source: ($home | path join ".config" "dotfiles" "SYNC-CONFLICT.txt"), stored: "SYNC-CONFLICT.txt" }
+        { name: "git-identities", source: ($home | path join ".config" "dotfiles" "git-identities.nuon"), stored: "git-identities.nuon" }
+        { name: "conflict-policy", source: ($home | path join ".config" "dotfiles" "conflict-policy.nuon"), stored: "conflict-policy.nuon" }
+        { name: "provider-config", source: ($home | path join ".config" "dotfiles" "sync-provider.nuon"), stored: "sync-provider.nuon" }
+        { name: "provider-state", source: ($home | path join ".config" "dotfiles" "provider-state.nuon"), stored: "provider-state.nuon" }
+        { name: "machine-overlay", source: ($home | path join ".config" "dotfiles" "machine-overlay.nuon"), stored: "machine-overlay.nuon" }
         { name: "nvim", source: ($home | path join ".config" "nvim"), stored: "nvim" }
         { name: "nushell", source: ($home | path join ".config" "nushell"), stored: "nushell" }
         { name: "gitconfig", source: ($home | path join ".gitconfig"), stored: "gitconfig" }
@@ -122,9 +143,10 @@ def create-backup [label: string quiet: bool] {
     let root = (backup-root)
     mkdir $root
 
-    let timestamp = (date now | format date "%Y%m%d-%H%M%S")
+    let timestamp = (date now | format date "%Y%m%d-%H%M%S-%f")
     let safe_label = (sanitize-label $label)
-    let backup_dir = ($root | path join ($timestamp + "-" + $safe_label))
+    let suffix = (random uuid | str substring 0..7)
+    let backup_dir = ($root | path join ($timestamp + "-" + $safe_label + "-" + $suffix))
     let files_dir = ($backup_dir | path join "files")
     mkdir $files_dir
 
@@ -134,6 +156,13 @@ def create-backup [label: string quiet: bool] {
         let source = ($target.source | path expand)
 
         if not ($source | path exists) {
+            $items = ($items | append {
+                name: $target.name
+                source: ($source | into string)
+                stored: ("files/" + $target.stored)
+                type: "missing"
+                present: false
+            })
             continue
         }
 
@@ -145,6 +174,7 @@ def create-backup [label: string quiet: bool] {
             source: ($source | into string)
             stored: ("files/" + $target.stored)
             type: ($source | path type)
+            present: true
         })
 
         if not $quiet {
@@ -153,7 +183,7 @@ def create-backup [label: string quiet: bool] {
     }
 
     {
-        version: 1
+        version: 2
         created_at: (date now | format date "%Y-%m-%d %H:%M:%S %z")
         label: $label
         machine: ($env.COMPUTERNAME? | default ($env.HOSTNAME? | default "unknown-machine"))
@@ -250,6 +280,23 @@ def restore-backup [requested: string force: bool] {
 
     let manifest = (open $manifest_file)
 
+    # Inspect the complete payload before deleting/replacing any live file.
+    # A partial backup must fail closed, not print a successful partial restore.
+    if not (($manifest.version? | default 1) in [1 2]) {
+        error make {msg: "Unsupported local-backup manifest version."}
+    }
+    for item in ($manifest.items? | default []) {
+        let relative = ($item.stored | into string)
+        let segments = ($relative | split row "/")
+        if not ($relative | str starts-with "files/") or ($relative | str contains '\') or ($segments | any {|segment| $segment in ["" "." ".."] }) {
+            error make {msg: "Invalid relative payload path in local-backup manifest."}
+        }
+        let stored = ($backup_dir | path join $relative)
+        if ($item.present? | default true) and not ($stored | path exists) {
+            error make {msg: ("Backup payload missing; no live files were changed: " + ($stored | into string))}
+        }
+    }
+
     print ("Backup : " + ($backup_dir | into string))
     print ("Created: " + ($manifest.created_at? | default "unknown"))
     print ""
@@ -267,10 +314,22 @@ def restore-backup [requested: string force: bool] {
     for item in ($manifest.items? | default []) {
         let stored = ($backup_dir | path join $item.stored)
         let destination = ($item.source | path expand)
+        let was_present = ($item.present? | default true)
+
+        if not $was_present {
+            if ($destination | path exists) {
+                if (($destination | path type) == "dir") {
+                    rm -r $destination
+                } else {
+                    rm $destination
+                }
+                print ("[remove] " + ($destination | into string) + " (absent before transaction)")
+            }
+            continue
+        }
 
         if not ($stored | path exists) {
-            print ("[skip] Backup payload missing: " + ($stored | into string))
-            continue
+            error make {msg: ("Backup payload disappeared during restore: " + ($stored | into string))}
         }
 
         if ($destination | path exists) {
