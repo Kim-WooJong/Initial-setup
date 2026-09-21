@@ -63,6 +63,28 @@ Commands are installed into the Nushell environment after setup.
 | `dotnuupdate` | Update/select the managed Nushell runtime. |
 | `dotcloud` | Manage Cloud-wins import/recovery. |
 
+## Tab completion
+
+Every installed custom command has a short Nushell description, so command discovery works directly from the prompt. Type a prefix and press `Tab` to see matching commands and their descriptions; type `--` after a command and press `Tab` to see its documented flags.
+
+```nu
+dot<Tab>
+dotpull --<Tab>
+dotrun --<Tab>
+dotupgrade --<Tab>
+```
+
+Nushell-native subcommands remain available for action-style command families:
+
+```nu
+dotvault <Tab>
+dotbackend <Tab>
+dotcloud <Tab>
+```
+
+Dynamic completion stays local and side-effect-free. `dotvault restore <Tab>` reads registered vault names, snapshot/local-backup/setup-run selectors read their local state directories, `dotapply --plan <Tab>` and `dotverify --plan <Tab>` read saved plan metadata, and `dotupgrade --rollback <Tab>` reads local upgrade history. Completion does not invoke synchronization, contact a network service, mutate provider state, or run an external command.
+
+Value completion is also available for constrained arguments such as release modes, project kinds, plan directions, snapshot names, local-backup names, setup run IDs, saved plans, and upgrade rollback IDs.
 
 ## Explicit rclone-only transport
 

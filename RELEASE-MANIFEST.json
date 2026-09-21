@@ -8,7 +8,7 @@
     },
     {
       "path": "CHANGELOG.md",
-      "sha256": "d5fc7f8a6c9213971eb8c419fb709bb6309a1b2f9c7ebd2baff199b78f0e978d"
+      "sha256": "b22009cbbb0e84aa995705ae80e6f2885ada729b8b7b8fe76c96987c97743960"
     },
     {
       "path": "CLOUD_WINS.md",
@@ -20,7 +20,7 @@
     },
     {
       "path": "README.md",
-      "sha256": "3013b29ea686349104f9ddbfa426271d88fe87ae4f701aadb63b063b1e396562"
+      "sha256": "280769f5799db525b3422d9ea79e46ace08ad4c891abbbbacb296ca28c1afafe"
     },
     {
       "path": "ROADMAP.md",
@@ -80,7 +80,7 @@
     },
     {
       "path": "docs/wiki/Command-Reference.md",
-      "sha256": "2a58f0e9307c9452d81fbf197c5b67e1dc2932dff80e780f80fb935e1074ab35"
+      "sha256": "bec664feef83a7896660c45260995d2fb6ec1f80689f3e546966df88de541fc3"
     },
     {
       "path": "docs/wiki/Development-and-Testing.md",
@@ -267,6 +267,10 @@
       "sha256": "79760d5e54ae5e7f91bfe6d5853623002bf8099eecaa7cd60b6fc5afca036bc9"
     },
     {
+      "path": "scripts/command-completion-test.nu",
+      "sha256": "9f34451b871a7f74b11daa58e5a952c2135888968784487a4992b392c39a91cb"
+    },
+    {
       "path": "scripts/create-snapshot.nu",
       "sha256": "b30ea527254514c8fa5ee056a7daecf6f8c2e1bb04d97493fed7639c6ccc8cf4"
     },
@@ -408,7 +412,7 @@
     },
     {
       "path": "scripts/modules/dotfiles.nu",
-      "sha256": "ac328551012a3024eac83854be393ff694bab338fc3403fbf7991121ecda3f86"
+      "sha256": "6b31981c9e0a9d6dec176b482608a93a2ede275455e7b57cdd09cf60dd0bab5e"
     },
     {
       "path": "scripts/modules/git-identities.nu",
@@ -487,8 +491,12 @@
       "sha256": "2b73e2d122c2625de38a87dcaf2c253d4009cd7e77f962743a9b5cddf49be96e"
     },
     {
+      "path": "scripts/modules/vault (# Edit conflict 2026-09-21 3j5tonC #).nu",
+      "sha256": "14f2ea467718ebba5461061cb13ea8fd1e5e9a92233530cdd870d54e376043cf"
+    },
+    {
       "path": "scripts/modules/vault.nu",
-      "sha256": "67317848fb69a3a72f0ddc58e021c0fc3b667614bc89bdd5cb514e46eba29891"
+      "sha256": "8de2d626e19a4a6714ecbe534025c8c97e4c505ea361a9cca41673f657178c81"
     },
     {
       "path": "scripts/new-project.nu",
@@ -509,6 +517,10 @@
     {
       "path": "scripts/plan.nu",
       "sha256": "bf27bfded528f04350e13e14cc9ea41372823c80ade05fe392277181047c9a32"
+    },
+    {
+      "path": "scripts/posix-bootstrap-test.nu",
+      "sha256": "4502b6b3e6f6d06f92cf993e7f9273a08732d34ec705cb11c4e447a9b5fbe0b2"
     },
     {
       "path": "scripts/posix/acquire-operation-lock.sh",
@@ -543,12 +555,8 @@
       "sha256": "3385d868f1703859ca12f9384d46bcb42ea4c2689dc814a97113a8a8e8328e25"
     },
     {
-      "path": "scripts/posix-bootstrap-test.nu",
-      "sha256": "4502b6b3e6f6d06f92cf993e7f9273a08732d34ec705cb11c4e447a9b5fbe0b2"
-    },
-    {
       "path": "scripts/post-setup-checklist.nu",
-      "sha256": "712065b591a492af3fef7f3c0a582bf66ced0146f7bfa401e6bc57fb978e5d23"
+      "sha256": "eae158d1eb3b9b82e44ebf5f7c541be510867c8497415035e87ef4ded32a1807"
     },
     {
       "path": "scripts/preflight.nu",
@@ -656,7 +664,7 @@
     },
     {
       "path": "scripts/self-test.nu",
-      "sha256": "a7707e806869a3a9187248aadfb275b5d80bfc604969f0db8e7938ba7aec6c7a"
+      "sha256": "ed2582b52e9e77be3ada487e7ce349e2f5810a261b94ac1354943b7843f2fc0a"
     },
     {
       "path": "scripts/setup-entry.nu",
@@ -772,7 +780,7 @@
     },
     {
       "path": "scripts/validate-project.nu",
-      "sha256": "1b88755cf57a3b6c338be2e00caf9d9b9984040907c06cc5027f76532d9a498f"
+      "sha256": "4fa16252e01f1431fa620fba0c0bfc248777c4e470e28ab0b81d5beb4873190d"
     },
     {
       "path": "scripts/validate-syntax.nu",

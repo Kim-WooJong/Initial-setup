@@ -69,6 +69,8 @@ dotrollback
 dotcloud status
 ```
 
+All installed custom commands expose short Nushell help/completion descriptions. Type a prefix such as `dot` and press `Tab` to discover commands, or type `command --` and press `Tab` to discover flags. Action-style families such as `dotvault`, `dotbackend`, and `dotcloud` also expose native subcommand completion. Dynamic selectors such as `dotvault restore <Tab>`, `dotrollback --snapshot <Tab>`, `dotapply --plan <Tab>`, and `dotupgrade --rollback <Tab>` read only local project state and perform no network or mutation work.
+
 ## Validation
 
 ```nu

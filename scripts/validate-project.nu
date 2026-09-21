@@ -216,6 +216,7 @@ def main [] {
         "scripts/backup-local-config.nu"
         "scripts/preflight.nu"
         "scripts/self-test.nu"
+        "scripts/command-completion-test.nu"
         "scripts/cloud-wins.nu"
         "scripts/cloud-wins-main.nu"
         "scripts/cloud-wins-build.nu"
@@ -537,6 +538,50 @@ def main [] {
     for token in ["dotplan" "dotapply" "dotverify" "dottoolchain" "dotmergecfg"] {
         if not ($dotfiles_module | str contains $token) { fail ("Dotfiles command surface is incomplete: " + $token) }
     }
+    for completion_token in [
+        'export def "dotvault status"'
+        'export def "dotvault init"'
+        'export def "dotvault capture"'
+        'export def "dotvault restore"'
+        'export def "dotvault migrate-rclone"'
+        'export def "dotbackend status"'
+        'export def "dotbackend configure"'
+        'export def "dotbackend init"'
+        'export def "dotbackend acknowledge"'
+        'export def "dotcloud help"'
+        'export def "dotcloud configure"'
+        'export def "dotcloud probe"'
+        'export def "dotcloud plan"'
+        'export def "dotcloud verify"'
+        'export def "dotcloud status"'
+        'export def "dotcloud apply"'
+        'export def "dotcloud activate"'
+        'export def "dotcloud rollback"'
+        'export def "dotcloud deactivate"'
+        'string@complete-vault-entries'
+        'string@complete-snapshots'
+        'string@complete-local-backups'
+        'string@complete-run-ids'
+        'string@complete-release-modes'
+        'string@complete-project-kinds'
+        'string@complete-plan-directions'
+        'string@complete-plan-files'
+        'string@complete-upgrade-ids'
+        'export def dotupgrade ['
+        '--manifest-sha256: string'
+        '--rollback: string@complete-upgrade-ids'
+        'export def dotsecuritytest ['
+        '--require-age'
+        '--require-rclone'
+    ] {
+        if not ($dotfiles_module | str contains $completion_token) { fail ("Nushell completion surface is incomplete: " + $completion_token) }
+    }
+    let completion_helpers = ($dotfiles_module | split row "def completion-item" | last | split row "def cloud-invoke" | first)
+    for forbidden_completion_token in ["run-command" "http get" "http post" "ureq" "curl" "wget"] {
+        if ($completion_helpers | str contains $forbidden_completion_token) {
+            fail ("Completion helpers must remain local-only and side-effect-free: " + $forbidden_completion_token)
+        }
+    }
 
     let planner_module = (open --raw ($TOOLS_ROOT | path join "scripts" "modules" "planner.nu"))
     for token in ["build-plan" "save-plan" "missing_packages" "protected_conflicts" "toolchain_drift" "verify_ok"] {
@@ -645,6 +690,7 @@ def main [] {
     for token in ["--no-upgrade" "--dry-run" "--check" "INITIAL_SETUP_TEST_MODE" "rclone version" "perform-rclone-install" "refresh-rclone-path"] {
         if not ($rclone_installer | str contains $token) { fail ("rclone installer is missing safety contract: " + $token) }
     }
+    if not ($self_test | str contains "command-completion-test.nu") { fail "Sandbox gate must test the interactive command/completion surface." }
     if not ($self_test | str contains "syntax-self-test.nu") { fail "Sandbox gate must test the syntax validator itself." }
     if not ($self_test | str contains "rclone-install-test.nu") { fail "Sandbox gate must include mocked rclone dependency regressions." }
     if not ("rclone" in (useful-lines ($TOOLS_ROOT | path join "packages" "common.txt"))) { fail "rclone is missing from the common package manifest." }
