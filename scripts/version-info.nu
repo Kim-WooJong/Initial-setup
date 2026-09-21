@@ -1,6 +1,10 @@
 #!/usr/bin/env nu
 
 const TOOLS_ROOT = path self ..
+const SUBPROCESS = path self ./modules/subprocess.nu
+const INSTALL_UTILS = path self ./modules/install-utils.nu
+use $SUBPROCESS [run-command]
+use $INSTALL_UTILS [probe-tool]
 
 def app-version [] {
     let file = ($TOOLS_ROOT | path join "VERSION")
@@ -13,11 +17,10 @@ def schema-version [] {
 }
 
 def git-output [args: list] {
-    if (which git | is-empty) { return "" }
-
-    let output = (^git -C $TOOLS_ROOT ...$args | str trim)
-    let exit_code = ($env.LAST_EXIT_CODE | default 1)
-    if $exit_code != 0 { "" } else { $output }
+    let git = (probe-tool "git" ["--version"])
+    if not $git.healthy { return "" }
+    let result = (run-command $git.path (["-C" ($TOOLS_ROOT | into string)] | append $args))
+    if $result.ok { $result.stdout | str trim } else { "" }
 }
 
 def main [] {

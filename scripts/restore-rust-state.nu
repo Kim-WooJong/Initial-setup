@@ -1,5 +1,8 @@
 #!/usr/bin/env nu
 
+const SUBPROCESS = path self ./modules/subprocess.nu
+use $SUBPROCESS [run-command command-failure-message]
+
 def nu-home [] {
     let test_mode = ($env.INITIAL_SETUP_TEST_MODE? | default "" | str trim)
     let override = ($env.INITIAL_SETUP_HOME_OVERRIDE? | default "" | str trim)
@@ -32,18 +35,19 @@ def machine-context [] {
 
 def run-rustup [label: string args: list] {
     print ("[rustup] " + $label)
-    ^rustup ...$args
-    let exit_code = ($env.LAST_EXIT_CODE | default 0)
-
-    if $exit_code != 0 {
-        print ("[warn] Rustup returned exit code " + ($exit_code | into string) + ": " + $label)
+    let result = (run-command "rustup" $args --live)
+    if not $result.ok {
+        let code = if $result.exit_code == null { "not launched" } else { $result.exit_code | into string }
+        print ("[warn] Rustup failed (" + $code + "): " + $label)
+        if not ($result.diagnostic | str trim | is-empty) { print --stderr $result.diagnostic }
     }
-
-    $exit_code
+    if $result.ok { 0 } else if $result.exit_code == null { 1 } else { $result.exit_code }
 }
 
 def toolchain-names [] {
-    ^rustup toolchain list
+    let result = (run-command "rustup" ["toolchain" "list"])
+    if not $result.ok { error make {msg: (command-failure-message "rustup toolchain list" $result)} }
+    $result.stdout
     | lines
     | each { |line| $line | str trim | split row " " | first }
     | where { |item| not ($item | is-empty) }
@@ -51,7 +55,9 @@ def toolchain-names [] {
 }
 
 def installed-components [toolchain: string] {
-    let lines = (^rustup component list --installed --toolchain $toolchain | lines | each { |line| $line | str trim })
+    let probe = (run-command "rustup" ["component" "list" "--installed" "--toolchain" $toolchain])
+    if not $probe.ok { error make {msg: (command-failure-message ("rustup component list " + $toolchain) $probe)} }
+    let lines = ($probe.stdout | lines | each { |line| $line | str trim })
     let candidates = ["clippy" "rustfmt" "rust-src" "rust-analyzer" "rust-analysis" "llvm-tools" "rustc-dev" "miri" "rust-docs"]
     mut result = []
 
@@ -67,7 +73,9 @@ def installed-components [toolchain: string] {
 }
 
 def installed-targets [toolchain: string] {
-    ^rustup target list --installed --toolchain $toolchain
+    let result = (run-command "rustup" ["target" "list" "--installed" "--toolchain" $toolchain])
+    if not $result.ok { error make {msg: (command-failure-message ("rustup target list " + $toolchain) $result)} }
+    $result.stdout
     | lines
     | each { |line| $line | str trim }
     | where { |item| not ($item | is-empty) }
@@ -75,7 +83,9 @@ def installed-targets [toolchain: string] {
 }
 
 def default-toolchain [] {
-    let rows = (^rustup toolchain list | lines | where { |line| $line | str contains "(default)" })
+    let result = (run-command "rustup" ["toolchain" "list"])
+    if not $result.ok { error make {msg: (command-failure-message "rustup toolchain list" $result)} }
+    let rows = ($result.stdout | lines | where { |line| $line | str contains "(default)" })
 
     if ($rows | is-empty) {
         return ""
@@ -84,7 +94,7 @@ def default-toolchain [] {
     $rows | first | str trim | split row " " | first
 }
 
-def main [] {
+def main [--source-root: string = ""] {
     let context = (machine-context)
 
     if not $context.features.rust {
@@ -97,7 +107,8 @@ def main [] {
         return
     }
 
-    let file = ($context.data_root | path expand | path join "toolchains" "rust" "state.nuon")
+    let source_root = if ($source_root | str trim | is-empty) { $context.data_root | path expand } else { $source_root | path expand }
+    let file = ($source_root | path join "toolchains" "rust" "state.nuon")
 
     if not ($file | path exists) {
         print "[skip] No captured Rust state"

@@ -1,5 +1,8 @@
 #!/usr/bin/env nu
 
+const INSTALL_UTILS = path self ./modules/install-utils.nu
+use $INSTALL_UTILS [run-installer probe-tool winget-package-state linux-is-root privileged-command]
+
 def nu-home [] {
     let test_mode = ($env.INITIAL_SETUP_TEST_MODE? | default "" | str trim)
     let override = ($env.INITIAL_SETUP_HOME_OVERRIDE? | default "" | str trim)
@@ -31,15 +34,7 @@ def machine-context [] {
 }
 
 def run-program [label: string program: string args: list] {
-    print ("[run] " + $label)
-    ^$program ...$args
-    let exit_code = ($env.LAST_EXIT_CODE | default 0)
-
-    if $exit_code != 0 {
-        print ("[warn] " + $label + " returned exit code " + ($exit_code | into string))
-    }
-
-    $exit_code
+    (run-installer $label $program $args).exit_code
 }
 
 def marker-file [] {

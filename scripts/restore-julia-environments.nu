@@ -36,7 +36,7 @@ def copy-if-exists [source: path destination: path] {
     cp $source $destination
 }
 
-def main [] {
+def main [--source-root: string = ""] {
     let context = (machine-context)
 
     if not $context.features.julia {
@@ -44,7 +44,8 @@ def main [] {
         return
     }
 
-    let cloud_root = ($context.data_root | path expand | path join "toolchains" "julia" "environments")
+    let source_root = if ($source_root | str trim | is-empty) { $context.data_root | path expand } else { $source_root | path expand }
+    let cloud_root = ($source_root | path join "toolchains" "julia" "environments")
 
     if not ($cloud_root | path exists) {
         print "[skip] No captured Julia environments"

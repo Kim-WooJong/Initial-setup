@@ -1,5 +1,59 @@
 # Changelog
 
+## 0.17.0
+
+- Prevent manual `dotpull`/`dotrpull` from silently rolling back live configuration changed after the last successful local sync baseline. Pull now shows the incoming managed-file diff and stops before changing live configuration or the private workspace unless `--discard-local` is supplied explicitly.
+- Recheck the live fingerprint immediately before apply so edits made while a pull is being prepared also stop the operation.
+- Add a shared terminal presentation module with consistent colored `info`, `ok`, `warn`, `error`, and diff output while respecting `NO_COLOR`. Apply it to pull/push status, preflight diffs, protected conflicts, `dotstatus`, and `dotdiff`.
+- Keep `--force` separate from local-authority selection: force does not imply permission to discard newer local edits.
+- Keep rclone-only local baselines isolated under the existing provider-state scope, so explicit rclone pulls do not advance or contaminate the normal provider `sync-state.nuon`.
+
+## 0.16.3
+
+- Let interactive setup reconcile a changed directory-provider baseline by reviewing differences and choosing local or private managed configuration, with cancellation as the default.
+- Preserve the reviewed private payload in a verified recovery copy before setup mutations, independently of optional rotating snapshots, alongside the existing local configuration backup.
+- Recheck the approved source revision, leave baseline acknowledgement until successful setup, and start a fresh transaction when a resumed run needs a new direction.
+- Keep background/revision-store conflict guards and protected Git/SSH review. Reject captured reconciliation prompts.
+- Add isolated reconciliation regressions to the verification suite and cover real terminal selection, invalid input, cancellation, and Ctrl+C separately from production configuration apply.
+
+## 0.16.2
+
+- Fix Nushell 0.114+ setup interruption parsing and remove the remaining deprecated case conversion from the active update path. Retain the version-selected legacy adapter and warning-test fixture.
+- Fix nullable variable annotations, mutable catch captures, pipeline conditions, and reserved helper names exposed by Nushell 0.115.1.
+- Keep captured chezmoi diffs non-interactive with the built-in diff and no pager; run merge editors directly on the terminal.
+- Keep interactive setup attached to the native terminal; inspect captured setup leaves for interactive input in the regression guard.
+- Make Windows policy tests traverse literal paths, preserve child arguments in launcher help handling, and move the POSIX compiler fixture into its own shell file.
+- Apply private Windows owner/DACL changes through .NET without Security-module autoload or unnecessary SACL privileges, including repeated backups.
+- Align structural checks with shared provider ownership and align the Cloud-wins package version with the release.
+
+Validation: Windows with Nushell 0.115.1; all active-source parser checks and real setup menu/cancellation checks passed. Rust's 35 tests passed sequentially. A parallel rerun intermittently hit Windows Access Denied during file replacement; its cause is not resolved by this patch. Native Linux/macOS, a separate Nu 0.114 interpreter, and age encryption round trips were not exercised.
+
+## 0.16.1
+
+- Restored direct TTY ownership for `setup-main.nu`: `setup.nu` now transfers control with `exec` instead of wrapping the interactive orchestrator in the captured subprocess pipeline; prerequisite bootstraps also receive the terminal directly so their re-entry cannot hide prompts.
+- Kept stdout/stderr capture only for non-interactive leaf commands, preventing hidden `input` prompts while preserving detailed subprocess diagnostics.
+- Made every production `input` site print its choices/default explicitly before reading from stdin.
+- Added setup progress messages before operation-lock and provider fingerprint work so startup no longer appears idle before the first setup section.
+- Classified Ctrl+C / `nu::shell::io::interrupted` as a user interruption, persist run status as `interrupted`, keep it resumable, and exit with code 130 instead of wrapping it as a generic setup failure.
+- Added regression policy coverage for the interactive TTY boundary and explicit-prompt rule.
+
+## 0.16.0
+
+- Added `dotrpush` and `dotrpull` for an isolated rclone-only revision transport. The commands use a separate provider baseline, leave the normal provider configuration/source untouched, and can persist a reviewed dedicated remote with `--save-remote`.
+
+- Added a maintainer-oriented code architecture and maintenance map covering entry/bootstrap, setup stages, command routing, subprocess diagnostics, synchronization/providers, recovery, Cloud-wins, validation, state layout, and change-by-purpose ownership.
+- Extended wiki regression coverage so the code-architecture page is required and every shared module must remain represented in the architecture map.
+- Added structured diagnostic health probes for doctor, audit, preflight, verification, and release gating; working-tree verification can report manifest drift without weakening strict release verification.
+- Completed the production subprocess cleanup for non-interactive/captured commands so child exit codes and diagnostics are preserved consistently across update, scheduler, migration, state-capture, platform, and command-wrapper paths.
+- Kept only two explicit subprocess boundaries: the real-TTY managed editor invocation and the self-contained seed-Nushell runtime gate; both are documented and guarded by regression policy.
+- Hardened Rust/VS Code/tool state capture so command failures cannot silently become empty desired state, and added a production subprocess policy gate to the verification suite.
+- Added a shared subprocess contract that preserves launch state, exit code, stdout, stderr, and diagnostics; sensitive commands can redact diagnostics, while long-running setup stages can stream output live and still retain a result record.
+- Converted installer health checks to validate real executable behavior after installation instead of treating PATH visibility or package-manager success as proof of a working tool.
+- Added explicit required/optional setup stage policy. Optional feature failures are recorded as warnings and do not abort core setup; required failures retain the underlying diagnostic and provide a resumable checkpoint.
+- Resume now retries warning/interrupted stages, skips successful checkpoints by default, and re-runs explicitly health-sensitive stages such as rclone and auto-sync checks.
+- Persist final run diagnostics and optional warning checkpoints in run history, and preserve primary setup errors together with any lock-cleanup failures.
+- Routed setup child scripts, project validation, and protected chezmoi operations through the shared subprocess diagnostics instead of replacing their root cause with generic wrapper errors.
+
 ## 0.15.0
 
 - Hardened Starship setup on Windows, Linux, and macOS. A PATH-visible executable is no longer accepted until both `starship --version` and `starship init nu` succeed.

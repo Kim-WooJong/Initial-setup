@@ -1,5 +1,7 @@
 const PROCESS_OUTPUT = path self ./process-output.nu
 use $PROCESS_OUTPUT [output-text]
+const SUBPROCESS = path self ./subprocess.nu
+use $SUBPROCESS [run-command checked-command]
 const TEXT_CASE = path self ./text-case.nu
 use $TEXT_CASE [text-lower]
 # Shared checked I/O, path validation, operation locking, and content manifests.
@@ -13,11 +15,7 @@ use $CORE [nu-home error-message]
 export def state-root [] { (nu-home) | path join ".config" "dotfiles" }
 
 export def checked [program: string args: list label: string] {
-    if (which $program | is-empty) { error make { msg: ("Missing required command: " + $program) } }
-    let result = (do { ^$program ...$args } | complete)
-    if $result.exit_code != 0 {
-        error make { msg: ($label + " failed (exit " + ($result.exit_code | into string) + ").") }
-    }
+    let result = (checked-command $label $program $args)
     $result.stdout
 }
 
@@ -88,15 +86,14 @@ export def lock-acquire [file: path] {
     if (which $program | is-empty) {
         error make {msg: ("LOCK_HELPER_MISSING: " + $program + ". This is not an existing-lock conflict.")}
     }
-    let result = (try {
-        if $nu.os-info.name == "windows" {
-            do { ^powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $WINDOWS_LOCK -Path $target -Token $token } | complete
-        } else {
-            do { ^sh $POSIX_LOCK $target $token } | complete
-        }
-    } catch {|err|
-        error make {msg: ("LOCK_HELPER_FAILED: could not execute the lock helper for " + ($target | into string) + ".\n" + (error-message $err "unknown helper execution failure"))}
-    })
+    let result = if $nu.os-info.name == "windows" {
+        run-command "powershell.exe" ["-NoProfile" "-NonInteractive" "-ExecutionPolicy" "Bypass" "-File" $WINDOWS_LOCK "-Path" $target "-Token" $token]
+    } else {
+        run-command "sh" [$POSIX_LOCK $target $token]
+    }
+    if not $result.launched {
+        error make {msg: ("LOCK_HELPER_FAILED: could not execute the lock helper for " + ($target | into string) + ".\n" + $result.launch_error)}
+    }
     let message = (lock-result-message $target $result $token)
     if not ($message | is-empty) { error make {msg: $message} }
     # Validate the helper result before allowing any protected operation.

@@ -1,277 +1,64 @@
 #!/usr/bin/env nu
 
 const TOOLS_ROOT = path self ..
+const INSTALL_UTILS = path self ./modules/install-utils.nu
+use $INSTALL_UTILS [run-installer probe-tool winget-package-state privileged-command]
 
-# ============================================================
-# install-wezterm.nu
-#
-# WezTerm is optional.
-#
-# External installers write directly to the terminal. This
-# avoids encoding/binary stdout issues from Windows programs
-# such as winget.
-#
-# A failed WezTerm installation does not stop setup.
-# ============================================================
+# WezTerm is optional. Existing PATH entries must pass `wezterm --version`.
 
-
-def winget-package-state [
-    mode: string
-    package_id: string
-    source: string = "winget"
-] {
-    let script = ($TOOLS_ROOT | path join "scripts" "winget-package-state.nu")
-    let args = [$script $mode $package_id "--source" $source]
-
-    ^$nu.current-exe --no-config-file ...$args | ignore
-    let exit_code = ($env.LAST_EXIT_CODE | default 2)
-
-    match $exit_code {
-        0 => { "yes" }
-        10 => { "no" }
-        _ => { "error" }
-    }
-}
-
-def run-program [
-    label: string
-    program: string
-    args: list
-] {
-    print ("[run] " + $label)
-    print ""
-
-    ^$program ...$args
-
-    let exit_code = (
-        $env.LAST_EXIT_CODE
-        | default 0
-    )
-
-    if $exit_code != 0 {
-        print ""
-        print (
-            "[warn] Command returned exit code " + ($exit_code | into string)
-        )
-    }
-
-    $exit_code
-}
-
-def wezterm-visible [] {
-    not (which wezterm | is-empty)
-}
-
-def install-with-winget [] {
-    if (which winget | is-empty) {
-        return false
-    }
-
-    let package_state = (winget-package-state "installed" "wez.wezterm")
-
-    if $package_state == "yes" {
-        print "[ok] WezTerm WinGet package already installed; skipping reinstall"
-        return true
-    }
-
-    if $package_state == "error" {
-        print "[warn] Could not determine WezTerm WinGet state; leaving package unchanged"
-        return true
-    }
-
-    let args = [
-        "install"
-        "--id"
-        "wez.wezterm"
-        "--exact"
-        "--source"
-        "winget"
-        "--accept-package-agreements"
-        "--accept-source-agreements"
-    ]
-
-    let exit_code = (run-program "Install WezTerm with winget" "winget" $args)
-
-    $exit_code == 0
-}
-
-def install-with-scoop [] {
-    if (which scoop | is-empty) {
-        return false
-    }
-
-    let args = [
-        "install"
-        "wezterm"
-    ]
-
-    let exit_code = (run-program "Install WezTerm with Scoop" "scoop" $args)
-
-    $exit_code == 0
-}
-
-def install-with-choco [] {
-    if (which choco | is-empty) {
-        return false
-    }
-
-    let args = [
-        "install"
-        "wezterm"
-        "-y"
-    ]
-
-    let exit_code = (run-program "Install WezTerm with Chocolatey" "choco" $args)
-
-    $exit_code == 0
-}
-
-def install-with-brew [] {
-    if (which brew | is-empty) {
-        return false
-    }
-
-    let args = [
-        "install"
-        "--cask"
-        "wezterm"
-    ]
-
-    let exit_code = (run-program "Install WezTerm with Homebrew" "brew" $args)
-
-    $exit_code == 0
-}
-
-
-def linux-is-root [] {
-    if (which id | is-empty) { return false }
-    let result = (do { ^id -u } | complete)
-    $result.exit_code == 0 and (($result.stdout | str trim) == "0")
-}
-
-def linux-run-root [label: string program: string args: list] {
-    if (linux-is-root) { return (run-program $label $program $args) }
-    if (which sudo | is-empty) {
-        print ("[warn] " + $label + " requires root privileges and sudo is unavailable.")
-        return 1
-    }
-    run-program $label "sudo" ([$program] | append $args)
-}
+def wezterm-probe [] { probe-tool "wezterm" ["--version"] }
 
 def linux-has-gui [] {
-    let display = (
-        $env.DISPLAY?
-        | default ""
-    )
-
-    let wayland = (
-        $env.WAYLAND_DISPLAY?
-        | default ""
-    )
-
+    let display = ($env.DISPLAY? | default "")
+    let wayland = ($env.WAYLAND_DISPLAY? | default "")
     not (($display | is-empty) and ($wayland | is-empty))
 }
 
-def install-linux [] {
-    if not (linux-has-gui) {
-        print "[skip] Headless Linux detected."
-        print "[info] WezTerm is not required on this machine."
-        return true
+def run-linux [label: string program: string args: list] {
+    let elevated = (privileged-command $program $args)
+    if not $elevated.ok { print ("[warn] " + $elevated.reason); return false }
+    (run-installer $label $elevated.program $elevated.args).ok
+}
+
+def install-windows [] {
+    if not (which winget | is-empty) {
+        let state = (winget-package-state $TOOLS_ROOT "wez.wezterm")
+        if $state != "error" {
+            let verb = if $state == "yes" { "upgrade" } else { "install" }
+            if (run-installer ("WezTerm WinGet " + $verb) "winget" [$verb "--id" "wez.wezterm" "--exact" "--source" "winget" "--accept-package-agreements" "--accept-source-agreements"]).ok { return true }
+        } else { print "[warn] Could not determine WezTerm WinGet state." }
     }
-
-    if not (which pacman | is-empty) {
-        let args = [
-            "-S"
-            "--needed"
-            "--noconfirm"
-            "wezterm"
-        ]
-
-        let exit_code = (linux-run-root "Install WezTerm with pacman" "pacman" $args)
-
-        if $exit_code == 0 {
-            return true
-        }
-    }
-
-    if not (which flatpak | is-empty) {
-        let args = [
-            "install"
-            "-y"
-            "flathub"
-            "org.wezfurlong.wezterm"
-        ]
-
-        let exit_code = (run-program "Install WezTerm with Flatpak" "flatpak" $args)
-
-        if $exit_code == 0 {
-            return true
-        }
-    }
-
+    if not (which scoop | is-empty) and (run-installer "Install WezTerm with Scoop" "scoop" ["install" "wezterm"]).ok { return true }
+    if not (which choco | is-empty) and (run-installer "Install WezTerm with Chocolatey" "choco" ["install" "wezterm" "-y"]).ok { return true }
     false
 }
 
-def main [] {
-    if (wezterm-visible) {
-        print "[ok] WezTerm already installed"
-        return
-    }
-
-    print "=== WezTerm installation ==="
-    print ""
-
-    let installed = (
-        match $nu.os-info.name {
-            "windows" => {
-                let winget_ok = (
-                    install-with-winget
-                )
-
-                if $winget_ok {
-                    true
-                } else {
-                    print ""
-                    print "[info] winget installation failed or is unavailable."
-                    print "[info] Trying Scoop fallback..."
-
-                    let scoop_ok = (
-                        install-with-scoop
-                    )
-
-                    if $scoop_ok {
-                        true
-                    } else {
-                        print ""
-                        print "[info] Scoop installation failed or is unavailable."
-                        print "[info] Trying Chocolatey fallback..."
-
-                        install-with-choco
-                    }
-                }
-            }
-
-            "macos" => {
-                install-with-brew
-            }
-
-            "linux" => {
-                install-linux
-            }
-
-            _ => {
-                false
-            }
+def install [] {
+    match $nu.os-info.name {
+        "windows" => { install-windows }
+        "macos" => {
+            if (which brew | is-empty) { print "[warn] Homebrew not found; WezTerm installation skipped."; false } else { (run-installer "Install WezTerm with Homebrew" "brew" ["install" "--cask" "wezterm"]).ok }
         }
-    )
-
-    print ""
-
-    if $installed {
-        print "[ok] WezTerm installation completed"
-        print "[info] A shell restart may be required before WezTerm appears in PATH."
-    } else {
-        print "[warn] WezTerm could not be installed automatically."
-        print "[warn] Continuing setup without WezTerm."
+        "linux" => {
+            if not (linux-has-gui) { print "[skip] Headless Linux detected; WezTerm is not required."; return false }
+            if not (which pacman | is-empty) and (run-linux "Install WezTerm with pacman" "pacman" ["-S" "--needed" "--noconfirm" "wezterm"]) { return true }
+            if not (which flatpak | is-empty) and (run-installer "Install WezTerm with Flatpak" "flatpak" ["install" "-y" "flathub" "org.wezfurlong.wezterm"]).ok { return true }
+            print "[warn] No supported WezTerm package channel found on this Linux host."
+            false
+        }
+        _ => { print "[warn] Unsupported OS for automatic WezTerm installation."; false }
     }
+}
+
+def main [] {
+    let before = (wezterm-probe)
+    if $before.healthy { print ("[ok] WezTerm " + $before.version + " -> " + $before.path); return }
+    if $before.found {
+        print ("[warn] WezTerm exists but failed `wezterm --version`: " + $before.path)
+        if $before.result != null and not ($before.result.diagnostic | str trim | is-empty) { print --stderr $before.result.diagnostic }
+    }
+    let attempted = (install)
+    if not $attempted { return }
+    let after = (wezterm-probe)
+    if $after.healthy { print ("[ok] WezTerm verified -> " + $after.path) } else { print "[warn] WezTerm installer completed, but `wezterm --version` still failed. Restart the shell or repair PATH." }
 }

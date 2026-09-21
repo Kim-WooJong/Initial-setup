@@ -1,6 +1,6 @@
 #!/usr/bin/env nu
 const RUNS = path self ./modules/run-state.nu
-use $RUNS [runs-root create-run load-run mark-stage stage-status finish-run]
+use $RUNS [runs-root create-run load-run mark-stage stage-status finish-run resolve-resume-run]
 def check [ok: bool message: string] {
     if not $ok { error make {msg: ("[run-state-test] " + $message)} }
     print ("[pass] " + $message)
@@ -13,8 +13,20 @@ def tests [] {
     let id = (create-run "0.14.1" "auto" "ask" "minimal" "test-data" true)
     check ((load-run $id).run_id == $id) "Created state can be read"
     mark-stage $id "fixture" "running"
+    mark-stage $id "fixture" "warning" "optional fixture warning"
+    check ((stage-status $id "fixture") == "warning") "Optional warning checkpoint persists"
+    let warned = ((load-run $id).stages | where name == "fixture" | first)
+    check (not (($warned.ended_at? | default "") | is-empty)) "Warning checkpoint receives an end timestamp"
+    mark-stage $id "fixture" "running"
     mark-stage $id "fixture" "success" "fixture complete"
     check ((stage-status $id "fixture") == "success") "Checkpoint replacement persists the latest state"
+    finish-run $id "failed" "fixture final diagnostic"
+    let failed = (load-run $id)
+    check ($failed.status == "failed") "Failed final state persists"
+    check ($failed.final_detail == "fixture final diagnostic") "Final diagnostic persists"
+    finish-run $id "interrupted" "user interruption fixture"
+    check ((load-run $id).status == "interrupted") "Interrupted final state persists"
+    check ((resolve-resume-run $id) == $id) "Interrupted run remains explicitly resumable"
     finish-run $id "success"
     check ((load-run $id).status == "success") "Final state persists"
     let names = (ls --all ((runs-root) | path join $id) | get name | path basename)

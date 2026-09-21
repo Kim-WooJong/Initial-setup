@@ -1,6 +1,8 @@
 #!/usr/bin/env nu
 const PROCESS_OUTPUT = path self ./modules/process-output.nu
+const SUBPROCESS = path self ./modules/subprocess.nu
 use $PROCESS_OUTPUT [output-text]
+use $SUBPROCESS [run-command command-failure-message]
 
 const TOOLS_ROOT = path self ..
 const CORE_MODULE = path self ./modules/core.nu
@@ -27,21 +29,15 @@ def fail [message: string] {
 def run-nu [label: string args: list] {
     print ("[test] " + $label)
 
-    let nu_exe = $nu.current-exe
-    let result = (do { ^$nu_exe --no-config-file ...$args } | complete)
-    let stdout = ($result.stdout? | output-text | str trim)
-    let stderr = ($result.stderr? | output-text | str trim)
+    let nu_exe = ($nu.current-exe | into string)
+    let result = (run-command $nu_exe (["--no-config-file"] | append $args))
+    let stdout = ($result.stdout? | default "" | str trim)
+    let stderr = ($result.stderr? | default "" | str trim)
 
-    if $result.exit_code != 0 {
-        if not ($stdout | is-empty) {
-            print $stdout
-        }
-
-        if not ($stderr | is-empty) {
-            print $stderr
-        }
-
-        fail ($label + " failed with exit code " + ($result.exit_code | into string))
+    if not $result.ok {
+        if not ($stdout | is-empty) { print $stdout }
+        if not ($stderr | is-empty) { print --stderr $stderr }
+        fail (command-failure-message $label $result)
     }
 
     $result
@@ -95,8 +91,8 @@ def main [
         run-nu "syntax-validator regression fixtures" [($TOOLS_ROOT | path join "scripts" "syntax-self-test.nu")] | ignore
         run-nu "offline latest-Nushell runtime regressions" [($TOOLS_ROOT | path join "scripts" "nu-runtime-test.nu")] | ignore
         if $nu.os-info.name != "windows" {
-            ^bash ($TOOLS_ROOT | path join "scripts" "posix" "prepare-nu-cargo-test.sh")
-            if ($env.LAST_EXIT_CODE | default 1) != 0 { fail "Cargo native bootstrap fixture failed." }
+            let cargo_fixture = (run-command "bash" [($TOOLS_ROOT | path join "scripts" "posix" "prepare-nu-cargo-test.sh" | into string)] --live)
+            if not $cargo_fixture.ok { fail (command-failure-message "Cargo native bootstrap fixture" $cargo_fixture) }
         }
         run-nu "language and failure-path regressions" [($TOOLS_ROOT | path join "scripts" "regression-test.nu")] | ignore
         run-nu "offline rclone dependency regressions" [($TOOLS_ROOT | path join "scripts" "rclone-install-test.nu")] | ignore
@@ -180,14 +176,14 @@ def main [
         fail "Local configuration detection did not see the sandbox marker."
     }
 
-    # Verify manifest-v2 transaction backup semantics: an existing file must be
+    # Verify manifest-v3 transaction backup semantics: an existing file must be
     # restored, while a machine-config file that did not exist at backup time
     # must be removed again during rollback.
     let backup_script = ($TOOLS_ROOT | path join "scripts" "backup-local-config.nu")
     run-nu "transaction local backup" [$backup_script "--label" "self-test-transaction" "--quiet"] | ignore
 
     let backup_root = ($sandbox_home | path join ".config" "dotfiles" "local-backups")
-    let backup_rows = (ls $backup_root | where type == dir | sort-by name | reverse)
+    let backup_rows = (ls $backup_root | where type == dir | where {|row| not (($row.name | path basename) | str starts-with ".") } | sort-by name | reverse)
     if ($backup_rows | is-empty) {
         fail "Transaction local backup was not created."
     }
@@ -299,7 +295,20 @@ def main [
     if $keep {
         print ("[info] Sandbox kept at: " + ($sandbox_root | into string))
     } else {
-        rm -r $sandbox_root
+        # Only remove the generated fixture beneath the selected temporary root.
+        if ($sandbox_root | path expand | path dirname) != ((temp-base) | path expand) {
+            fail "Refusing cleanup outside the temporary fixture root."
+        }
+        try {
+            rm --recursive $sandbox_root
+        } catch {|err|
+            if $nu.os-info.name != "windows" { error make {msg: $err.msg} }
+            # Windows may retain handles to INetCache/INetCookies created by
+            # native tools in the isolated profile. All assertions above passed;
+            # report the retained directory instead of misreporting setup failure.
+            print --stderr ("[warn] Sandbox checks passed; Windows cache handles prevented cleanup: " + ($sandbox_root | into string))
+            return
+        }
         print "[ok] Sandbox removed."
     }
 

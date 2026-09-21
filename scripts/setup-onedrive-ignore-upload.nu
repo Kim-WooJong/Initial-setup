@@ -1,6 +1,8 @@
 #!/usr/bin/env nu
 
 const TOOLS_ROOT = path self ..
+const SUBPROCESS = path self ./modules/subprocess.nu
+use $SUBPROCESS [run-command command-failure-message print-result]
 
 def nu-home [] {
     let test_mode = ($env.INITIAL_SETUP_TEST_MODE? | default "" | str trim)
@@ -78,20 +80,9 @@ def main [--check] {
     }
 
     let resolved_args = $args
-    let result = (
-        do { ^$shell ...$resolved_args }
-        | complete
-    )
-
-    let exit_code = $result.exit_code
-
-    if not (($result.stdout? | default "") | is-empty) {
-        print $result.stdout
-    }
-
-    if not (($result.stderr? | default "") | is-empty) {
-        print $result.stderr
-    }
+    let result = (run-command $shell $resolved_args)
+    let exit_code = ($result.exit_code? | default 1)
+    print-result "OneDrive upload exclusion policy" $result
 
     match $exit_code {
         0 => {
@@ -110,9 +101,7 @@ def main [--check] {
         }
 
         _ => {
-            error make {
-                msg: ("OneDrive policy helper failed with exit code " + ($exit_code | into string))
-            }
+            error make { msg: (command-failure-message "OneDrive policy helper" $result) }
         }
     }
 }

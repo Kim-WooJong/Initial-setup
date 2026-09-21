@@ -28,6 +28,11 @@ section() {
 
 have() { command -v "$1" >/dev/null 2>&1; }
 
+healthy_version() {
+    command -v "$1" >/dev/null 2>&1 || return 1
+    "$1" --version >/dev/null 2>&1
+}
+
 is_root() { [ "$(id -u)" -eq 0 ]; }
 
 as_root() {
@@ -180,13 +185,16 @@ install_macos_core() {
 }
 
 install_chezmoi_fallback() {
-    if have chezmoi; then return 0; fi
+    if healthy_version chezmoi; then return 0; fi
+    if have chezmoi; then
+        printf '[warn] chezmoi is present but `chezmoi --version` failed; attempting a user-local repair.\n' >&2
+    fi
     if ! have curl; then return 1; fi
     mkdir -p "$HOME/.local/bin"
     # Official installer. It writes only to the requested user bin directory.
     sh -c "$(curl -fsLS https://get.chezmoi.io)" -- -b "$HOME/.local/bin" || return 1
     export PATH="$HOME/.local/bin:$PATH"
-    have chezmoi
+    healthy_version chezmoi
 }
 
 install_linux_core() {
@@ -195,24 +203,24 @@ install_linux_core() {
         as_root apt-get update
         as_root apt-get install -y ca-certificates curl git tar gzip xz-utils unzip build-essential pkg-config libssl-dev
         if ! have nvim; then run_optional "Install Neovim with apt" as_root apt-get install -y neovim; fi
-        if ! have chezmoi; then run_optional "Install chezmoi with apt" as_root apt-get install -y chezmoi; fi
+        if ! healthy_version chezmoi; then run_optional "Install chezmoi with apt" as_root apt-get install -y chezmoi; fi
     elif have dnf; then
         as_root dnf install -y ca-certificates curl git tar gzip xz unzip gcc gcc-c++ make pkgconf-pkg-config openssl-devel
         if ! have nvim; then run_optional "Install Neovim with dnf" as_root dnf install -y neovim; fi
-        if ! have chezmoi; then run_optional "Install chezmoi with dnf" as_root dnf install -y chezmoi; fi
+        if ! healthy_version chezmoi; then run_optional "Install chezmoi with dnf" as_root dnf install -y chezmoi; fi
     elif have pacman; then
         as_root pacman -Sy --needed --noconfirm ca-certificates curl git tar gzip xz unzip base-devel openssl pkgconf
         if ! have nvim; then run_optional "Install Neovim with pacman" as_root pacman -S --needed --noconfirm neovim; fi
-        if ! have chezmoi; then run_optional "Install chezmoi with pacman" as_root pacman -S --needed --noconfirm chezmoi; fi
+        if ! healthy_version chezmoi; then run_optional "Install chezmoi with pacman" as_root pacman -S --needed --noconfirm chezmoi; fi
     elif have zypper; then
         as_root zypper --non-interactive refresh
         as_root zypper --non-interactive install ca-certificates curl git tar gzip xz unzip gcc gcc-c++ make pkg-config libopenssl-devel
         if ! have nvim; then run_optional "Install Neovim with zypper" as_root zypper --non-interactive install neovim; fi
-        if ! have chezmoi; then run_optional "Install chezmoi with zypper" as_root zypper --non-interactive install chezmoi; fi
+        if ! healthy_version chezmoi; then run_optional "Install chezmoi with zypper" as_root zypper --non-interactive install chezmoi; fi
     elif have apk; then
         as_root apk add --no-cache ca-certificates curl git tar gzip xz unzip build-base pkgconf openssl-dev
         if ! have nvim; then run_optional "Install Neovim with apk" as_root apk add --no-cache neovim; fi
-        if ! have chezmoi; then run_optional "Install chezmoi with apk" as_root apk add --no-cache chezmoi; fi
+        if ! healthy_version chezmoi; then run_optional "Install chezmoi with apk" as_root apk add --no-cache chezmoi; fi
     else
         printf '[error] Unsupported Linux package manager. Supported: apt, dnf, pacman, zypper, apk.\n' >&2
         return 1
@@ -272,9 +280,13 @@ if [ "$DRY_RUN" -eq 0 ] && [ "$CONFIG_POLICY" != "preview" ]; then
         *) printf '[error] Unsupported operating system. Use bootstrap.ps1 on Windows.\n' >&2; exit 1 ;;
     esac
     ensure_shell_path
-    for required in chezmoi git curl tar; do
+    for required in git curl tar; do
         if ! have "$required"; then printf '[error] Missing dependency after bootstrap: %s\n' "$required" >&2; exit 1; fi
     done
+    if ! healthy_version chezmoi; then
+        printf '[error] chezmoi is present or was installed, but `chezmoi --version` is still unhealthy.\n' >&2
+        exit 1
+    fi
 fi
 
 section "Preparing Nushell runtime"
@@ -320,8 +332,9 @@ NU_ARGS=("$ROOT/setup.nu" "--mode" "$MODE" "--config-policy" "$CONFIG_POLICY")
 [ -n "$RUN_ID" ] && NU_ARGS+=("--run-id" "$RUN_ID")
 [ "$VALIDATE" -eq 1 ] && NU_ARGS+=("--validate")
 
-"$NU_RUNTIME" --no-config-file "${NU_ARGS[@]}"
-STATUS=$?
+STATUS=0
+"$NU_RUNTIME" --no-config-file "${NU_ARGS[@]}" || STATUS=$?
+if [ "$STATUS" -eq 130 ]; then printf '[cancelled] setup.nu was interrupted by the user.\n' >&2; exit 130; fi
 if [ "$STATUS" -ne 0 ]; then printf '[error] setup.nu exited with code %s\n' "$STATUS" >&2; exit "$STATUS"; fi
 
 section "Bootstrap complete"

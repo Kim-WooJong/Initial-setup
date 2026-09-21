@@ -1,3 +1,5 @@
+const SUBPROCESS = path self ./subprocess.nu
+use $SUBPROCESS [run-command]
 # Shared Starship discovery and health checks.
 #
 # A Starship executable is considered usable only when both `--version`
@@ -66,7 +68,7 @@ export def starship-candidates [] {
 }
 
 export def probe-starship [path: path] {
-    let version_result = (do { ^$path --version } | complete)
+    let version_result = (run-command ($path | into string) ["--version"])
     let version_stdout = ($version_result.stdout? | default "" | str trim)
     let version_stderr = ($version_result.stderr? | default "" | str trim)
 
@@ -82,7 +84,7 @@ export def probe-starship [path: path] {
         }
     }
 
-    let init_result = (do { ^$path init nu } | complete)
+    let init_result = (run-command ($path | into string) ["init" "nu"])
     let init_stdout = ($init_result.stdout? | default "")
     let init_stderr = ($init_result.stderr? | default "" | str trim)
     let init_exit_code = ($init_result.exit_code? | default 1)

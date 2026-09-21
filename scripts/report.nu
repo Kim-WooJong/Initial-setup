@@ -1,5 +1,10 @@
 #!/usr/bin/env nu
 
+const INSTALL_UTILS = path self ./modules/install-utils.nu
+const SUBPROCESS = path self ./modules/subprocess.nu
+use $INSTALL_UTILS [probe-tool]
+use $SUBPROCESS [run-command]
+
 def nu-home [] {
     let test_mode = ($env.INITIAL_SETUP_TEST_MODE? | default "" | str trim)
     let override = ($env.INITIAL_SETUP_HOME_OVERRIDE? | default "" | str trim)
@@ -30,21 +35,14 @@ def machine-context [] {
     open $file
 }
 
-def first-version [
-    command: string
-    args: list
-] {
-    if (which $command | is-empty) {
-        return "not installed"
+def first-version [command: string args: list] {
+    let probe = (probe-tool $command $args)
+    if not $probe.found { return "not installed" }
+    if not $probe.healthy {
+        let detail = ($probe.result.diagnostic? | default "health probe failed" | str trim)
+        return ("unhealthy: " + $detail)
     }
-
-    let output = (^$command ...$args | lines)
-
-    if ($output | is-empty) {
-        "installed"
-    } else {
-        $output | first | str trim
-    }
+    if ($probe.version | str trim | is-empty) { "installed/healthy" } else { $probe.version }
 }
 
 def main [
@@ -75,7 +73,11 @@ def main [
         (
             "Git describe   : " + (
                 if (($context.tools_root | path expand | path join ".git") | path exists) {
-                    ^git -C ($context.tools_root | path expand) describe --tags --always --dirty | str trim
+                    let git = (probe-tool "git" ["--version"])
+                    if $git.healthy {
+                        let described = (run-command $git.path ["-C" (($context.tools_root | path expand) | into string) "describe" "--tags" "--always" "--dirty"])
+                        if $described.ok { $described.stdout | str trim } else { "git describe failed: " + ($described.diagnostic? | default "unknown error") }
+                    } else { "git unavailable/unhealthy" }
                 } else {
                     "not a Git checkout"
                 }

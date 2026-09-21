@@ -5,6 +5,7 @@
 - [Features and Roles](Features-and-Roles.md)
 - [Command Reference](Command-Reference.md)
 - [Architecture](Architecture.md)
+- [Code Architecture](Code-Architecture.md)
 - [Synchronization](Synchronization.md)
 - [Cloud-wins](Cloud-Wins.md)
 - [Recovery and Safety](Recovery-and-Safety.md)

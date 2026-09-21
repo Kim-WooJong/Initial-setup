@@ -1,5 +1,8 @@
 # Shared Initial-setup helpers.
 
+const SUBPROCESS = path self ./subprocess.nu
+use $SUBPROCESS [run-command]
+
 export def nu-home [] {
     let test_mode = ($env.INITIAL_SETUP_TEST_MODE? | default "" | str trim)
     let override = ($env.INITIAL_SETUP_HOME_OVERRIDE? | default "" | str trim)
@@ -55,7 +58,8 @@ export def detect-machine-name [] {
     }
 
     if not (which hostname | is-empty) {
-        let external_name = (^hostname | str trim)
+        let result = (run-command "hostname" [])
+        let external_name = (if $result.ok { $result.stdout | str trim } else { "" })
 
         if not ($external_name | is-empty) {
             return $external_name

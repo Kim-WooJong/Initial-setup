@@ -1,8 +1,8 @@
 #!/usr/bin/env nu
 const CLOUD_CONFIG = path self ./modules/cloud-wins-config.nu
 use $CLOUD_CONFIG [cloud-mode-active]
-const PROCESS_OUTPUT = path self ./modules/process-output.nu
-use $PROCESS_OUTPUT [output-text]
+const SUBPROCESS = path self ./modules/subprocess.nu
+use $SUBPROCESS [run-command command-failure-message]
 
 const TOOLS_ROOT = path self ..
 
@@ -64,13 +64,16 @@ def log [
         $message
     ]
 
-    ^$nu.current-exe --no-config-file ...$args | ignore
+    let result = (run-command $nu.current-exe (["--no-config-file"] | append $args))
+    if not $result.ok {
+        print --stderr ("[warn] Event logging failed: " + (command-failure-message "log-event" $result))
+    }
 }
 
 def fingerprint [kind: string] {
     let script = ($TOOLS_ROOT | path join "scripts" "sync-fingerprint.nu")
-    let result = (do { ^$nu.current-exe --no-config-file $script --kind $kind } | complete)
-    if $result.exit_code != 0 { error make { msg: "Fingerprint unavailable; synchronization baseline was not advanced." } }
+    let result = (run-command $nu.current-exe ["--no-config-file" $script "--kind" $kind])
+    if not $result.ok { error make { msg: ((command-failure-message ("Fingerprint " + $kind) $result) + (char nl) + "Synchronization baseline was not advanced.") } }
     let value = ($result.stdout | str trim)
     if not ($value =~ '^[a-f0-9]{64}$') and not ($kind == "cloud" and ($value | is-empty)) {
         error make { msg: "Invalid fingerprint result." }
@@ -80,14 +83,9 @@ def fingerprint [kind: string] {
 
 def run-script [name: string] {
     let script = ($TOOLS_ROOT | path join "scripts" $name)
-    let result = (do { ^$nu.current-exe --no-config-file $script } | complete)
-
-    let stderr = ($result.stderr? | output-text | str trim)
-    if $result.exit_code != 0 and not ($stderr | is-empty) {
-        print $stderr
-    }
-
-    $result.exit_code
+    let result = (run-command $nu.current-exe ["--no-config-file" $script])
+    if not $result.ok and not ($result.diagnostic | str trim | is-empty) { print --stderr $result.diagnostic }
+    if $result.exit_code == null { 1 } else { $result.exit_code }
 }
 
 def wait-stable [seconds: int] {

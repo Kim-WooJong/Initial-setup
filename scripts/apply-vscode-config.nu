@@ -91,7 +91,7 @@ def apply-dir [source: path destination: path prune: bool] {
     merge-dir $source $destination
 }
 
-def main [--prune] {
+def main [--prune --source-root: string = ""] {
     let user_dir = (vscode-user-dir)
 
     if $user_dir == null {
@@ -102,7 +102,8 @@ def main [--prune] {
     let context = (machine-context)
     let configured_prune = ($context.sync.prune_extras? | default false)
     let should_prune = ($prune or $configured_prune)
-    let private_root = ($context.data_root | path expand | path join "vscode")
+    let source_root = if ($source_root | str trim | is-empty) { $context.data_root | path expand } else { $source_root | path expand }
+    let private_root = ($source_root | path join "vscode")
 
     if not ($private_root | path exists) {
         print "[skip] Private VS Code configuration not found."

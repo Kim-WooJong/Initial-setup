@@ -1,5 +1,7 @@
-const PROCESS_OUTPUT = path self ./process-output.nu
-use $PROCESS_OUTPUT [output-text]
+const SUBPROCESS = path self ./subprocess.nu
+const CONSOLE = path self ./console.nu
+use $SUBPROCESS [run-command]
+use $CONSOLE [print-ok print-warn style]
 # Protected-file and three-way conflict helpers.
 
 const CORE_MODULE = path self ./core.nu
@@ -70,29 +72,23 @@ export def protected-conflicts [source: path] {
 
         # Policy entries may exist on only some machines. Do not turn an
         # unmanaged local file into a false conflict.
-        let managed = (
-            do { ^chezmoi --source ($source | into string) source-path ($target | into string) }
-            | complete
-        )
-        if $managed.exit_code != 0 or (($managed.stdout? | default "" | str trim) | is-empty) {
+        let managed = (run-command "chezmoi" ["--source" ($source | into string) "source-path" ($target | into string)])
+        if not $managed.ok or (($managed.stdout | str trim) | is-empty) {
             continue
         }
 
-        let result = (
-            do { ^chezmoi --source ($source | into string) diff ($target | into string) }
-            | complete
-        )
+        let result = (run-command "chezmoi" ["--source" ($source | into string) "--no-pager" "--use-builtin-diff" "diff" ($target | into string)])
 
-        if $result.exit_code != 0 {
+        if not $result.ok {
             $conflicts = ($conflicts | append {
                 entry: $entry
                 target: ($target | into string)
-                error: ($result.stderr? | output-text | str trim | default "chezmoi diff failed")
+                error: ($result.diagnostic | str trim | default "chezmoi diff failed")
             })
             continue
         }
 
-        let diff = ($result.stdout? | default "" | str trim)
+        let diff = ($result.stdout | str trim)
         if not ($diff | is-empty) {
             $conflicts = ($conflicts | append {
                 entry: $entry
@@ -107,14 +103,14 @@ export def protected-conflicts [source: path] {
 
 export def print-protected-conflicts [conflicts: list] {
     if ($conflicts | is-empty) {
-        print "Protected-file conflicts: none"
+        print-ok "Protected-file conflicts: none"
         return
     }
 
-    print "Protected-file conflicts"
+    print (style "warn" "Protected-file conflicts")
     print "────────────────────────────────────────────────────────────"
     for item in $conflicts {
-        print ("  [protected] " + $item.target)
+        print ((style "warn" "  [protected]") + " " + $item.target)
         if not (($item.error? | default "") | is-empty) {
             print ("              " + $item.error)
         }

@@ -1,5 +1,8 @@
 #!/usr/bin/env nu
 
+const SUBPROCESS = path self ./modules/subprocess.nu
+use $SUBPROCESS [run-command command-failure-message]
+
 # ============================================================
 # Capture the exact current VS Code extension set.
 # ============================================================
@@ -75,12 +78,12 @@ def main [] {
         "--list-extensions"
     ]
 
+    let result = (run-command "code" $args)
+    if not $result.ok { error make {msg: (command-failure-message "List VS Code extensions" $result)} }
     let current = (
-        ^code ...$args
+        $result.stdout
         | lines
-        | where { |item|
-            not ($item | is-empty)
-        }
+        | where { |item| not ($item | is-empty) }
         | sort
         | uniq
         | str join (char nl)

@@ -38,6 +38,12 @@ def tests [base: path] {
     check ($next.active and $next.previous_context.tools_root == ($ROOT | into string) and $next.activated_context.tools_root == ($ROOT | into string)) "Active recovery snapshots follow the new checkout"
     let refreshed = (open --raw (machine-config-path) | from nuon)
     check ($refreshed == ($active | upsert tools_root ($ROOT | into string))) "Refresh only changes tools_root"
+    let installed_modules = ((($base | path join ".config" "nushell" "modules")))
+    for name in ["dotfiles.nu" "subprocess.nu" "process-output.nu" "console.nu"] {
+        let installed = ($installed_modules | path join $name)
+        check ($installed | path exists) ("Refresh installs command runtime dependency: " + $name)
+        check ((open --raw $installed | hash sha256) == (open --raw ($ROOT | path join "scripts" "modules" $name) | hash sha256)) ("Installed command runtime module matches checkout: " + $name)
+    }
     # Simulate interruption after cloud snapshots changed but before machine write.
     atomic-record (machine-config-path) $active
     child $IMPL []

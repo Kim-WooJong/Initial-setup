@@ -1,7 +1,9 @@
 const CORE_MODULE = path self ./core.nu
+const SUBPROCESS = path self ./subprocess.nu
 const GIT_IDENTITIES_MODULE = path self ./git-identities.nu
 
 use $CORE_MODULE [nu-home]
+use $SUBPROCESS [run-command]
 use $GIT_IDENTITIES_MODULE [active-git-identities]
 
 export def ssh-dir [] {
@@ -86,10 +88,10 @@ export def generate-missing-public-keys [] {
             continue
         }
 
-        let result = (do { ^ssh-keygen -y -P "" -f $key } | complete)
-        let public_key = ($result.stdout? | default "" | str trim)
+        let result = (run-command "ssh-keygen" ["-y" "-P" "" "-f" ($key | into string)])
+        let public_key = ($result.stdout | str trim)
 
-        if $result.exit_code == 0 and not ($public_key | is-empty) {
+        if $result.ok and not ($public_key | is-empty) {
             ($public_key + (char nl)) | save $pub
             print ("[create] SSH public key -> " + ($pub | into string))
             $generated = $generated + 1

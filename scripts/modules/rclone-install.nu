@@ -1,5 +1,7 @@
 const PROCESS_OUTPUT = path self ./process-output.nu
 use $PROCESS_OUTPUT [output-text]
+const SUBPROCESS = path self ./subprocess.nu
+use $SUBPROCESS [run-command]
 # rclone is a setup dependency, separate from optional configuration capture.
 # Install only through an existing package manager. Never fetch/run shell scripts,
 # change remote credentials, install mount drivers, or upgrade a working binary.
@@ -69,7 +71,7 @@ def registered-windows-path [] {
     if ($shells | is-empty) { return [] }
     let shell = ($shells | first)
     let script = '[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false); $paths = @(); foreach ($scope in @("Machine", "User")) { $value = [Environment]::GetEnvironmentVariable("Path", $scope); if ($value) { foreach ($part in ($value -split ";")) { if ($part) { $paths += [Environment]::ExpandEnvironmentVariables($part) } } } }; ConvertTo-Json -Compress -InputObject @($paths)'
-    let result = (try { do { ^$shell -NoLogo -NoProfile -NonInteractive -Command $script } | complete } catch { {exit_code: 1 stdout: ""} })
+    let result = (run-command $shell ["-NoLogo" "-NoProfile" "-NonInteractive" "-Command" $script])
     if $result.exit_code != 0 { return [] }
     try { $result.stdout | from json } catch { [] }
 }
@@ -101,7 +103,7 @@ export def rclone-probe [] {
     let matches = (which "^rclone" | where type == external)
     if ($matches | is-empty) { return {found: false ready: false path: "" version: ""} }
     let exe = ($matches | first | get path)
-    let result = (try { do { ^$exe version } | complete } catch { {exit_code: 1 stdout: ""} })
+    let result = (run-command ($exe | into string) ["version"])
     let versions = ($result.stdout | lines | where {|line| $line | str starts-with "rclone v" })
     let version = (if ($versions | is-empty) { "" } else { $versions | first | str trim })
     {found: true ready: ($result.exit_code == 0 and not ($version | is-empty)) path: ($exe | into string) version: $version}
@@ -154,7 +156,7 @@ def execute-install-step [step: record] {
     }
     print ("[run] " + $step.label)
     if $step.kind == "winget-state" {
-        let result = (do { ^winget list --id Rclone.Rclone --exact --source winget --accept-source-agreements --disable-interactivity } | complete)
+        let result = (run-command "winget" ["list" "--id" "Rclone.Rclone" "--exact" "--source" "winget" "--accept-source-agreements" "--disable-interactivity"])
         check-rclone-winget-state $result.exit_code (($result.stdout | output-text) + ($result.stderr | output-text)) | ignore
         return {exit_code: 0 stderr: ""}
     }
@@ -162,7 +164,7 @@ def execute-install-step [step: record] {
     let args = $step.args
     # Capture the native exit code explicitly. In a terminal sudo can still use
     # its controlling TTY; package output is shown when the command completes.
-    let result = (do { ^$program ...$args } | complete)
+    let result = (run-command $program $args)
     if not ($result.stdout | is-empty) { print ($result.stdout | output-text) }
     if not ($result.stderr | is-empty) { print --stderr ($result.stderr | output-text) }
     {exit_code: $result.exit_code stderr: "See the package manager output above. No other manager or unverified download was tried."}
@@ -174,7 +176,7 @@ export def --env ensure-rclone [--dry-run --check] {
     let candidates = ["winget" "brew" "apt-get" "dnf" "pacman" "zypper" "apk" "sudo"]
     let commands = ($candidates | where {|name| not (which ("^" + $name) | is-empty) })
     let is_root = (if $nu.os-info.name == "linux" and not (which "^id" | is-empty) {
-        let result = (do { ^id -u } | complete)
+        let result = (run-command "id" ["-u"])
         $result.exit_code == 0 and ($result.stdout | str trim) == "0"
     } else { false })
     let plan = (rclone-install-plan $nu.os-info.name $commands $is_root)

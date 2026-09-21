@@ -1,31 +1,10 @@
 #!/usr/bin/env nu
 
 const TOOLS_ROOT = path self ..
-
-def nu-home [] {
-    let test_mode = ($env.INITIAL_SETUP_TEST_MODE? | default "" | str trim)
-    let override = ($env.INITIAL_SETUP_HOME_OVERRIDE? | default "" | str trim)
-
-    if $test_mode == "1" and not ($override | is-empty) {
-        return ($override | path expand)
-    }
-
-    let home_path = ($nu | get --optional home-path)
-
-    if $home_path != null {
-        return $home_path
-    }
-
-    let home_dir = ($nu | get --optional home-dir)
-
-    if $home_dir != null {
-        return $home_dir
-    }
-
-    error make {
-        msg: "Unable to determine the Nushell home directory."
-    }
-}
+const CORE = path self ./modules/core.nu
+const DIAGNOSTICS = path self ./modules/diagnostics.nu
+use $CORE [nu-home]
+use $DIAGNOSTICS [diagnostic-check tool-diagnostic print-diagnostic summarize-diagnostics]
 
 def app-version [] {
     open --raw ($TOOLS_ROOT | path join "VERSION")
@@ -45,9 +24,6 @@ def main [] {
     let conflict_file = ((nu-home) | path join ".config" "dotfiles" "SYNC-CONFLICT.txt")
     let tool_state = ((nu-home) | path join ".config" "dotfiles" "state" "tools.nuon")
 
-    mut critical = 0
-    mut warnings = 0
-
     print "Initial-setup audit"
     print "==================="
 
@@ -61,6 +37,8 @@ def main [] {
     let expected_schema = (schema-version)
     let actual_app = ($context.app_version? | default (($context | get --optional version) | default "unknown"))
     let actual_schema = ($context.schema_version? | default 0)
+    let data_root = ($context.data_root | path expand)
+    let tools_root = ($context.tools_root | path expand)
 
     print ("Application    : " + $actual_app + " / expected " + $expected_app)
     print ("Config schema  : " + ($actual_schema | into string) + " / expected " + ($expected_schema | into string))
@@ -69,108 +47,45 @@ def main [] {
     print ("Prune extras   : " + (($context.sync.prune_extras? | default false) | into string))
     print ""
 
-    if $actual_app == $expected_app {
-        print "[ok] Application version matches machine config."
-    } else {
-        print "[WARN] Machine config app_version differs from repository VERSION."
-        $warnings = $warnings + 1
-    }
+    let data_root_ok = if ($data_root | path exists) { ($data_root | path type) == "dir" } else { false }
+    let tools_root_ok = if ($tools_root | path exists) { ($tools_root | path type) == "dir" } else { false }
 
-    if $actual_schema == $expected_schema {
-        print "[ok] Machine config schema is current."
-    } else {
-        print "[FAIL] Machine config schema is not current."
-        $critical = $critical + 1
-    }
+    mut checks = []
+    $checks = ($checks | append (diagnostic-check "config:app-version" "Application version matches machine config" "warning" ($actual_app == $expected_app) (if $actual_app == $expected_app { $actual_app } else { "machine=" + $actual_app + ", repository=" + $expected_app }) "Run `nu setup.nu` after reviewing the configuration diff."))
+    $checks = ($checks | append (diagnostic-check "config:schema" "Machine config schema is current" "critical" ($actual_schema == $expected_schema) ("machine=" + ($actual_schema | into string) + ", expected=" + ($expected_schema | into string)) "Run `nu setup.nu` or `dotdoctor --fix`."))
+    $checks = ($checks | append (diagnostic-check "path:private-data" "Private data root exists" "critical" $data_root_ok ($data_root | into string) "Restore or reconnect the configured private data root."))
+    $checks = ($checks | append (diagnostic-check "path:tools-root" "Tools root exists" "critical" $tools_root_ok ($tools_root | into string) "Update the machine config or restore the project directory."))
 
-    let data_root = ($context.data_root | path expand)
-    let tools_root = ($context.tools_root | path expand)
-
-    if ($data_root | path exists) {
-        print "[ok] Private data root exists."
-    } else {
-        print "[FAIL] Private data root is unavailable."
-        $critical = $critical + 1
-    }
-
-    if ($tools_root | path exists) {
-        print "[ok] Tools root exists."
-    } else {
-        print "[FAIL] Tools root is unavailable."
-        $critical = $critical + 1
-    }
-
-    if (which chezmoi | is-empty) {
-        print "[FAIL] chezmoi is not available."
-        $critical = $critical + 1
-    } else {
-        print "[ok] chezmoi is available."
-    }
-
-    if (which git | is-empty) {
-        print "[WARN] Git is not available."
-        $warnings = $warnings + 1
-    } else {
-        print "[ok] Git is available."
-    }
+    $checks = ($checks | append (tool-diagnostic "chezmoi" ["--version"] "critical" "chezmoi"))
+    $checks = ($checks | append (tool-diagnostic "git" ["--version"] "warning" "Git"))
 
     if $context.features.neovim {
-        if (which nvim | is-empty) {
-            print "[FAIL] Neovim feature is enabled but nvim is unavailable."
-            $critical = $critical + 1
-        } else {
-            print "[ok] Neovim is available."
-        }
+        $checks = ($checks | append (tool-diagnostic "nvim" ["--version"] "warning" "Neovim"))
     }
-
     if $context.features.starship {
-        if (which starship | is-empty) {
-            print "[WARN] Starship feature is enabled but starship is unavailable."
-            $warnings = $warnings + 1
-        } else {
-            print "[ok] Starship is available."
-        }
+        $checks = ($checks | append (tool-diagnostic "starship" ["--version"] "warning" "Starship"))
     }
-
     if $context.features.rust {
-        if (which cargo | is-empty) {
-            print "[WARN] Rust feature is enabled but cargo is unavailable."
-            $warnings = $warnings + 1
-        } else {
-            print "[ok] Cargo is available."
-        }
+        $checks = ($checks | append (tool-diagnostic "cargo" ["--version"] "warning" "Cargo"))
     }
-
     if $context.features.julia {
-        if (which julia | is-empty) {
-            print "[WARN] Julia feature is enabled but julia is unavailable."
-            $warnings = $warnings + 1
-        } else {
-            print "[ok] Julia is available."
-        }
+        $checks = ($checks | append (tool-diagnostic "julia" ["--version"] "warning" "Julia"))
     }
 
-    if ($conflict_file | path exists) {
-        print "[FAIL] Automatic synchronization conflict marker exists."
-        $critical = $critical + 1
-    } else {
-        print "[ok] No synchronization conflict marker."
+    $checks = ($checks | append (diagnostic-check "sync:conflict" "No synchronization conflict marker" "critical" (not ($conflict_file | path exists)) ($conflict_file | into string) "Resolve the conflict before the next automatic synchronization."))
+    $checks = ($checks | append (diagnostic-check "state:tools" "Tool-version snapshot exists" "warning" ($tool_state | path exists) ($tool_state | into string) "Run `dotstate` to capture the current tool versions."))
+
+    for row in $checks {
+        print-diagnostic $row
     }
 
-    if ($tool_state | path exists) {
-        print "[ok] Tool-version snapshot exists."
-    } else {
-        print "[WARN] Tool-version snapshot is missing; run `dotstate`."
-        $warnings = $warnings + 1
-    }
-
+    let summary = (summarize-diagnostics $checks)
     print ""
     print "Summary"
     print "-------"
-    print ("Critical : " + ($critical | into string))
-    print ("Warnings : " + ($warnings | into string))
+    print ("Passed   : " + ($summary.passed | into string))
+    print ("Critical : " + ($summary.failed | into string))
+    print ("Warnings : " + ($summary.warnings | into string))
 
-    if $critical > 0 {
-        exit 1
-    }
+    if $summary.failed > 0 { exit 1 }
 }

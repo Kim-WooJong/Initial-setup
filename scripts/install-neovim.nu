@@ -1,155 +1,72 @@
 #!/usr/bin/env nu
 
 const TOOLS_ROOT = path self ..
+const INSTALL_UTILS = path self ./modules/install-utils.nu
+use $INSTALL_UTILS [run-installer probe-tool winget-package-state privileged-command]
 
+# Neovim is optional. A visible executable is accepted only when `nvim --version`
+# succeeds. Installer success is also followed by the same health probe.
 
-def winget-package-state [
-    mode: string
-    package_id: string
-    source: string = "winget"
-] {
-    let script = ($TOOLS_ROOT | path join "scripts" "winget-package-state.nu")
-    let args = [$script $mode $package_id "--source" $source]
+def nvim-probe [] { probe-tool "nvim" ["--version"] }
 
-    ^$nu.current-exe --no-config-file ...$args | ignore
-    let exit_code = ($env.LAST_EXIT_CODE | default 2)
-
-    match $exit_code {
-        0 => { "yes" }
-        10 => { "no" }
-        _ => { "error" }
+def run-linux [label: string program: string args: list] {
+    let elevated = (privileged-command $program $args)
+    if not $elevated.ok {
+        print ("[warn] " + $elevated.reason)
+        return false
     }
+    (run-installer $label $elevated.program $elevated.args).ok
 }
 
-def nu-home [] {
-    let test_mode = ($env.INITIAL_SETUP_TEST_MODE? | default "" | str trim)
-    let override = ($env.INITIAL_SETUP_HOME_OVERRIDE? | default "" | str trim)
-
-    if $test_mode == "1" and not ($override | is-empty) {
-        return ($override | path expand)
-    }
-
-    let home_path = ($nu | get --optional home-path)
-
-    if $home_path != null {
-        return $home_path
-    }
-
-    let home_dir = ($nu | get --optional home-dir)
-
-    if $home_dir != null {
-        return $home_dir
-    }
-
-    error make {
-        msg: "Unable to determine the Nushell home directory."
-    }
-}
-
-def run-program [label: string program: string args: list] {
-    print ("[run] " + $label)
-    ^$program ...$args
-    let exit_code = ($env.LAST_EXIT_CODE | default 0)
-
-    if $exit_code != 0 {
-        print ("[warn] " + $label + " returned exit code " + ($exit_code | into string))
-    }
-
-    $exit_code
-}
-
-
-def linux-is-root [] {
-    if (which id | is-empty) { return false }
-    let result = (do { ^id -u } | complete)
-    $result.exit_code == 0 and ($result.stdout | str trim) == "0"
-}
-
-def run-linux-package [label: string manager: string args: list] {
-    if (linux-is-root) { return (run-program $label $manager $args) }
-    if (which sudo | is-empty) {
-        print ("[warn] " + $label + " requires root privileges and sudo is unavailable")
-        return 1
-    }
-    run-program $label "sudo" ([$manager] | append $args)
-}
-
-def main [] {
-    if not (which nvim | is-empty) {
-        print "[ok] Neovim already installed"
-        return
-    }
-
+def install [] {
     match $nu.os-info.name {
         "windows" => {
             if (which winget | is-empty) {
                 print "[warn] winget not found; Neovim installation skipped."
-                return
+                return false
             }
-
-            let package_state = (winget-package-state "installed" "Neovim.Neovim")
-
-            if $package_state == "yes" {
-                print "[ok] Neovim WinGet package already installed; skipping reinstall"
-                print "[info] nvim is not visible in PATH in this process"
-                return
+            let state = (winget-package-state $TOOLS_ROOT "Neovim.Neovim")
+            if $state == "error" {
+                print "[warn] Could not determine Neovim WinGet state; refusing a blind reinstall."
+                return false
             }
-
-            if $package_state == "error" {
-                print "[warn] Could not determine Neovim WinGet state; leaving package unchanged"
-                return
-            }
-
-            let args = ["install" "--id" "Neovim.Neovim" "--exact" "--source" "winget" "--accept-package-agreements" "--accept-source-agreements"]
-            run-program "Install Neovim with winget" "winget" $args | ignore
+            let verb = if $state == "yes" { "upgrade" } else { "install" }
+            (run-installer ("Neovim WinGet " + $verb) "winget" [$verb "--id" "Neovim.Neovim" "--exact" "--source" "winget" "--accept-package-agreements" "--accept-source-agreements"]).ok
         }
-
         "macos" => {
-            if (which brew | is-empty) {
-                print "[warn] Homebrew not found; Neovim installation skipped."
-                return
-            }
-
-            run-program "Install Neovim with Homebrew" "brew" ["install" "neovim"] | ignore
+            if (which brew | is-empty) { print "[warn] Homebrew not found; Neovim installation skipped."; return false }
+            (run-installer "Install Neovim with Homebrew" "brew" ["install" "neovim"]).ok
         }
-
         "linux" => {
-            if not (which apt-get | is-empty) {
-                run-linux-package "Install Neovim with APT" "apt-get" ["install" "-y" "neovim"] | ignore
-                return
-            }
-
-            if not (which dnf | is-empty) {
-                run-linux-package "Install Neovim with DNF" "dnf" ["install" "-y" "neovim"] | ignore
-                return
-            }
-
-            if not (which pacman | is-empty) {
-                run-linux-package "Install Neovim with pacman" "pacman" ["-S" "--needed" "--noconfirm" "neovim"] | ignore
-                return
-            }
-
-            if not (which zypper | is-empty) {
-                run-linux-package "Install Neovim with zypper" "zypper" ["--non-interactive" "install" "neovim"] | ignore
-                return
-            }
-
-            if not (which apk | is-empty) {
-                run-linux-package "Install Neovim with apk" "apk" ["add" "--no-cache" "neovim"] | ignore
-                return
-            }
-
+            if not (which apt-get | is-empty) { return (run-linux "Install Neovim with APT" "apt-get" ["install" "-y" "neovim"]) }
+            if not (which dnf | is-empty) { return (run-linux "Install Neovim with DNF" "dnf" ["install" "-y" "neovim"]) }
+            if not (which pacman | is-empty) { return (run-linux "Install Neovim with pacman" "pacman" ["-S" "--needed" "--noconfirm" "neovim"]) }
+            if not (which zypper | is-empty) { return (run-linux "Install Neovim with zypper" "zypper" ["--non-interactive" "install" "neovim"]) }
+            if not (which apk | is-empty) { return (run-linux "Install Neovim with apk" "apk" ["add" "--no-cache" "neovim"]) }
             print "[warn] No supported Linux package manager found for Neovim."
+            false
         }
+        _ => { print "[warn] Unsupported OS for automatic Neovim installation."; false }
+    }
+}
 
-        _ => {
-            print "[warn] Unsupported OS for automatic Neovim installation."
-        }
+def main [] {
+    let before = (nvim-probe)
+    if $before.healthy {
+        print ("[ok] Neovim " + $before.version + " -> " + $before.path)
+        return
+    }
+    if $before.found {
+        print ("[warn] Neovim exists but failed `nvim --version`: " + $before.path)
+        if $before.result != null and not ($before.result.diagnostic | str trim | is-empty) { print --stderr $before.result.diagnostic }
     }
 
-    if (which nvim | is-empty) {
-        print "[info] If installation succeeded, restart the shell so PATH can refresh."
+    let attempted = (install)
+    if not $attempted { return }
+    let after = (nvim-probe)
+    if $after.healthy {
+        print ("[ok] Neovim verified -> " + $after.path)
     } else {
-        print "[ok] Neovim installed"
+        print "[warn] Neovim installer completed, but `nvim --version` still failed. Restart the shell or repair PATH."
     }
 }

@@ -1,6 +1,10 @@
 #!/usr/bin/env nu
 
 const TOOLS_ROOT = path self ..
+const SUBPROCESS = path self ./modules/subprocess.nu
+const CONSOLE = path self ./modules/console.nu
+use $SUBPROCESS [run-command command-failure-message]
+use $CONSOLE [print-info print-ok print-warn]
 
 def nu-home [] {
     let test_mode = ($env.INITIAL_SETUP_TEST_MODE? | default "" | str trim)
@@ -38,15 +42,9 @@ def run-script [
     ...args: string
 ] {
     let script = ($tools_root | path join "scripts" $name)
-
-    ^$nu.current-exe --no-config-file $script ...$args
-
-    let exit_code = ($env.LAST_EXIT_CODE | default 0)
-
-    if $exit_code != 0 {
-        error make {
-            msg: ("Script failed: " + ($script | into string))
-        }
+    let result = (run-command $nu.current-exe (["--no-config-file" $script] | append $args) --live)
+    if not $result.ok {
+        error make {msg: (command-failure-message ("Script " + $name) $result)}
     }
 }
 
@@ -60,7 +58,10 @@ def log [level: string message: string] {
         $message
     ]
 
-    ^$nu.current-exe --no-config-file ...$args | ignore
+    let result = (run-command $nu.current-exe (["--no-config-file"] | append $args))
+    if not $result.ok {
+        print-warn ("Event logging failed: " + (command-failure-message "log-event" $result))
+    }
 }
 
 def main [] {
@@ -95,7 +96,7 @@ def main [] {
         run-script $tools_root "capture-rclone-config.nu"
     }
 
-    print ("Private data: " + ($data_root | into string))
+    print-info ("Private data: " + ($data_root | into string))
     print "[1/4] Updating managed chezmoi files..."
 
     let args = [
@@ -104,15 +105,10 @@ def main [] {
         "re-add"
     ]
 
-    ^chezmoi ...$args
-
-    let readd_exit = ($env.LAST_EXIT_CODE | default 0)
-
-    if $readd_exit != 0 {
+    let readd = (run-command "chezmoi" $args --live)
+    if not $readd.ok {
         log "ERROR" "chezmoi re-add failed."
-        error make {
-            msg: "chezmoi re-add failed"
-        }
+        error make {msg: (command-failure-message "chezmoi re-add" $readd)}
     }
 
     if $context.features.vscode {
@@ -131,5 +127,5 @@ def main [] {
     # Sync baseline is committed by sync-transport.nu after remote verification.
 
     log "INFO" "Local configuration published to private cloud source."
-    print "[ok] Local configuration is now authoritative."
+    print-ok "Local configuration is now authoritative."
 }

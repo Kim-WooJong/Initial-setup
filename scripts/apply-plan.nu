@@ -1,5 +1,7 @@
 #!/usr/bin/env nu
 const TOOLS_ROOT = path self ..
+const SUBPROCESS = path self ./modules/subprocess.nu
+use $SUBPROCESS [run-command command-failure-message]
 const PLANNER = path self ./modules/planner.nu
 use $PLANNER [resolve-plan-path]
 const PROVIDER = path self ./modules/sync-provider.nu
@@ -8,9 +10,10 @@ const RCLONE = path self ./modules/rclone-install.nu
 use $RCLONE [refresh-rclone-path ensure-rclone]
 
 def run-plan-script [script: string ...args: string] {
-    let exe = $nu.current-exe
-    ^$exe --no-config-file ($TOOLS_ROOT | path join "scripts" $script) ...$args
-    if ($env.LAST_EXIT_CODE | default 0) != 0 { error make { msg: ("Plan action failed: " + $script) } }
+    let exe = ($nu.current-exe | into string)
+    let target = ($TOOLS_ROOT | path join "scripts" $script)
+    let result = (run-command $exe (["--no-config-file" ($target | into string)] | append $args) --live)
+    if not $result.ok { error make { msg: (command-failure-message ("Plan action " + $script) $result) } }
 }
 
 def main [--plan: string = "" --yes] {
@@ -42,7 +45,8 @@ def main [--plan: string = "" --yes] {
     print ("Protected    : " + (($plan_data.protected_conflicts? | default [] | length) | into string) + " conflict(s)")
 
     if not $yes {
-        let answer = (input "Apply this plan? [y/N]: " | str trim)
+        print "Apply this plan? [y/N] (default: N):"
+        let answer = (input | str trim)
         if not ($answer in ["y" "Y" "yes" "YES"]) { print "Cancelled."; return }
     }
 

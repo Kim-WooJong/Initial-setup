@@ -2,167 +2,119 @@
 
 const TOOLS_ROOT = path self ..
 const CORE = path self ./modules/core.nu
+const SAFETY = path self ./modules/safety.nu
+const PROVIDER = path self ./modules/sync-provider.nu
+const SUBPROCESS = path self ./modules/subprocess.nu
 use $CORE [error-message failure-envelope captured-failure]
+use $SAFETY [state-root operation-lease release-lease manifest-hash]
+use $PROVIDER [load-provider assert-expected-head assert-same-head stable-provider-head record-provider-state remote-lock release-remote-lock install-workspace workspace-manifest new-transfer-dir copy-workspace]
+use $SUBPROCESS [run-command command-failure-message]
 
-def nu-home [] {
-    let test_mode = ($env.INITIAL_SETUP_TEST_MODE? | default "" | str trim)
-    let override = ($env.INITIAL_SETUP_HOME_OVERRIDE? | default "" | str trim)
-
-    if $test_mode == "1" and not ($override | is-empty) {
-        return ($override | path expand)
-    }
-
-    let home_path = ($nu | get --optional home-path)
-
-    if $home_path != null {
-        return $home_path
-    }
-
-    let home_dir = ($nu | get --optional home-dir)
-
-    if $home_dir != null {
-        return $home_dir
-    }
-
-    error make {
-        msg: "Unable to determine the Nushell home directory."
-    }
-}
-
-def machine-context [] {
-    let file = ((nu-home) | path join ".config" "dotfiles" "config.nuon")
-    open $file
-}
-
-def snapshot-root [] {
-    (nu-home)
-    | path join ".config" "dotfiles" "snapshots"
-}
+def snapshot-root [] { (state-root) | path join "snapshots" }
 
 def snapshot-list [] {
     let root = (snapshot-root)
-
-    if not ($root | path exists) {
-        return []
-    }
-
+    if not ($root | path exists) { return [] }
     ls $root
     | where type == dir
+    | where {|row|
+        let name = ($row.name | path basename)
+        not ($name | str starts-with ".partial-") and (($row.name | path join "snapshot.nuon") | path exists)
+    }
     | sort-by name
     | reverse
 }
 
-def run-script [
-    name: string
-    ...args: string
-] {
+def run-script [name: string ...args: string] {
     let script = ($TOOLS_ROOT | path join "scripts" $name)
-
-    ^$nu.current-exe --no-config-file $script ...$args
-
-    let exit_code = ($env.LAST_EXIT_CODE | default 0)
-
-    if $exit_code != 0 {
-        error make {
-            msg: ("Script failed: " + $name)
-        }
-    }
+    let result = (run-command $nu.current-exe (["--no-config-file" $script] | append $args) --live)
+    if not $result.ok { error make {msg: (command-failure-message ("Script " + $name) $result)} }
 }
 
-def restore-item [source: path destination: path] {
-    if ($destination | path exists) {
-        if (($destination | path type) == "dir") {
-            rm -r $destination
-        } else {
-            rm $destination
-        }
-    }
-
-    if not ($source | path exists) {
-        return
-    }
-
-    if (($source | path type) == "dir") {
-        cp -r $source $destination
-    } else {
-        cp $source $destination
-    }
-}
-
-def rollback-impl [
-    --list
-    --snapshot: string = ""
-    --source-only
-] {
+def resolve-snapshot [requested: string] {
     let snapshots = (snapshot-list)
-
-    if $list {
-        if ($snapshots | is-empty) {
-            print "No snapshots."
-            return
-        }
-
-        $snapshots
-        | each { |item| $item.name | path basename }
-        | print
-
-        return
+    if ($snapshots | is-empty) { error make {msg: "No snapshot is available."} }
+    if ($requested | is-empty) { return ($snapshots | first | get name) }
+    if ($requested | path basename) != $requested or $requested in ["." ".."] {
+        error make {msg: "Snapshot must be selected by name, not by a path."}
     }
-
-    if ($snapshots | is-empty) {
-        error make {
-            msg: "No snapshot is available."
-        }
+    let matches = ($snapshots | where {|row| ($row.name | path basename) == $requested })
+    if ($matches | length) != 1 {
+        error make {msg: ("Completed snapshot not found: " + $requested)}
     }
+    $matches | first | get name
+}
 
-    let selected = (
-        if ($snapshot | is-empty) {
-            $snapshots | first | get name
-        } else {
-            if ($snapshot | path basename) != $snapshot or $snapshot in ["." ".."] { error make {msg: "Snapshot must be a name, not a path."} }
-            snapshot-root | path join $snapshot
-        }
-    )
-
-    if not ($selected | path exists) {
-        error make {
-            msg: ("Snapshot not found: " + ($selected | into string))
-        }
+def validate-snapshot [selected: path] {
+    let meta_file = ($selected | path join "snapshot.nuon")
+    if not ($meta_file | path exists) { error make {msg: "Snapshot metadata is missing."} }
+    let meta = (open --raw $meta_file | from nuon)
+    let version = ($meta.version? | default 1 | into int)
+    if not ($version in [1 2 3]) { error make {msg: "Unsupported snapshot version."} }
+    if $version == 3 {
+        let expected = ($meta.files? | default [])
+        if ($expected | describe) !~ '^(list|table)' { error make {msg: "Snapshot v3 manifest is invalid."} }
+        let actual = (workspace-manifest $selected)
+        if $actual != $expected { error make {msg: "Snapshot payload no longer matches its recorded SHA-256 manifest."} }
+        let hash = (manifest-hash $actual)
+        if $hash != ($meta.tree_hash? | default "") { error make {msg: "Snapshot tree hash is invalid."} }
+    } else {
+        print --stderr ("[warn] Snapshot v" + ($version | into string) + " predates content-hash verification; compatibility restore will be used.")
     }
+    {meta: $meta version: $version}
+}
 
-    let context = (machine-context)
-    let data_root = ($context.data_root | path expand)
+def prepare-restore-source [provider: record selected: path version: int] {
+    if $version != 1 { return {source: $selected cleanup: null} }
+    # v1 predates the encrypted vault. Preserve current ciphertext rather than
+    # interpreting an absent secrets/ directory as a request to delete it.
+    let stage = (new-transfer-dir)
+    copy-workspace $selected $stage | ignore
+    let current_secrets = ($provider.data_root | path expand | path join "secrets")
+    if ($current_secrets | path exists) {
+        cp --recursive $current_secrets ($stage | path join "secrets")
+    }
+    {source: $stage cleanup: $stage}
+}
 
+def rollback-impl [provider: record --snapshot: string = "" --source-only] {
+    let selected = (resolve-snapshot $snapshot)
+    let validated = (validate-snapshot $selected)
+
+    # Preserve a normal user-facing snapshot before changing the private source.
     run-script "create-snapshot.nu" "--label" "pre-rollback" "--quiet"
 
-    restore-item ($selected | path join ".chezmoiroot") ($data_root | path join ".chezmoiroot")
-    restore-item ($selected | path join "home") ($data_root | path join "home")
-    restore-item ($selected | path join "vscode") ($data_root | path join "vscode")
-    restore-item ($selected | path join "toolchains") ($data_root | path join "toolchains")
-    let meta = (open ($selected | path join "snapshot.nuon"))
-    if ($meta.version? | default "1" | into string) == "2" {
-        restore-item ($selected | path join "secrets") ($data_root | path join "secrets")
-    } else { print "[keep] Older snapshot predates the encrypted vault; current ciphertext is retained." }
-    restore-item ($selected | path join ".dotfiles-sync-meta.nuon") ($data_root | path join ".dotfiles-sync-meta.nuon")
+    let prepared = (prepare-restore-source $provider $selected $validated.version)
+    let apply_source = $prepared.source
+    let install_result = (try { install-workspace $provider $apply_source; null } catch {|err| failure-envelope $err })
+    let install_failure = (captured-failure $install_result)
+    if $install_failure != null {
+        if $prepared.cleanup != null { try { rm --recursive --force $prepared.cleanup } catch {} }
+        error make {msg: (error-message $install_failure "Snapshot workspace restore failed.")}
+    }
 
     if $source_only {
+        if $prepared.cleanup != null { try { rm --recursive --force $prepared.cleanup } catch {} }
         print ("[ok] Restored private source snapshot without applying it locally: " + ($selected | path basename))
         return
     }
 
     run-script "write-sync-meta.nu" "--action" "rollback"
-    run-script "sync-down-local.nu"
-
+    run-script "sync-down-local.nu" "--source-root" ($apply_source | into string)
+    if $prepared.cleanup != null { try { rm --recursive --force $prepared.cleanup } catch {
+        print --stderr ("[warn] Compatibility staging remains at: " + ($prepared.cleanup | into string))
+    } }
     print ("[ok] Restored snapshot: " + ($selected | path basename))
 }
 
-const SAFETY = path self ./modules/safety.nu
-const PROVIDER = path self ./modules/sync-provider.nu
-use $SAFETY [operation-lease release-lease]
-use $PROVIDER [load-provider assert-expected-head assert-same-head provider-head record-provider-state remote-lock release-remote-lock]
-
 def main [--list --snapshot: string = "" --source-only] {
-    if $list { rollback-impl --list; return }
+    if $list {
+        let snapshots = (snapshot-list)
+        if ($snapshots | is-empty) { print "No snapshots."; return }
+        $snapshots | each {|item| $item.name | path basename } | print
+        return
+    }
+
     let lease = (operation-lease)
     mut shared = null
     let operation_result = (try {
@@ -170,9 +122,10 @@ def main [--list --snapshot: string = "" --source-only] {
         let provider = (load-provider)
         $shared = (remote-lock $provider)
         let head = (assert-expected-head $provider)
-        rollback-impl --snapshot $snapshot --source-only=$source_only
+        rollback-impl $provider --snapshot $snapshot --source-only=$source_only
         if $provider.kind == "directory" {
-            record-provider-state $provider (provider-head $provider)
+            let current = (stable-provider-head $provider)
+            record-provider-state $provider $current
             if not $source_only { run-script "update-sync-state.nu" }
         } else {
             assert-same-head $provider $head
@@ -182,13 +135,17 @@ def main [--list --snapshot: string = "" --source-only] {
     } catch {|err| failure-envelope $err })
     let operation_failure = (captured-failure $operation_result)
 
-    # Snapshot the error in catch; inspect mutable handles in the outer block.
-    # Attempt both releases, including when the remote lock cannot be removed.
     let remote_cleanup_result = (try { release-remote-lock $shared; null } catch {|err| failure-envelope $err })
     let local_cleanup_result = (try { release-lease $lease; null } catch {|err| failure-envelope $err })
     let remote_cleanup_error = (captured-failure $remote_cleanup_result)
     let local_cleanup_error = (captured-failure $local_cleanup_result)
-    if $operation_failure != null { error make {msg: (error-message $operation_failure "Rollback failed.")} }
-    if $remote_cleanup_error != null { error make {msg: (error-message $remote_cleanup_error "Remote-lock cleanup failed.")} }
-    if $local_cleanup_error != null { error make {msg: (error-message $local_cleanup_error "Local-lock cleanup failed.")} }
+
+    if $operation_failure != null {
+        mut message = (error-message $operation_failure "Rollback failed.")
+        if $remote_cleanup_error != null { $message = ($message + (char nl) + "Remote-lock cleanup also failed: " + (error-message $remote_cleanup_error)) }
+        if $local_cleanup_error != null { $message = ($message + (char nl) + "Local-lock cleanup also failed: " + (error-message $local_cleanup_error)) }
+        error make {msg: $message}
+    }
+    if $remote_cleanup_error != null { error make {msg: ("Remote-lock cleanup failed: " + (error-message $remote_cleanup_error))} }
+    if $local_cleanup_error != null { error make {msg: ("Local-lock cleanup failed: " + (error-message $local_cleanup_error))} }
 }

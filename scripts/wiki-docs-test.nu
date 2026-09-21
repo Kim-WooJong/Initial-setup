@@ -15,6 +15,7 @@ def main [] {
         "Features-and-Roles.md"
         "Command-Reference.md"
         "Architecture.md"
+        "Code-Architecture.md"
         "Synchronization.md"
         "Cloud-Wins.md"
         "Recovery-and-Safety.md"
@@ -30,7 +31,7 @@ def main [] {
     }
 
     let commands = [
-        "dotstatus" "dotdiff" "dotpush" "dotpull" "dotresolve" "dotsync"
+        "dotstatus" "dotdiff" "dotpush" "dotpull" "dotrpush" "dotrpull" "dotresolve" "dotsync"
         "dotsnapshot" "dotrollback" "dotversion" "dotrepo" "dotrelease"
         "dotcleanup" "dotaudit" "dotstate" "dotmigrate" "dotchecklist"
         "dotcapture" "dotrestoreenv" "dotdoctor" "dotupdate" "dotreport"
@@ -55,5 +56,35 @@ def main [] {
         }
     }
 
-    print "[pass] Wiki pages and user command coverage are present."
+
+    let architecture = (open --raw ($wiki | path join "Code-Architecture.md"))
+    let module_root = ($ROOT | path join "scripts" "modules")
+    for module in (ls $module_root | where type == file | get name | where {|file| $file | str ends-with ".nu" } | each {|file| $file | path basename } | sort) {
+        if not ($architecture | str contains ("`" + $module + "`")) {
+            fail ("Shared module missing from code architecture map: " + $module)
+        }
+    }
+
+    let scripts_root = ($ROOT | path join "scripts")
+    for script in (ls $scripts_root | where type == file | get name | where {|file| $file | str ends-with ".nu" } | each {|file| $file | path basename } | sort) {
+        if not ($architecture | str contains ("`" + $script + "`")) {
+            fail ("Top-level script missing from code architecture map: " + $script)
+        }
+    }
+
+    for anchor in [
+        "setup.nu"
+        "setup-main.nu"
+        "bootstrap.sh"
+        "subprocess.nu"
+        "sync-provider.nu"
+        "cloud-wins-engine.nu"
+        "verify.nu"
+    ] {
+        if not ($architecture | str contains $anchor) {
+            fail ("Architecture map is missing a required ownership anchor: " + $anchor)
+        }
+    }
+
+    print "[pass] Wiki pages, architecture ownership, and user command coverage are present."
 }

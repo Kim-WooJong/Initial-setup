@@ -1,5 +1,8 @@
 #!/usr/bin/env nu
 
+const SUBPROCESS = path self ./modules/subprocess.nu
+use $SUBPROCESS [run-command command-failure-message]
+
 # ============================================================
 # Ensure canonical config.nu imports the management module.
 # ============================================================
@@ -128,11 +131,8 @@ def main [] {
         ($config_file | into string)
     ]
 
-    ^chezmoi ...$args
-
-    if $env.LAST_EXIT_CODE != 0 {
-        error make {
-            msg: "Failed to update Nushell config in private source."
-        }
+    let result = (run-command "chezmoi" $args --live)
+    if not $result.ok {
+        error make { msg: (command-failure-message "Update Nushell config in private source" $result) }
     }
 }

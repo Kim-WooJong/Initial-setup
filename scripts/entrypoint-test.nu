@@ -27,9 +27,15 @@ def tests [base: path] {
     mkdir ($broken | path join "scripts")
     cp ($ROOT | path join "setup.nu") ($broken | path join "setup.nu")
     cp ($ROOT | path join "scripts" "diagnose-project.nu") ($broken | path join "scripts" "diagnose-project.nu")
+    # Keep the minimal entrypoint's own capture boundary; omit implementation
+    # files so preflight can diagnose the incomplete release before setup imports.
+    mkdir ($broken | path join "scripts" "modules")
+    for module in ["subprocess.nu" "process-output.nu"] {
+        cp ($ROOT | path join "scripts" "modules" $module) ($broken | path join "scripts" "modules" $module)
+    }
     let failure = (child ($broken | path join "setup.nu") ["--diagnose"])
     check ($failure.exit_code != 0) "Partial extraction is rejected"
-    check ($failure.stdout | str contains "INCOMPLETE_RELEASE") "Partial extraction has a specific diagnostic before module imports"
+    check ($failure.stdout | str contains "INCOMPLETE_RELEASE") "Partial extraction has a specific diagnostic before setup implementation imports"
     let normal = (child ($broken | path join "setup.nu") [])
     check ($normal.exit_code != 0 and ($normal.stdout | str contains "INCOMPLETE_RELEASE")) "Normal entry rejects incomplete releases before runtime updates"
     if $nu.os-info.name != "windows" {

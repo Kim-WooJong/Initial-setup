@@ -6,6 +6,9 @@
 # of the chezmoi source fingerprint.
 # ============================================================
 
+const SAFETY = path self ./modules/safety.nu
+use $SAFETY [atomic-record]
+
 def nu-home [] {
     let test_mode = ($env.INITIAL_SETUP_TEST_MODE? | default "" | str trim)
     let override = ($env.INITIAL_SETUP_HOME_OVERRIDE? | default "" | str trim)
@@ -57,7 +60,7 @@ def main [
         | path join ".dotfiles-sync-meta.nuon"
     )
 
-    {
+    atomic-record $file {
         version: "1"
         last_writer: $context.machine.name
         last_action: $action
@@ -66,8 +69,6 @@ def main [
             | format date "%Y-%m-%d %H:%M:%S %z"
         )
     }
-    | to nuon
-    | save --force $file
 
     print (
         "[meta] Last writer: " + $context.machine.name

@@ -3,38 +3,48 @@
 # No production setup or Proton access. Cargo builds only the local helper cache.
 # Reports contain paths/diagnostics; inspect them before sharing.
 const ROOT = path self ..
+const SUBPROCESS = path self ./modules/subprocess.nu
+const INSTALL_UTILS = path self ./modules/install-utils.nu
+use $SUBPROCESS [run-command]
+use $INSTALL_UTILS [probe-tool]
 
-def text [value: any] {
-    if ($value | describe) == "string" { return $value }
-    if ($value | describe) == "binary" {
-        try { $value | decode utf-8 } catch { "[Non-UTF-8 diagnostic omitted]" }
-    } else { "" }
+def save-log [file: path content: string] {
+    let temp = (($file | path dirname) | path join ((random uuid) + ".tmp"))
+    $content | save $temp
+    mv --force $temp $file
 }
 
 def invoke [script: string args: list directory: path name: string] {
-    let exe = $nu.current-exe
+    let exe = ($nu.current-exe | into string)
     let path = ($ROOT | path join "scripts" $script)
     let started = (date now)
-    let result = (try { do { ^$exe --no-config-file $path ...$args } | complete } catch {|err|
-        {exit_code: 1 stdout: "" stderr: ($err.msg? | default "Child process failed")}
-    })
-    let out = (text $result.stdout)
-    let err = (text $result.stderr)
+    let result = (run-command $exe (["--no-config-file" ($path | into string)] | append $args))
+    let out = ($result.stdout? | default "")
+    let err = if $result.launched { ($result.stderr? | default "") } else { ($result.launch_error? | default "Child process failed to launch") }
     let log = ($directory | path join ($name + ".log"))
-    ([$out $err] | str join (char nl)) | save $log
-    let ok = ($result.exit_code == 0)
+    save-log $log ([$out $err] | where {|x| not ($x | is-empty) } | str join (char nl))
+    let ok = $result.ok
     print ((if $ok { "[pass] " } else { "[FAIL] " }) + $name + " -> " + ($log | into string))
     if not $ok and not ($err | is-empty) { print --stderr $err }
-    {name: $name status: (if $ok { "passed" } else { "failed" }) exit_code: $result.exit_code elapsed: ((date now) - $started | into string) log: ($log | into string)}
+    {
+        name: $name
+        status: (if $ok { "passed" } else { "failed" })
+        launched: $result.launched
+        exit_code: (if $result.exit_code == null { 1 } else { $result.exit_code })
+        elapsed: ((date now) - $started | into string)
+        log: ($log | into string)
+    }
 }
 
-def write-summary [directory: path results: list full: bool offline: bool finished: bool] {
+def write-summary [directory: path results: list full: bool offline: bool finished: bool working_tree: bool] {
     let failed = ($results | where status == "failed" | length)
     let incomplete = ($results | where {|r| $r.status in ["blocked" "skipped"] } | length)
     let payload = {
         format: 1 project: "Initial-setup" version: (open --raw ($ROOT | path join "VERSION") | str trim)
         platform: $nu.os-info.name nushell: (version).version executable: ($nu.current-exe | into string)
         full_requested: $full offline_cargo: $offline finished: $finished
+        working_tree_mode: $working_tree
+        release_manifest_enforced: (not $working_tree)
         optional_external_security: (not $full)
         dependency_note: "Default scope permits security fixtures to skip absent age/rclone. --full requires both. A skipped Rust build is never a successful verification."
         passed: ($results | where status == "passed" | length) failed: $failed incomplete: $incomplete
@@ -49,7 +59,7 @@ def write-summary [directory: path results: list full: bool offline: bool finish
     $payload
 }
 
-def main [--full --offline --report-dir: path --skip-build] {
+def main [--full --offline --report-dir: path --skip-build --working-tree] {
     let parent = if $report_dir != null { $report_dir | path expand } else {
         $env.TEMP? | default ($env.TMPDIR? | default "/tmp") | path expand
     }
@@ -57,12 +67,17 @@ def main [--full --offline --report-dir: path --skip-build] {
     mkdir $directory
     print ("[reports] " + ($directory | into string))
     mut results = []
-    let preflight = (invoke "diagnose-project.nu" ["--manifest" "--strict-manifest" "--require-runtime"] $directory "preflight")
+    let preflight_args = if $working_tree {
+        ["--manifest" "--require-runtime"]
+    } else {
+        ["--manifest" "--strict-manifest" "--require-runtime"]
+    }
+    let preflight = (invoke "diagnose-project.nu" $preflight_args $directory "preflight")
     $results = ($results | append $preflight)
     if $preflight.status != "passed" {
         # A broken archive/old interpreter cannot safely execute the remaining scripts.
         $results = ($results | append {name: "remaining-checks" status: "blocked" reason: "Fix preflight errors before executing project code."})
-        write-summary $directory $results $full $offline true | ignore
+        write-summary $directory $results $full $offline true $working_tree | ignore
         exit 1
     }
     let syntax = (invoke "validate-syntax.nu" ["--deny-warnings" "--report" ($directory | path join "syntax.json")] $directory "syntax")
@@ -76,6 +91,15 @@ def main [--full --offline --report-dir: path --skip-build] {
         {name: "runtime-fixtures" script: "nu-runtime-test.nu" args: []}
         {name: "regressions" script: "regression-test.nu" args: []}
         {name: "rclone-fixtures" script: "rclone-install-test.nu" args: []}
+        {name: "rclone-explicit-sync" script: "rclone-explicit-sync-policy-test.nu" args: []}
+        {name: "installer-health" script: "installer-health-test.nu" args: []}
+        {name: "orchestration-policy" script: "orchestration-policy-test.nu" args: []}
+        {name: "interactive-tty-policy" script: "interactive-tty-policy-test.nu" args: []}
+        {name: "setup-reconciliation" script: "setup-reconcile-test.nu" args: []}
+        {name: "sync-recovery-policy" script: "sync-recovery-policy-test.nu" args: []}
+        {name: "diagnostics-policy" script: "diagnostics-policy-test.nu" args: []}
+        {name: "production-subprocess-policy" script: "production-subprocess-policy-test.nu" args: []}
+        {name: "subprocess-core" script: "subprocess-test.nu" args: []}
         {name: "subprocess-diagnostics" script: "process-output-test.nu" args: ["--external"]}
         {name: "locks" script: "lock-test.nu" args: []}
         {name: "managed-editor" script: "edit-managed-test.nu" args: []}
@@ -86,14 +110,16 @@ def main [--full --offline --report-dir: path --skip-build] {
     ] {
         let row = (invoke $stage.script $stage.args $directory $stage.name)
         $results = ($results | append $row)
-        write-summary $directory $results $full $offline false | ignore
+        write-summary $directory $results $full $offline false $working_tree | ignore
     }
     if $nu.os-info.name in ["linux" "macos"] {
         let posix = (invoke "posix-bootstrap-test.nu" [] $directory "posix-bootstrap")
         $results = ($results | append $posix)
-        write-summary $directory $results $full $offline false | ignore
+        write-summary $directory $results $full $offline false $working_tree | ignore
     }
-    let cargo_available = (not (which cargo | is-empty) and not (which rustc | is-empty))
+    let cargo_probe = (probe-tool "cargo" ["--version"])
+    let rustc_probe = (probe-tool "rustc" ["--version"])
+    let cargo_available = ($cargo_probe.healthy and $rustc_probe.healthy)
     if $skip_build or not $cargo_available {
         $results = ($results | append {name: "rust-build-tests" status: "skipped" reason: (if $skip_build { "--skip-build requested" } else { "Rust/Cargo not found" })})
         $results = ($results | append {name: "cloud-engine-integration" status: "blocked" reason: "No successful build/test stage in this verification run."})
@@ -112,7 +138,7 @@ def main [--full --offline --report-dir: path --skip-build] {
     let security_args = if $full { ["--require-age" "--require-rclone"] } else { [] }
     let security = (invoke "security-self-test.nu" $security_args $directory "security")
     $results = ($results | append $security)
-    let summary = (write-summary $directory $results $full $offline true)
+    let summary = (write-summary $directory $results $full $offline true $working_tree)
     print ("[summary] " + ($directory | path join "summary.json"))
     if not $summary.verified_requested_scope { exit 1 }
     print "[pass] Requested checks completed on this interpreter/platform. See scope limitations in summary.json."

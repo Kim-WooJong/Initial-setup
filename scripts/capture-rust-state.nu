@@ -1,5 +1,8 @@
 #!/usr/bin/env nu
 
+const SUBPROCESS = path self ./modules/subprocess.nu
+use $SUBPROCESS [run-command command-failure-message]
+
 def nu-home [] {
     let test_mode = ($env.INITIAL_SETUP_TEST_MODE? | default "" | str trim)
     let override = ($env.INITIAL_SETUP_HOME_OVERRIDE? | default "" | str trim)
@@ -31,7 +34,9 @@ def machine-context [] {
 }
 
 def toolchain-names [] {
-    ^rustup toolchain list
+    let result = (run-command "rustup" ["toolchain" "list"])
+    if not $result.ok { error make {msg: (command-failure-message "rustup toolchain list" $result)} }
+    $result.stdout
     | lines
     | each { |line| $line | str trim | split row " " | first }
     | where { |item| not ($item | is-empty) }
@@ -39,7 +44,9 @@ def toolchain-names [] {
 }
 
 def installed-components [toolchain: string] {
-    let lines = (^rustup component list --installed --toolchain $toolchain | lines | each { |line| $line | str trim })
+    let probe = (run-command "rustup" ["component" "list" "--installed" "--toolchain" $toolchain])
+    if not $probe.ok { error make {msg: (command-failure-message ("rustup component list " + $toolchain) $probe)} }
+    let lines = ($probe.stdout | lines | each { |line| $line | str trim })
     let candidates = ["clippy" "rustfmt" "rust-src" "rust-analyzer" "rust-analysis" "llvm-tools" "rustc-dev" "miri" "rust-docs"]
     mut result = []
 
@@ -52,7 +59,9 @@ def installed-components [toolchain: string] {
 }
 
 def installed-targets [toolchain: string] {
-    ^rustup target list --installed --toolchain $toolchain
+    let result = (run-command "rustup" ["target" "list" "--installed" "--toolchain" $toolchain])
+    if not $result.ok { error make {msg: (command-failure-message ("rustup target list " + $toolchain) $result)} }
+    $result.stdout
     | lines
     | each { |line| $line | str trim }
     | where { |item| not ($item | is-empty) }
@@ -60,7 +69,9 @@ def installed-targets [toolchain: string] {
 }
 
 def default-toolchain [toolchains: list] {
-    let default_lines = (^rustup toolchain list | lines | where { |line| $line | str contains "(default)" })
+    let result = (run-command "rustup" ["toolchain" "list"])
+    if not $result.ok { error make {msg: (command-failure-message "rustup toolchain list" $result)} }
+    let default_lines = ($result.stdout | lines | where { |line| $line | str contains "(default)" })
 
     if not ($default_lines | is-empty) {
         return ($default_lines | first | str trim | split row " " | first)

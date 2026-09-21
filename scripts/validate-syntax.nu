@@ -36,7 +36,7 @@ def nu-string-literal [value: string] {
 # Run every check in a fresh process so earlier imports cannot mask errors.
 def child [args: list] {
     let exe = $nu.current-exe
-    try { do { ^$exe --no-config-file ...$args } | complete } catch {|err|
+    try { do -i { ^$exe --no-config-file ...$args } | complete } catch {|err|
         {exit_code: 1 stdout: "" stderr: $err.msg}
     }
 }

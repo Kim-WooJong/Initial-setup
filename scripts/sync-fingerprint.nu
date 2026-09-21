@@ -1,5 +1,8 @@
 #!/usr/bin/env nu
 
+const SUBPROCESS = path self ./modules/subprocess.nu
+use $SUBPROCESS [run-command]
+
 def nu-home [] {
     let test_mode = ($env.INITIAL_SETUP_TEST_MODE? | default "" | str trim)
     let override = ($env.INITIAL_SETUP_HOME_OVERRIDE? | default "" | str trim)
@@ -154,19 +157,10 @@ def rclone-config-path [] {
         return null
     }
 
-    let rows = (
-        ^rclone config file
-        | lines
-        | each { |line| $line | str trim }
-        | where { |line| not ($line | is-empty) }
-    )
-
-    let exit_code = ($env.LAST_EXIT_CODE | default 1)
-
-    if $exit_code != 0 or ($rows | is-empty) {
-        return null
-    }
-
+    let result = (run-command "rclone" ["config" "file"])
+    if not $result.ok { return null }
+    let rows = ($result.stdout | lines | each {|line| $line | str trim } | where {|line| not ($line | is-empty) })
+    if ($rows | is-empty) { return null }
     $rows | last
 }
 
@@ -317,16 +311,17 @@ def local-entries [] {
                 "--list-extensions"
             ]
 
-            let extension_text = (
-                ^code ...$args
+            let code_result = (run-command "code" $args)
+            let extension_text = if $code_result.ok {
+                $code_result.stdout
                 | lines
-                | where { |item|
-                    not ($item | is-empty)
-                }
+                | where { |item| not ($item | is-empty) }
                 | sort
                 | uniq
                 | str join (char nl)
-            )
+            } else {
+                "UNAVAILABLE:" + ($code_result.exit_code? | default 1 | into string)
+            }
 
             let extension_hash = (
                 $extension_text

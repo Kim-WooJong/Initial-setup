@@ -1,5 +1,8 @@
 #!/usr/bin/env nu
 
+const SUBPROCESS = path self ./modules/subprocess.nu
+use $SUBPROCESS [run-command command-failure-message]
+
 def project-path [
     base: string
     name: string
@@ -26,7 +29,10 @@ def init-git [dir: path] {
         "init"
     ]
 
-    ^git ...$args | ignore
+    let result = (run-command "git" $args --live)
+    if not $result.ok {
+        error make { msg: (command-failure-message "git init" $result) }
+    }
 }
 
 def create-common [dir: path name: string] {
@@ -52,12 +58,9 @@ def create-rust [dir: path name: string] {
         ($dir | into string)
     ]
 
-    ^cargo ...$args
-
-    if $env.LAST_EXIT_CODE != 0 {
-        error make {
-            msg: "cargo new failed."
-        }
+    let result = (run-command "cargo" $args --live)
+    if not $result.ok {
+        error make { msg: (command-failure-message "cargo new" $result) }
     }
 }
 

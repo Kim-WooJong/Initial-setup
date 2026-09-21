@@ -1,11 +1,11 @@
 # Builds are explicit; previews never install Rust crates or write the checkout.
-const OUTPUT = path self ./process-output.nu
-use $OUTPUT [output-text]
 const ROOT = path self ../..
 const SAFETY = path self ./safety.nu
 const CORE = path self ./core.nu
+const SUBPROCESS = path self ./subprocess.nu
 use $SAFETY [state-root]
 use $CORE [error-message]
+use $SUBPROCESS [run-command command-failure-message]
 
 export def cloud-build-layout [] {
     let source = ($ROOT | path join "tools" "cloudwins")
@@ -16,6 +16,7 @@ export def cloud-build-layout [] {
     let root = ((state-root) | path join "cache" "cloudwins" $id)
     {root: $root source: $source inputs: $inputs source_hash: $id build_source: ($root | path join "source") target_dir: ($root | path join "target") receipt: ($root | path join "receipt.nuon")}
 }
+
 export def cloud-engine [] {
     let layout = (cloud-build-layout)
     if not ($layout.receipt | path exists) {
@@ -31,14 +32,14 @@ export def cloud-engine [] {
     }
     $exe
 }
+
 export def engine-json [exe: path args: list] {
-    let result = (do { ^$exe ...$args } | complete)
-    if $result.exit_code != 0 {
-        if not ($result.stderr | output-text | is-empty) { print --stderr ($result.stderr | output-text) }
-        error make {msg: ("cloudwins failed (exit " + ($result.exit_code | into string) + "). Payload/baseline success is not assumed.")}
+    let result = (run-command ($exe | into string) $args)
+    if not ($result.stderr | str trim | is-empty) { print --stderr ($result.stderr | str trim --right) }
+    if not $result.ok {
+        error make {msg: ((command-failure-message "cloudwins" $result) + (char nl) + "Payload/baseline success is not assumed.")}
     }
-    if not ($result.stderr | output-text | is-empty) { print --stderr ($result.stderr | output-text) }
-    try { $result.stdout | output-text | from json } catch {|err|
+    try { $result.stdout | from json } catch {|err|
         error make {msg: ("Invalid cloudwins JSON: " + (error-message $err))}
     }
 }

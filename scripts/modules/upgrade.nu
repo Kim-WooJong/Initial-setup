@@ -1,5 +1,7 @@
 const PROCESS_OUTPUT = path self ./process-output.nu
 use $PROCESS_OUTPUT [output-text]
+const SUBPROCESS = path self ./subprocess.nu
+use $SUBPROCESS [run-command]
 const TEXT_CASE = path self ./text-case.nu
 use $TEXT_CASE [text-lower]
 # A validation sandbox isolates configuration paths; it is NOT a security
@@ -87,12 +89,12 @@ export def validate-candidate [root: path run_dir: path] {
             ["--no-config-file" ($root | path join "scripts" "self-test.nu") "--sandbox"]
             ["--no-config-file" ($root | path join "scripts" "security-self-test.nu")]
         ] {
-            let nu_exe = $nu.current-exe
-            let result = (do { ^$nu_exe ...$args } | complete)
+            let nu_exe = ($nu.current-exe | into string)
+            let result = (run-command $nu_exe $args)
             let logfile = ($run_dir | path join "validation.log")
-            let text = ("=== " + ($args.1 | path basename) + " ===\n" + ($result.stdout | output-text) + "\n" + ($result.stderr | output-text) + "\n")
+            let text = ("=== " + ($args.1 | path basename) + " ===\n" + $result.stdout + "\n" + $result.stderr + "\n")
             if ($logfile | path exists) { $text | save --append $logfile } else { $text | save $logfile }
-            if $result.exit_code != 0 {
+            if not $result.ok {
                 error make {msg: ("Candidate validation failed. Isolated test diagnostics: " + ($logfile | into string))}
             }
         }

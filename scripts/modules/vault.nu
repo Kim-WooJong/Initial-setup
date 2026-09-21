@@ -218,12 +218,12 @@ export def capture-secret [name: string] {
     print ("[ok] Encrypted capture: " + $name + ". Run dotpush to publish it.")
 }
 
-export def restore-secret [name: string force: bool] {
+def restore-secret-source [name: string force: bool source: path] {
     let entry = (resolve-vault-entry $name)
     let config = (load-vault)
-    let source = (ciphertext-path $name)
     let destination = ($entry.local | path expand)
     if not ($source | path exists) { error make { msg: "No encrypted copy exists for this entry." } }
+    if ($source | path type) != "file" { error make {msg: "Encrypted secret source must be a regular file."} }
     if not ($config.identity | path exists) { error make { msg: "Local age identity is missing. Recover it from your offline backup." } }
     if ($destination | path exists) and not $force { error make { msg: "Destination exists. Review it before using dotvault restore NAME --force." } }
     let parent = ($destination | path dirname)
@@ -260,6 +260,17 @@ export def restore-secret [name: string force: bool] {
         print ("[warn] Secret restored, but restricted recovery files remain at: " + ($temp_dir | into string))
     }
     print ("[ok] Restored secret: " + $name)
+}
+
+export def restore-secret [name: string force: bool] {
+    restore-secret-source $name $force (ciphertext-path $name)
+}
+
+export def restore-secret-from-root [name: string force: bool source_root: path] {
+    resolve-vault-entry $name | ignore
+    let root = ($source_root | path expand)
+    let source = ($root | path join "secrets" ($name + ".age"))
+    restore-secret-source $name $force $source
 }
 
 export def migrate-rclone-secret [remove_legacy: bool] {

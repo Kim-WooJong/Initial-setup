@@ -1,17 +1,14 @@
 #!/usr/bin/env nu
 const TOOLS_ROOT = path self ..
-const OUTPUT = path self ./modules/process-output.nu
-use $OUTPUT [output-text]
+const SUBPROCESS = path self ./modules/subprocess.nu
+use $SUBPROCESS [run-command print-result]
 
 def run-script [name: string] {
     let script = ($TOOLS_ROOT | path join "scripts" $name)
     let exe = $nu.current-exe
-    let result = (do { ^$exe --no-config-file $script } | complete)
-    let out = ($result.stdout | output-text)
-    let err = ($result.stderr | output-text)
-    if not ($out | is-empty) { print $out }
-    if not ($err | is-empty) { print --stderr $err }
-    {script: $name exit_code: $result.exit_code}
+    let result = (run-command ($exe | into string) ["--no-config-file" ($script | into string)])
+    print-result ("Capture " + $name) $result
+    {script: $name exit_code: ($result.exit_code? | default 1)}
 }
 
 def main [] {

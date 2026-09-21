@@ -6,7 +6,7 @@ use $PROCESS_OUTPUT [output-text]
 const ROOT = path self ..
 
 def invoke-nu [exe: path args: list] {
-    try { do { ^$exe --no-config-file ...$args } | complete } catch {|err|
+    try { do -i { ^$exe --no-config-file ...$args } | complete } catch {|err|
         {exit_code: 1 stdout: "" stderr: $err.msg}
     }
 }
@@ -15,7 +15,10 @@ def interpreter [path: path family: string] {
     let exe = ($path | path expand)
     if not ($exe | path exists) { error make {msg: ("Interpreter not found: " + ($exe | into string))} }
     let result = (invoke-nu $exe ["--commands" "version | to json --raw"])
-    if $result.exit_code != 0 { error make {msg: ("Cannot run interpreter: " + ($exe | into string))} }
+    if $result.exit_code != 0 {
+        let detail = ([($result.stderr | output-text) ($result.stdout | output-text)] | where {|x| not ($x | str trim | is-empty) } | str join (char nl) | str trim)
+        error make {msg: ("Cannot run interpreter: " + ($exe | into string) + (if ($detail | is-empty) { "" } else { (char nl) + $detail }))}
+    }
     let info = ($result.stdout | from json)
     let parts = ($info.version | split row ".")
     let major = ($parts.0 | into int)

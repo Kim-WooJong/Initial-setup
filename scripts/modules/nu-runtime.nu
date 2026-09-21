@@ -2,6 +2,62 @@
 # interpreters must parse it before setup/sync implementation modules are loaded.
 # All version conversions below run at execution time, never in a const selector.
 
+# Bootstrap boundary runner. This module intentionally cannot import the shared
+# subprocess module because old seed interpreters must parse it first. Keep the
+# same result contract locally so diagnostics and exit codes are still preserved.
+def runtime-output-text [value] {
+    if $value == null { return "" }
+    let kind = ($value | describe)
+    if $kind == "binary" {
+        try { $value | decode utf-8 } catch { "<non-UTF-8 output>" }
+    } else {
+        $value | into string
+    }
+}
+
+def runtime-run [program args: list = [] --live] {
+    let executed = (try {
+        let result = if $live {
+            do -i { ^$program ...$args }
+            | tee { print --raw $in }
+            | tee --stderr { print --stderr --raw $in }
+            | complete
+        } else {
+            do -i { ^$program ...$args } | complete
+        }
+        {
+            launched: true
+            exit_code: ($result.exit_code? | default 1)
+            stdout: (runtime-output-text ($result.stdout? | default ""))
+            stderr: (runtime-output-text ($result.stderr? | default ""))
+            launch_error: ""
+        }
+    } catch {|err|
+        {
+            launched: false
+            exit_code: null
+            stdout: ""
+            stderr: ""
+            launch_error: ($err.msg? | default ($err | into string))
+        }
+    })
+    let ok = ($executed.launched and $executed.exit_code == 0)
+    let diagnostic = if not $executed.launched {
+        $executed.launch_error
+    } else if not ($executed.stderr | str trim | is-empty) {
+        $executed.stderr | str trim
+    } else {
+        $executed.stdout | str trim
+    }
+    $executed | merge {ok: $ok diagnostic: $diagnostic}
+}
+
+def runtime-failure [label: string result: record] {
+    let code = if $result.exit_code == null { "not launched" } else { "exit " + ($result.exit_code | into string) }
+    let detail = ($result.diagnostic? | default "" | str trim)
+    if ($detail | is-empty) { $label + " failed (" + $code + ")." } else { $label + " failed (" + $code + ").\n" + $detail }
+}
+
 export def runtime-version [value: string] {
     let clean = ($value | str trim)
     if not ($clean =~ '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') {
@@ -82,9 +138,7 @@ def runtime-bin-name [] { if $nu.os-info.name == "windows" { "nu.exe" } else { "
 export def runtime-session-valid [] {
     let provider = ($env.INITIAL_SETUP_NU_SESSION_PROVIDER? | default "")
     (
-        ($provider in ["cargo-v1" "release-v1" "current-v1"]) and
-        ($env.INITIAL_SETUP_NU_SESSION_EXE? | default "") == ($nu.current-exe | into string) and
-        ($env.INITIAL_SETUP_NU_SESSION_VERSION? | default "") == (version).version
+        ($provider in ["cargo-v1" "release-v1" "current-v1"]) and ($env.INITIAL_SETUP_NU_SESSION_EXE? | default "") == ($nu.current-exe | into string) and ($env.INITIAL_SETUP_NU_SESSION_VERSION? | default "") == (version).version
     )
 }
 
@@ -105,8 +159,8 @@ def runtime-compiler [release: record] {
     let rustc = (runtime-command "rustc")
     let command = if $rustup != null {
         print --stderr "[nushell] Preparing the stable Rust toolchain for the new Cargo build."
-        ^$rustup toolchain install stable --profile minimal | ignore
-        if ($env.LAST_EXIT_CODE | default 1) != 0 { error make {msg: "NU_RUST_UPDATE_FAILED: Rust update failed; current Nushell is retained."} }
+        let install = (runtime-run ($rustup | into string) ["toolchain" "install" "stable" "--profile" "minimal"] --live)
+        if not $install.ok { error make {msg: ("NU_RUST_UPDATE_FAILED: " + (runtime-failure "Rust stable toolchain preparation" $install) + " Current Nushell is retained.")} }
         {program: $rustup prefix: ["run" "stable" "cargo"] rustc: $rustup rustc_args: ["run" "stable" "rustc"]}
     } else {
         if $cargo == null or $rustc == null { error make {msg: "NU_CARGO_MISSING: install Rust/Cargo or run native bootstrap first. No synchronization started."} }
@@ -114,8 +168,8 @@ def runtime-compiler [release: record] {
     }
     let program = $command.rustc
     let args = ($command.rustc_args | append "-vV")
-    let result = (do { ^$program ...$args } | complete)
-    if $result.exit_code != 0 or ($result.stdout | describe) != "string" { error make {msg: "NU_RUST_INVALID: cannot run the selected Rust compiler."} }
+    let result = (runtime-run ($program | into string) $args)
+    if not $result.ok { error make {msg: ("NU_RUST_INVALID: " + (runtime-failure "Selected Rust compiler" $result))} }
     let versions = ($result.stdout | lines | parse --regex '^release: (?P<value>\S+)$')
     let hosts = ($result.stdout | lines | parse --regex '^host: (?P<value>[a-zA-Z0-9_-]+)$')
     if ($versions | length) != 1 or ($hosts | length) != 1 { error make {msg: "NU_RUST_INVALID: missing compiler version/host."} }
@@ -135,13 +189,13 @@ export def runtime-build-args [release: record destination: path host: string] {
 }
 
 export def runtime-probe [exe: path expected: string] {
-    let result = (do { ^$exe --version } | complete)
-    if $result.exit_code != 0 or ($result.stdout | describe) != "string" or ($result.stdout | str trim) != $expected {
-        error make {msg: "NU_RUNTIME_VERIFY_FAILED: executable did not report the selected stable version."}
+    let result = (runtime-run ($exe | into string) ["--version"])
+    if not $result.ok or ($result.stdout | str trim) != $expected {
+        error make {msg: ("NU_RUNTIME_VERIFY_FAILED: " + (runtime-failure "Selected Nushell version probe" $result))}
     }
-    let probe = (do { ^$exe --no-config-file -c '"AbC" | str length' } | complete)
-    if $probe.exit_code != 0 or ($probe.stdout | describe) != "string" or ($probe.stdout | str trim) != "3" {
-        error make {msg: "NU_RUNTIME_VERIFY_FAILED: selected executable cannot run an isolated command."}
+    let probe = (runtime-run ($exe | into string) ["--no-config-file" "-c" '"AbC" | str length'])
+    if not $probe.ok or ($probe.stdout | str trim) != "3" {
+        error make {msg: ("NU_RUNTIME_VERIFY_FAILED: " + (runtime-failure "Selected Nushell isolated probe" $probe))}
     }
 }
 
@@ -153,8 +207,7 @@ def runtime-tracked [directory: path expected: string] {
     let tracked = (open --raw $file | from json)
     $tracked.installs | columns | any {|key|
         (
-            ($key | str starts-with ("nu " + $expected + " (registry+")) and
-            (($key | str contains "github.com/rust-lang/crates.io-index") or ($key | str contains "index.crates.io"))
+            ($key | str starts-with ("nu " + $expected + " (registry+")) and (($key | str contains "github.com/rust-lang/crates.io-index") or ($key | str contains "index.crates.io"))
         )
     }
 }
@@ -209,8 +262,7 @@ export def runtime-install [release: record] {
     # Adopt that verified Cargo installation instead of compiling the same nu twice.
     let seed_root = ($nu.current-exe | path dirname | path dirname)
     if (
-        ($seed_root | path dirname) == ($root | path join "versions") and
-        (($seed_root | path basename) =~ '^build-[a-f0-9-]{32,36}$') and (version).version == $release.version
+        ($seed_root | path dirname) == ($root | path join "versions") and (($seed_root | path basename) =~ '^build-[a-f0-9-]{32,36}$') and (version).version == $release.version
     ) {
         return (runtime-record $root $seed_root $release)
     }
@@ -224,9 +276,10 @@ export def runtime-install [release: record] {
         # One shared build cache lets Cargo use its own OS-backed build locks.
         # There is no extra, age-deleted operation/provider lock in this updater.
         with-env {CARGO_TARGET_DIR: ($root | path join "target") RUSTUP_TOOLCHAIN: "stable"} {
-            ^$program ...$args | ignore
-            let code = ($env.LAST_EXIT_CODE | default 1)
-            if $code != 0 { error make {msg: "NU_CARGO_BUILD_FAILED: see Cargo diagnostics above. Install native build prerequisites; the previous runtime and configuration were not replaced."} }
+            let build = (runtime-run ($program | into string) $args --live)
+            if not $build.ok {
+                error make {msg: ("NU_CARGO_BUILD_FAILED: " + (runtime-failure "Cargo Nushell build" $build) + " Install native build prerequisites; the previous runtime and configuration were not replaced.")}
+            }
         }
         let exe = (runtime-record $root $directory $release)
         {ok: true exe: $exe}
@@ -323,14 +376,14 @@ export def runtime-execute [script: path args: list --read-only --background --p
     } {
         if not ($preflight | is-empty) {
             if not ($preflight | path exists) { error make {msg: "PROJECT_PREFLIGHT_MISSING: restore the complete release."} }
-            ^$exe --no-config-file $preflight
-            let checked = ($env.LAST_EXIT_CODE | default 1)
-            if $checked != 0 { exit $checked }
+            let checked = (runtime-run ($exe | into string) ["--no-config-file" $preflight] --live)
+            if not $checked.ok { exit ($checked.exit_code? | default 1) }
         }
         if not ($script | path exists) or ($script | path type) != "file" {
             error make {msg: ("SCRIPT_MISSING: " + ($script | into string) + "; check the checkout path and archive extraction.")}
         }
-        ^$exe --no-config-file $script ...$args
-        exit ($env.LAST_EXIT_CODE | default 1)
+        # Transfer terminal ownership to the selected runtime so interactive setup
+        # prompts keep native TTY behavior. exec propagates the child exit status.
+        exec $exe --no-config-file $script ...$args
     }
 }

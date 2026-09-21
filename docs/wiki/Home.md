@@ -16,6 +16,7 @@ nu setup.nu
 - [Features and Roles](Features-and-Roles.md)
 - [Command Reference](Command-Reference.md)
 - [Architecture](Architecture.md)
+- [Code Architecture and Maintenance Map](Code-Architecture.md)
 - [Synchronization](Synchronization.md)
 - [Cloud-wins](Cloud-Wins.md)
 - [Recovery and Safety](Recovery-and-Safety.md)

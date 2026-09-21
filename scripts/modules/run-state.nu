@@ -151,7 +151,7 @@ export def mark-stage [
                 name: $stage
                 status: $status
                 started_at: (if $status == "running" { $timestamp } else { "" })
-                ended_at: (if $status in ["success" "failed" "skipped"] { $timestamp } else { "" })
+                ended_at: (if $status in ["success" "failed" "warning" "skipped" "interrupted"] { $timestamp } else { "" })
                 detail: $detail
             }
         } else {
@@ -167,7 +167,7 @@ export def mark-stage [
                                 $item.started_at? | default ""
                             }
                         )
-                        ended_at: (if $status in ["success" "failed" "skipped"] { $timestamp } else { "" })
+                        ended_at: (if $status in ["success" "failed" "warning" "skipped" "interrupted"] { $timestamp } else { "" })
                         detail: $detail
                     }
                 } else {
@@ -177,7 +177,7 @@ export def mark-stage [
         }
     )
 
-    let run_status = (if $status == "failed" { "failed" } else { "running" })
+    let run_status = (if $status == "failed" { "failed" } else if $status == "interrupted" { "interrupted" } else { "running" })
     let next = (
         $state
         | upsert status $run_status
@@ -189,16 +189,17 @@ export def mark-stage [
     append-event $run_id ($status | text-upper) ($stage + (if ($detail | is-empty) { "" } else { " | " + $detail }))
 }
 
-export def finish-run [run_id: string status: string] {
+export def finish-run [run_id: string status: string detail: string = ""] {
     let state = (load-run $run_id)
     let next = (
         $state
         | upsert status $status
         | upsert updated_at (now-text)
         | upsert finished_at (now-text)
+        | upsert final_detail $detail
     )
     save-run $next
-    append-event $run_id ($status | text-upper) "setup run finished"
+    append-event $run_id ($status | text-upper) ("setup run finished" + (if ($detail | is-empty) { "" } else { " | " + $detail }))
 }
 
 export def latest-resumable-run [] {
@@ -215,7 +216,7 @@ export def latest-resumable-run [] {
         if not ($file | path exists) { continue }
 
         let state = (open $file)
-        if ($state.status? | default "") in ["running" "failed"] {
+        if ($state.status? | default "") in ["running" "failed" "interrupted"] {
             return ($state.run_id? | default ($row.name | path basename))
         }
     }
@@ -226,7 +227,7 @@ export def latest-resumable-run [] {
 export def resolve-resume-run [requested: string] {
     if not ($requested | is-empty) {
         let state = (load-run $requested)
-        if not (($state.status? | default "") in ["running" "failed"]) {
+        if not (($state.status? | default "") in ["running" "failed" "interrupted"]) {
             error make { msg: ("Setup run " + $requested + " is not resumable (status: " + ($state.status? | default "unknown") + ").") }
         }
         return $requested

@@ -1,6 +1,8 @@
 #!/usr/bin/env nu
 
 const TOOLS_ROOT = path self ..
+const SUBPROCESS = path self ./modules/subprocess.nu
+use $SUBPROCESS [run-command command-failure-message]
 
 def nu-home [] {
     let test_mode = ($env.INITIAL_SETUP_TEST_MODE? | default "" | str trim)
@@ -178,18 +180,15 @@ def cleanup-windows-env [] {
 
     let script = ($TOOLS_ROOT | path join "scripts" "windows" "cleanup-direnv-env.ps1")
     let args = ["-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ($script | into string)]
-    let output = (^$shell ...$args | str trim)
-    let exit_code = ($env.LAST_EXIT_CODE | default 0)
-
-    if $exit_code != 0 {
-        print "[warn] Legacy direnv environment cleanup failed."
-
+    let result = (run-command $shell $args)
+    if not $result.ok {
+        print --stderr ("[warn] " + (command-failure-message "Legacy direnv environment cleanup" $result))
         return {
             changed: false
             preserved_custom: false
         }
     }
-
+    let output = ($result.stdout | str trim)
     if ($output | is-empty) {
         return {
             changed: false
@@ -197,11 +196,11 @@ def cleanup-windows-env [] {
         }
     }
 
-    let result = ($output | from json)
+    let payload = ($output | from json)
     mut changed = false
     mut preserved_custom = false
 
-    for item in $result.variables {
+    for item in $payload.variables {
         if $item.action == "removed-old-managed-value" {
             print ("[migrate] Removed old Initial-setup User-scope " + $item.name)
             $changed = true
@@ -269,15 +268,14 @@ def uninstall-old-winget-direnv [] {
         "--disable-interactivity"
     ]
 
-    ^winget ...$args
-    let exit_code = ($env.LAST_EXIT_CODE | default 0)
+    let result = (run-command "winget" $args --live)
 
-    if $exit_code == 0 {
+    if $result.ok {
         print "[ok] Winget direnv package removed."
         return true
     }
 
-    print ("[warn] Winget direnv uninstall returned exit code " + ($exit_code | into string))
+    print ("[warn] " + (command-failure-message "Winget direnv removal" $result))
     false
 }
 

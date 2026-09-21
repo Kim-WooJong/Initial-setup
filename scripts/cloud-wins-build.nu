@@ -1,18 +1,20 @@
 #!/usr/bin/env nu
 # Compile from a private local cache, not inside a cloud-synchronized checkout.
-const OUTPUT = path self ./modules/process-output.nu
-use $OUTPUT [output-text]
 const ROOT = path self ..
 const ENGINE = path self ./modules/cloud-wins-engine.nu
 const SAFETY = path self ./modules/safety.nu
 const CORE = path self ./modules/core.nu
+const SUBPROCESS = path self ./modules/subprocess.nu
 use $ENGINE [cloud-build-layout]
 use $SAFETY [private-directory atomic-record operation-lease release-lease]
 use $CORE [error-message failure-envelope captured-failure]
+use $SUBPROCESS [run-command command-failure-message]
 
 def checked-cargo [args: list] {
-    ^cargo ...$args
-    if ($env.LAST_EXIT_CODE | default 1) != 0 { error make {msg: "Cargo failed; no successful build receipt was written."} }
+    let result = (run-command "cargo" $args --live)
+    if not $result.ok {
+        error make {msg: ((command-failure-message "Cargo" $result) + (char nl) + "No successful build receipt was written.")}
+    }
 }
 def main [--test --offline] {
     if (which cargo | is-empty) or (which rustc | is-empty) {
@@ -33,9 +35,9 @@ def main [--test --offline] {
         }
         # Honor the local compiler, but choose its host explicitly, not a user's
         # CARGO_BUILD_TARGET. This command does not change Rustup defaults.
-        let rust = (do { ^rustc -vV } | complete)
-        if $rust.exit_code != 0 { error make {msg: "Cannot query rustc host."} }
-        let host_rows = ($rust.stdout | output-text | lines | where {|line| $line | str starts-with "host: "})
+        let rust = (run-command "rustc" ["-vV"])
+        if not $rust.ok { error make {msg: (command-failure-message "Query rustc host" $rust)} }
+        let host_rows = ($rust.stdout | lines | where {|line| $line | str starts-with "host: "})
         if ($host_rows | length) != 1 { error make {msg: "Cannot identify rustc host triple."} }
         let host = ($host_rows | first | str replace "host: " "" | str trim)
         let manifest = ($layout.build_source | path join "Cargo.toml")
@@ -52,10 +54,11 @@ def main [--test --offline] {
         checked-cargo (["build" "--release"] | append $common | append $offline_args)
         let name = if $nu.os-info.name == "windows" { "cloudwins.exe" } else { "cloudwins" }
         let exe = ($layout.target_dir | path join $host "release" $name)
-        let version = (do { ^$exe --version } | complete)
+        let version = (run-command ($exe | into string) ["--version"])
         let expected_version = (open --raw ($ROOT | path join "VERSION") | str trim)
-        if $version.exit_code != 0 or ($version.stdout | output-text | str trim) != ("cloudwins " + $expected_version) {
-            error make {msg: "Built helper did not report the expected version."}
+        if not $version.ok or ($version.stdout | str trim) != ("cloudwins " + $expected_version) {
+            let detail = if $version.ok { "Unexpected version output: " + ($version.stdout | str trim) } else { command-failure-message "Built cloudwins --version" $version }
+            error make {msg: ("Built helper did not report the expected version." + (char nl) + $detail)}
         }
         atomic-record $layout.receipt {
             version: 1 source_hash: $layout.source_hash exe: ($exe | into string)
@@ -65,13 +68,14 @@ def main [--test --offline] {
         }
         print {built: true exe: $exe tests_executed: $test receipt: $layout.receipt}
         null
-    } catch {|err| failure-envelope {msg: (error-message $err "cloudwins build failed.")} })
+    } catch {|err| failure-envelope $err })
     let failed = (captured-failure $result)
-    let cleanup = (try { release-lease $lease; null } catch {|err| failure-envelope {msg: (error-message $err "Could not release build lease.")} })
+    let cleanup = (try { release-lease $lease; null } catch {|err| failure-envelope $err })
     let cleanup_failure = (captured-failure $cleanup)
     if $failed != null {
-        if $cleanup_failure != null { print --stderr $cleanup_failure.msg }
-        error make {msg: $failed.msg}
+        mut message = (error-message $failed "cloudwins build failed.")
+        if $cleanup_failure != null { $message = ($message + (char nl) + "Build operation-lock cleanup also failed: " + (error-message $cleanup_failure)) }
+        error make {msg: $message}
     }
-    if $cleanup_failure != null { error make {msg: $cleanup_failure.msg} }
+    if $cleanup_failure != null { error make {msg: ("Build operation-lock cleanup failed: " + (error-message $cleanup_failure))} }
 }

@@ -7,7 +7,9 @@ Commands are installed into the Nushell environment after setup.
 | `dotstatus` | Show synchronization and provider state. |
 | `dotdiff` | Show managed configuration differences. |
 | `dotpush` | Publish reviewed local source changes. |
-| `dotpull` | Fetch/apply private source changes. |
+| `dotpull` | Fetch/apply private source changes. Blocks post-baseline local edits by default; `--discard-local` explicitly permits replacement after showing the incoming diff. |
+| `dotrpush` | Publish the current private source snapshot to a dedicated rclone remote without changing the normal provider. |
+| `dotrpull` | Pull/apply from a dedicated rclone remote without replacing the normal provider source; the same post-baseline local-change guard applies. |
 | `dotresolve` | Resolve merge/protected-file conflicts. |
 | `dotsync` | Run the normal synchronization workflow. |
 | `dotsnapshot` | Create a recoverable snapshot. |
@@ -60,3 +62,24 @@ Commands are installed into the Nushell environment after setup.
 | `dotsecuritytest` | Project maintenance or configuration command; run with `--help` for options. |
 | `dotnuupdate` | Update/select the managed Nushell runtime. |
 | `dotcloud` | Manage Cloud-wins import/recovery. |
+
+
+## Explicit rclone-only transport
+
+Use these commands when you want an additional rclone transport without switching the normal synchronization provider.
+
+```nu
+# One-time explicit target; save it after reviewing the path.
+dotrpush --remote "proton:Initial-setup-store" --save-remote
+
+# Later calls can reuse ~/.config/dotfiles/rclone-sync.nuon.
+dotrpush
+dotrpull
+
+# Pull with the same apply controls as the normal pull path.
+dotrpull --backup
+dotrpull --force
+dotrpull --prune
+```
+
+`dotrpush` deliberately publishes the current private source snapshot as-is. It does not recapture live files into the normal provider source, because doing so could trigger an unrelated cloud client such as Proton Drive. `dotrpull` fetches into verified temporary staging and applies from that staging; it does not replace the normal provider source. The dedicated rclone transport uses its own provider baseline and does not advance the normal global sync baseline.

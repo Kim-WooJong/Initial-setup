@@ -1,6 +1,8 @@
 #!/usr/bin/env nu
 
 const TOOLS_ROOT = path self ..
+const SUBPROCESS = path self ./modules/subprocess.nu
+use $SUBPROCESS [run-command]
 
 def powershell-command [] {
     if not (which pwsh | is-empty) { return "pwsh" }
@@ -42,6 +44,6 @@ def main [
         $source
     ]
 
-    ^$shell ...$args | ignore
-    exit ($env.LAST_EXIT_CODE | default 2)
+    let result = (run-command $shell $args)
+    exit ($result.exit_code? | default 2)
 }

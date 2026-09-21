@@ -145,7 +145,7 @@ def failure-path-regressions [sandbox: path] {
     let backup2 = (child "backup-local-config.nu" ["--label" "same-label" "--quiet"])
     expect ($backup1.exit_code == 0 and $backup2.exit_code == 0) "Repeated same-label local backups both succeed"
     let backup_root = ((state-root) | path join "local-backups")
-    let backups = (ls $backup_root | where type == dir)
+    let backups = (ls $backup_root | where type == dir | where {|row| not (($row.name | path basename) | str starts-with ".") })
     expect (($backups | length) == 2) "Two backup invocations never reuse the same directory"
 
     # A missing payload must be discovered before any live destination changes.
@@ -155,7 +155,7 @@ def failure-path-regressions [sandbox: path] {
     rm ($damaged | path join $saved_config.stored)
     let live_config = ((state-root) | path join "config.nuon")
     let config_hash = (open --raw $live_config | hash sha256)
-    let restore = (child "backup-local-config.nu" ["--restore" ($damaged | into string) "--force"])
+    let restore = (child "backup-local-config.nu" ["--restore" ($damaged | path basename) "--force"])
     expect ($restore.exit_code != 0) "Incomplete local backup is rejected before restore"
     expect ((($restore.stderr | output-text) + ($restore.stdout | output-text)) | str contains "Backup payload missing") "Restore reaches payload preflight"
     expect ((open --raw $live_config | hash sha256) == $config_hash) "Payload-preflight failure leaves live configuration untouched"

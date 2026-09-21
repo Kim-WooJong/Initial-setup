@@ -1,6 +1,12 @@
 #!/usr/bin/env nu
 
 const TOOLS_ROOT = path self ..
+const SUBPROCESS = path self ./modules/subprocess.nu
+const INSTALL_UTILS = path self ./modules/install-utils.nu
+const DIAGNOSTICS = path self ./modules/diagnostics.nu
+use $SUBPROCESS [run-command command-failure-message]
+use $INSTALL_UTILS [probe-tool]
+use $DIAGNOSTICS [tool-diagnostic print-diagnostic]
 
 def nu-home [] {
     let test_mode = ($env.INITIAL_SETUP_TEST_MODE? | default "" | str trim)
@@ -43,15 +49,13 @@ def run-script [tools_root: path name: string ...args: string] {
     let script = ($tools_root | path join "scripts" $name)
 
     if not ($script | path exists) {
-        print ("[WARN] Repair script missing: " + $name)
+        print ("[WARN] Repair/check script missing: " + $name)
         return false
     }
 
-    ^$nu.current-exe --no-config-file $script ...$args
-    let exit_code = ($env.LAST_EXIT_CODE | default 0)
-
-    if $exit_code != 0 {
-        print ("[WARN] Repair failed: " + $name)
+    let result = (run-command ($nu.current-exe | into string) (["--no-config-file" ($script | into string)] | append $args) --live)
+    if not $result.ok {
+        print --stderr ("[WARN] " + (command-failure-message $name $result))
         return false
     }
 
@@ -77,7 +81,7 @@ def main [--fix] {
         } else {
             print "[info] From the Initial-setup project root run: nu setup.nu"
         }
-        return
+        exit 1
     }
 
     if $fix {
@@ -111,31 +115,30 @@ def main [--fix] {
         print "[FAIL] Private data root unavailable"
     }
 
+    print "Tool health:"
     for tool in [
-        "git"
-        "chezmoi"
-        "nvim"
-        "starship"
-        "wezterm"
-        "code"
-        "rg"
-        "fd"
-        "fzf"
-        "bat"
-        "zoxide"
-        "delta"
-        "lazygit"
-        "rustup"
-        "cargo"
-        "juliaup"
-        "julia"
+        {name: "git" args: ["--version"]}
+        {name: "chezmoi" args: ["--version"]}
+        {name: "nvim" args: ["--version"]}
+        {name: "starship" args: ["--version"]}
+        {name: "wezterm" args: ["--version"]}
+        {name: "code" args: ["--version"]}
+        {name: "rg" args: ["--version"]}
+        {name: "fd" args: ["--version"]}
+        {name: "fzf" args: ["--version"]}
+        {name: "bat" args: ["--version"]}
+        {name: "zoxide" args: ["--version"]}
+        {name: "delta" args: ["--version"]}
+        {name: "lazygit" args: ["--version"]}
+        {name: "rustup" args: ["--version"]}
+        {name: "cargo" args: ["--version"]}
+        {name: "juliaup" args: ["--version"]}
+        {name: "julia" args: ["--version"]}
     ] {
-        if (which $tool | is-empty) {
-            print ("[--] " + $tool + " not found")
-        } else {
-            print ("[ok] " + $tool)
-        }
+        let tool_check = (tool-diagnostic $tool.name $tool.args "warning")
+        print-diagnostic $tool_check
     }
+    let chezmoi_probe = (probe-tool "chezmoi" ["--version"])
 
     let git_local = ((nu-home) | path join ".gitconfig.local")
     let ssh_local = ((nu-home) | path join ".ssh" "config.local")
@@ -169,11 +172,7 @@ def main [--fix] {
     if $context.features.git_config {
         print ""
         print "Git folder identities:"
-        let git_ids_script = ($tools_root | path join "scripts" "setup-git-identities.nu")
-        ^$nu.current-exe --no-config-file $git_ids_script --check
-        let git_ids_exit = ($env.LAST_EXIT_CODE | default 0)
-
-        if $git_ids_exit != 0 {
+        if not (run-script $tools_root "setup-git-identities.nu" "--check") {
             print "[WARN] Git folder identity check failed"
         }
     }
@@ -181,11 +180,7 @@ def main [--fix] {
     if $context.features.ssh_config {
         print ""
         print "SSH key pairs:"
-        let ssh_keys_script = ($tools_root | path join "scripts" "setup-ssh-keys.nu")
-        ^$nu.current-exe --no-config-file $ssh_keys_script --check
-        let ssh_keys_exit = ($env.LAST_EXIT_CODE | default 0)
-
-        if $ssh_keys_exit != 0 {
+        if not (run-script $tools_root "setup-ssh-keys.nu" "--check") {
             print "[WARN] SSH key check failed"
         }
     }
@@ -205,15 +200,17 @@ def main [--fix] {
     }
 
     if $nu.os-info.name == "windows" and ($context.features.onedrive_ignore_uploads? | default false) {
-        let policy_script = ($tools_root | path join "scripts" "setup-onedrive-ignore-upload.nu")
-        ^$nu.current-exe --no-config-file $policy_script --check
+        run-script $tools_root "setup-onedrive-ignore-upload.nu" "--check" | ignore
     }
 
     if ($context.features.rclone_config? | default false) {
-        if (which rclone | is-empty) {
-            print "[--] rclone config sync enabled, but rclone is not installed"
+        let rclone_probe = (probe-tool "rclone" ["version"])
+        if $rclone_probe.healthy {
+            print ("[ok] rclone config synchronization enabled | " + $rclone_probe.version)
+        } else if $rclone_probe.found {
+            print ("[WARN] rclone config sync enabled, but the executable is unhealthy: " + ($rclone_probe.result.diagnostic? | default "unknown error"))
         } else {
-            print "[ok] rclone config synchronization enabled"
+            print "[--] rclone config sync enabled, but rclone is not installed"
         }
     }
 
@@ -237,7 +234,7 @@ def main [--fix] {
     print "Toolchain desired state:"
     run-script $tools_root "toolchain-state.nu" "--status" | ignore
 
-    if $context.features.neovim and not (which chezmoi | is-empty) {
+    if $context.features.neovim and $chezmoi_probe.healthy {
         print ""
         print "Chezmoi merge tool:"
         run-script $tools_root "setup-merge-tool.nu" "--check" | ignore
@@ -277,18 +274,16 @@ def main [--fix] {
             print "[--] Linux auto-sync systemd unit files missing"
         }
 
-        if (which systemctl | is-empty) {
-            print "[--] systemctl not available; use dotsync manually"
+        let systemctl_probe = (probe-tool "systemctl" ["--version"])
+        if not $systemctl_probe.healthy {
+            print "[--] systemctl not available/healthy; use dotsync manually"
         } else {
-            let status = (try {
-                do { ^systemctl --user is-active dotfiles-auto-sync.timer } | complete
-            } catch {
-                {exit_code: 1 stdout: "" stderr: ""}
-            })
-            if $status.exit_code == 0 and (($status.stdout | str trim) == "active") {
+            let status = (run-command $systemctl_probe.path ["--user" "is-active" "dotfiles-auto-sync.timer"])
+            if $status.ok and (($status.stdout | str trim) == "active") {
                 print "[ok] Linux auto-sync timer is active"
             } else {
-                print "[--] Linux auto-sync timer is not active; manual dotsync remains available"
+                let reason = ($status.diagnostic? | default "" | str trim)
+                print ("[--] Linux auto-sync timer is not active; manual dotsync remains available" + (if ($reason | is-empty) { "" } else { " | " + $reason }))
             }
         }
     }
@@ -398,14 +393,19 @@ def main [--fix] {
         }
 
         run-script $tools_root "capture-tool-state.nu" | ignore
-        print "[ok] Repair pass completed"
+        print "[info] Repair pass finished. Review any warnings above; individual repair failures are not reported as success."
     }
 
     print ""
     print "Secure synchronization:"
     print ("Vault configured: " + ((vault-configured) | into string))
-    for optional in ["age" "age-keygen" "rclone"] {
-        print ($optional + ": " + (if (which $optional | is-empty) {"not installed"} else {"available"}))
+    for optional in [
+        {name: "age" args: ["--version"]}
+        {name: "age-keygen" args: ["--version"]}
+        {name: "rclone" args: ["version"]}
+    ] {
+        let probe = (probe-tool $optional.name $optional.args)
+        print ($optional.name + ": " + (if $probe.healthy { "healthy" } else if $probe.found { "found but unhealthy" } else { "not installed" }))
     }
     try {
         let provider = (load-provider)
@@ -417,19 +417,23 @@ def main [--fix] {
         if ($data_root | path join "rclone" "rclone.conf" | path exists) {
             print "[WARN] Legacy plaintext rclone.conf exists; review dotvault migrate-rclone before publishing."
         }
-    } catch {
-        print "[WARN] Provider is not reachable or has invalid metadata. No baseline was reset."
+    } catch {|err|
+        print ("[WARN] Provider is not reachable or has invalid metadata. No baseline was reset. " + ($err.msg? | default "unknown provider error"))
     }
     print ""
     print "chezmoi status:"
 
-    if not (which chezmoi | is-empty) and ($data_root | path exists) {
+    if $chezmoi_probe.healthy and ($data_root | path exists) {
         let args = [
             "--source"
             ($data_root | into string)
             "status"
         ]
-
-        ^chezmoi ...$args
+        let status = (run-command $chezmoi_probe.path $args --live)
+        if not $status.ok {
+            print --stderr ("[WARN] " + (command-failure-message "chezmoi status" $status))
+        }
+    } else {
+        print "[--] chezmoi status unavailable because chezmoi/private data is not healthy."
     }
 }

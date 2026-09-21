@@ -4,10 +4,12 @@
 # explicit chezmoi three-way merge support.
 
 const TOOLS_ROOT = path self ..
+const SUBPROCESS = path self ./modules/subprocess.nu
 const CORE_MODULE = path self ./modules/core.nu
 const CONFLICTS_MODULE = path self ./modules/conflicts.nu
 
 use $CORE_MODULE [nu-home machine-context error-message failure-envelope captured-failure]
+use $SUBPROCESS [run-command command-failure-message]
 use $CONFLICTS_MODULE [load-conflict-policy local-policy-path protected-conflicts print-protected-conflicts target-path is-protected-target]
 
 const SAFETY = path self ./modules/safety.nu
@@ -17,11 +19,9 @@ use $PROVIDER [load-provider assert-expected-head assert-same-head provider-head
 
 def run-script [name: string ...args: string] {
     let script = ($TOOLS_ROOT | path join "scripts" $name)
-    ^$nu.current-exe --no-config-file $script ...$args
-
-    let exit_code = ($env.LAST_EXIT_CODE | default 0)
-    if $exit_code != 0 {
-        error make { msg: ("Script failed: " + ($script | into string)) }
+    let result = (run-command ($nu.current-exe | into string) (["--no-config-file" ($script | into string)] | append $args) --live)
+    if not $result.ok {
+        error make { msg: (command-failure-message ("Script " + ($script | path basename)) $result) }
     }
 }
 
@@ -55,21 +55,27 @@ def guarded-resolve [action: closure] {
 }
 
 def resolve-target-input [prompt: string] {
-    let value = (input $prompt | str trim)
+    print $prompt
+    let value = (input | str trim)
     if ($value | is-empty) {
         error make { msg: "No target path was entered." }
     }
     target-path $value
 }
 
+# The merge tool may be a terminal editor. Preserve its TTY and read its exit
+# status immediately; this boundary must never use run-command/complete/tee.
+def interactive-merge [args: list] {
+    ^chezmoi ...$args
+    let merge_exit = ($env.LAST_EXIT_CODE | default 1)
+    if $merge_exit != 0 {
+        error make {msg: ("chezmoi merge exited with code " + ($merge_exit | into string) + ". No follow-up apply was performed.")}
+    }
+}
+
 def merge-target [data_root: path target: path] {
     print ("[merge] " + ($target | into string))
-    ^chezmoi --source ($data_root | into string) merge ($target | into string)
-
-    let merge_exit = ($env.LAST_EXIT_CODE | default 0)
-    if $merge_exit != 0 {
-        error make { msg: "chezmoi merge failed." }
-    }
+    interactive-merge ["--source" ($data_root | into string) "merge" ($target | into string)]
 
     print "[apply] Applying merged target..."
     checked "chezmoi" ["--source" ($data_root | into string) "--force" "apply" ($target | into string)] "Apply selected target" | ignore
@@ -117,9 +123,11 @@ def main [--policy] {
     print ("Private data: " + ($data_root | into string))
     print ""
 
-    ^chezmoi --source ($data_root | into string) status
+    let status_result = (run-command "chezmoi" ["--source" ($data_root | into string) "status"] --live)
+    if not $status_result.ok { error make {msg: (command-failure-message "chezmoi status" $status_result)} }
     print ""
-    ^chezmoi --source ($data_root | into string) diff
+    let diff_result = (run-command "chezmoi" ["--source" ($data_root | into string) "--no-pager" "--use-builtin-diff" "diff"] --live)
+    if not $diff_result.ok { error make {msg: (command-failure-message "chezmoi diff" $diff_result)} }
     print ""
 
     let protected = (protected-conflicts $data_root)
@@ -140,7 +148,8 @@ def main [--policy] {
 
     mut selected = ""
     while ($selected | is-empty) {
-        let answer = (input "Select [1]: " | str trim)
+        print "Select [1] (press Enter for default):"
+        let answer = (input | str trim)
         let choice = (if ($answer | is-empty) { "1" } else { $answer })
 
         if $choice in ["1" "2" "3" "4" "5" "6" "7" "8"] {
@@ -158,7 +167,7 @@ def main [--policy] {
         "2" => {
             print "[merge] Launching the configured three-way merge tool for every changed managed file..."
             guarded-resolve {
-                checked "chezmoi" ["--source" ($data_root | into string) "merge-all"] "Merge changed files" | ignore
+                interactive-merge ["--source" ($data_root | into string) "merge-all"]
                 print "[review] Source merged. No blanket --force apply was performed. Apply selected protected targets explicitly before dotpull."
             }
         }

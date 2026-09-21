@@ -123,26 +123,24 @@ def main [] {
 
     copy-if-missing $starship_default $starship_target
 
-    let module_source = (
-        $TOOLS_ROOT
-        | path join "scripts" "modules" "dotfiles.nu"
-    )
-
-    let module_target = (
+    let runtime_modules = ["dotfiles.nu" "subprocess.nu" "process-output.nu" "console.nu"]
+    let module_target_root = (
         $data_root
-        | path join "home" "dot_config" "nushell" "modules" "dotfiles.nu"
+        | path join "home" "dot_config" "nushell" "modules"
     )
+    mkdir $module_target_root
 
-    if not ($module_source | path exists) {
-        error make {
-            msg: $"Management module not found: ($module_source)"
+    for name in $runtime_modules {
+        let module_source = ($TOOLS_ROOT | path join "scripts" "modules" $name)
+        let module_target = ($module_target_root | path join $name)
+
+        if not ($module_source | path exists) or ($module_source | path type) != "file" {
+            error make { msg: $"Management runtime module not found: ($module_source)" }
         }
+
+        cp $module_source $module_target
+        print $"[sync] Management module -> ($module_target)"
     }
-
-    mkdir ($module_target | path dirname)
-    cp $module_source $module_target
-
-    print $"[sync] Management module -> ($module_target)"
 
 
     let vscode_extensions = (

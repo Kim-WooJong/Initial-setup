@@ -1,5 +1,8 @@
 #!/usr/bin/env nu
 
+const SUBPROCESS = path self ./modules/subprocess.nu
+use $SUBPROCESS [run-command command-failure-message]
+
 # ============================================================
 # Import current settings into the private cloud chezmoi source.
 #
@@ -70,12 +73,9 @@ def chezmoi-add [data_root: path target: path force_source: bool] {
 
     $args = ($args | append ($p | into string))
 
-    ^chezmoi ...$args
-
-    if $env.LAST_EXIT_CODE != 0 {
-        error make {
-            msg: $"chezmoi add failed: ($p)"
-        }
+    let result = (run-command "chezmoi" $args --live)
+    if not $result.ok {
+        error make { msg: (command-failure-message ("chezmoi add " + ($p | into string)) $result) }
     }
 }
 
@@ -161,11 +161,11 @@ def main [--force-source] {
             "qa"
         ]
 
-        let current_nvim = (
-            ^nvim ...$nvim_args
-            | str trim
-            | path expand
-        )
+        let nvim_result = (run-command "nvim" $nvim_args)
+        if not $nvim_result.ok {
+            error make { msg: (command-failure-message "Query Neovim config path" $nvim_result) }
+        }
+        let current_nvim = ($nvim_result.stdout | str trim | path expand)
 
         copy-dir-if-needed $current_nvim $canonical_nvim
         chezmoi-add $data_root $canonical_nvim $force_source

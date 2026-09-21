@@ -4,18 +4,17 @@
 const ROOT = path self ..
 const CORE = path self ./modules/core.nu
 use $CORE [nu-home]
-const OUTPUT = path self ./modules/process-output.nu
-use $OUTPUT [output-text]
+const SUBPROCESS = path self ./modules/subprocess.nu
+use $SUBPROCESS [run-command command-failure-message]
 
 # Machine data must be decoded losslessly, unlike human-readable diagnostics.
 def checked-source [root: path target: path] {
     if (which chezmoi | is-empty) {
         error make {msg: "Local edit is preserved. chezmoi is required only for --push."}
     }
-    let result = (do { ^chezmoi --source $root source-path $target } | complete)
-    if $result.exit_code != 0 {
-        print --stderr ($result.stderr | output-text)
-        error make {msg: "Local edit is preserved. chezmoi could not resolve the managed source; nothing was published."}
+    let result = (run-command "chezmoi" ["--source" ($root | into string) "source-path" ($target | into string)])
+    if not $result.ok {
+        error make {msg: ("Local edit is preserved. " + (command-failure-message "chezmoi source-path" $result) + " Nothing was published.")}
     }
     let raw = $result.stdout
     let decoded = if ($raw | describe) == "binary" {
@@ -71,10 +70,13 @@ def main [
     mut args = []
     if not ($editor_argument | is-empty) { $args = ($args | append $editor_argument) }
     $args = ($args | append ["--" ($local | into string)])
+    # Interactive editors need the real terminal, so this is the one intentional
+    # direct external invocation in production code. Read LAST_EXIT_CODE
+    # immediately; no other command may run between the editor and this check.
     ^$editor ...$args
     let editor_exit = ($env.LAST_EXIT_CODE | default 1)
     if $editor_exit != 0 {
-        error make {msg: "Editor exited unsuccessfully. Any saved local edits were kept; no push was requested."}
+        error make {msg: ("Editor " + $editor + " exited with code " + ($editor_exit | into string) + ". Any saved local edits were kept; no push was requested.")}
     }
     if not $push {
         print "[local] Editor closed. No push or private-source update was requested by this command."
@@ -96,10 +98,9 @@ def main [
     if (contains-template $source) {
         error make {msg: "Local edit is preserved. This target uses a chezmoi template; re-add does not update templates. Review the template or use chezmoi merge explicitly before publishing."}
     }
-    let exe = $nu.current-exe
-    ^$exe --no-config-file ($ROOT | path join "scripts" "sync-up.nu")
-    let push_exit = ($env.LAST_EXIT_CODE | default 1)
-    if $push_exit != 0 {
-        error make {msg: "Local edit is preserved, but --push was blocked or failed. Resolve the preceding publication error; editing itself succeeded."}
+    let exe = ($nu.current-exe | into string)
+    let push_result = (run-command $exe ["--no-config-file" (($ROOT | path join "scripts" "sync-up.nu") | into string)] --live)
+    if not $push_result.ok {
+        error make {msg: ("Local edit is preserved, but --push was blocked or failed. " + (command-failure-message "sync-up" $push_result))}
     }
 }

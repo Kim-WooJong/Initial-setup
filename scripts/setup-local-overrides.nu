@@ -1,5 +1,8 @@
 #!/usr/bin/env nu
 
+const SUBPROCESS = path self ./modules/subprocess.nu
+use $SUBPROCESS [run-command command-failure-message]
+
 # ============================================================
 # Create machine-local Git and SSH override files.
 #
@@ -63,19 +66,9 @@ def update-managed-file [
         ($file | into string)
     ]
 
-    ^chezmoi ...$args
-
-    let exit_code = (
-        $env.LAST_EXIT_CODE
-        | default 0
-    )
-
-    if $exit_code != 0 {
-        error make {
-            msg: (
-                "Failed to update managed file: " + ($file | into string)
-            )
-        }
+    let result = (run-command "chezmoi" $args --live)
+    if not $result.ok {
+        error make { msg: (command-failure-message ("Update managed file " + ($file | into string)) $result) }
     }
 }
 

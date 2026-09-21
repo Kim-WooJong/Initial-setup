@@ -1,6 +1,8 @@
 #!/usr/bin/env nu
 
 const TOOLS_ROOT = path self ..
+const INSTALL_UTILS = path self ./modules/install-utils.nu
+use $INSTALL_UTILS [run-installer probe-tool winget-package-state linux-is-root privileged-command]
 use modules/starship.nu [probe-starship-candidates resolve-starship]
 
 # ============================================================
@@ -23,55 +25,12 @@ def nu-home [] {
     error make {msg: "Unable to determine the Nushell home directory."}
 }
 
-def winget-package-state [
-    mode: string
-    package_id: string
-    source: string = "winget"
-] {
-    let script = ($TOOLS_ROOT | path join "scripts" "winget-package-state.nu")
-    let args = [$script $mode $package_id "--source" $source]
-
-    ^$nu.current-exe --no-config-file ...$args | ignore
-    let exit_code = ($env.LAST_EXIT_CODE | default 2)
-
-    match $exit_code {
-        0 => { "yes" }
-        10 => { "no" }
-        _ => { "error" }
-    }
-}
-
-def run-program [
-    label: string
-    program: string
-    args: list
-] {
-    print ("[run] " + $label)
-    print ""
-
-    ^$program ...$args
-
-    let exit_code = (
-        $env.LAST_EXIT_CODE
-        | default 0
-    )
-
-    if $exit_code != 0 {
-        print ""
-        print (
-            "[warn] Command returned exit code " + ($exit_code | into string)
-        )
-    }
-
-    $exit_code
-}
-
 def install-with-winget [repair: bool = false] {
     if (which winget | is-empty) {
         return false
     }
 
-    let package_state = (winget-package-state "installed" "Starship.Starship")
+    let package_state = (winget-package-state $TOOLS_ROOT "Starship.Starship")
 
     if $package_state == "yes" {
         if not $repair {
@@ -93,8 +52,8 @@ def install-with-winget [repair: bool = false] {
             "--accept-source-agreements"
         ]
 
-        let upgrade_code = (run-program "Upgrade Starship with winget" "winget" $upgrade_args)
-        return ($upgrade_code == 0)
+        let upgrade = (run-installer "Upgrade Starship with winget" "winget" $upgrade_args)
+        return $upgrade.ok
     }
 
     if $package_state == "error" {
@@ -112,9 +71,7 @@ def install-with-winget [repair: bool = false] {
         "--accept-source-agreements"
     ]
 
-    let exit_code = (run-program "Install Starship with winget" "winget" $args)
-
-    $exit_code == 0
+    (run-installer "Install Starship with winget" "winget" $args).ok
 }
 
 def install-with-cargo [] {
@@ -128,9 +85,7 @@ def install-with-cargo [] {
         "--locked"
     ]
 
-    let exit_code = (run-program "Install Starship with Cargo" "cargo" $args)
-
-    $exit_code == 0
+    (run-installer "Install Starship with Cargo" "cargo" $args).ok
 }
 
 def install-with-brew [] {
@@ -143,9 +98,7 @@ def install-with-brew [] {
         "starship"
     ]
 
-    let exit_code = (run-program "Install Starship with Homebrew" "brew" $args)
-
-    $exit_code == 0
+    (run-installer "Install Starship with Homebrew" "brew" $args).ok
 }
 
 def install-with-official-script [] {
@@ -157,8 +110,7 @@ def install-with-official-script [] {
     mkdir $bin_dir
     let bin_literal = (($bin_dir | into string) | str replace --all '"' '\\"')
     let command = (
-        "curl --proto '=https' --tlsv1.2 -sSf https://starship.rs/install.sh "
-        + "| sh -s -- -y -b \"" + $bin_literal + "\""
+        "curl --proto '=https' --tlsv1.2 -sSf https://starship.rs/install.sh " + "| sh -s -- -y -b \"" + $bin_literal + "\""
     )
 
     let args = [
@@ -166,9 +118,7 @@ def install-with-official-script [] {
         $command
     ]
 
-    let exit_code = (run-program "Install Starship with official installer" "sh" $args)
-
-    $exit_code == 0
+    (run-installer "Install Starship with official installer" "sh" $args).ok
 }
 
 def print-unhealthy-candidates [] {

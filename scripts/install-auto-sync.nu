@@ -1,5 +1,10 @@
 #!/usr/bin/env nu
 
+const INSTALL_UTILS = path self ./modules/install-utils.nu
+use $INSTALL_UTILS [run-installer probe-tool winget-package-state linux-is-root privileged-command]
+const SUBPROCESS = path self ./modules/subprocess.nu
+use $SUBPROCESS [run-command print-result command-failure-message]
+
 def nu-home [] {
     let test_mode = ($env.INITIAL_SETUP_TEST_MODE? | default "" | str trim)
     let override = ($env.INITIAL_SETUP_HOME_OVERRIDE? | default "" | str trim)
@@ -34,30 +39,9 @@ def machine-context [] {
     open $file
 }
 
-def run-program [
-    label: string
-    program: string
-    args: list
-] {
-    print (
-        "[run] " + $label
-    )
-    print ""
-
-    ^$program ...$args
-
-    let exit_code = (
-        $env.LAST_EXIT_CODE
-        | default 0
-    )
-
-    if $exit_code != 0 {
-        error make {
-            msg: (
-                "Command failed with exit code " + ($exit_code | into string) + ": " + $label
-            )
-        }
-    }
+def run-program [label: string program: string args: list] {
+    let result = (run-installer $label $program $args)
+    if not $result.ok { error make {msg: ("Command failed: " + $label)} }
 }
 
 def vbs-literal [value: string] {
@@ -139,13 +123,8 @@ def systemd-user-available [] {
         return false
     }
 
-    let result = (try {
-        do { ^systemctl --user show-environment } | complete
-    } catch {
-        {exit_code: 1 stdout: "" stderr: "systemctl --user invocation failed"}
-    })
-
-    $result.exit_code == 0
+    let result = (run-command "systemctl" ["--user" "show-environment"])
+    $result.ok
 }
 
 def install-linux [
@@ -225,17 +204,19 @@ def install-linux [
         return
     }
 
-    let reload = (do { ^systemctl --user daemon-reload } | complete)
+    let reload = (run-command "systemctl" ["--user" "daemon-reload"])
 
-    if $reload.exit_code != 0 {
+    if not $reload.ok {
+        print-result "systemctl --user daemon-reload" $reload
         print "[warn] Could not reload systemd user units; automatic sync remains disabled."
         print "[info] Manual `dotsync` is still available."
         return
     }
 
-    let enabled = (do { ^systemctl --user enable --now dotfiles-auto-sync.timer } | complete)
+    let enabled = (run-command "systemctl" ["--user" "enable" "--now" "dotfiles-auto-sync.timer"])
 
-    if $enabled.exit_code != 0 {
+    if not $enabled.ok {
+        print-result "systemctl --user enable --now dotfiles-auto-sync.timer" $enabled
         print "[warn] Could not enable dotfiles-auto-sync.timer; automatic sync remains disabled."
         print "[info] Manual `dotsync` is still available."
         return
@@ -310,8 +291,10 @@ def install-macos [
         ($plist | into string)
     ]
 
-    ^launchctl ...$unload_args
-    | ignore
+    let unload = (run-command "launchctl" $unload_args)
+    if not $unload.ok {
+        print --stderr ("[warn] Existing LaunchAgent unload was best-effort: " + (command-failure-message "launchctl unload" $unload))
+    }
 
     let load_args = [
         "load"

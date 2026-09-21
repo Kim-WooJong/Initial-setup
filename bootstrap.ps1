@@ -299,6 +299,10 @@ $env:PATH = (Split-Path -Parent $nu) + [IO.Path]::PathSeparator + $env:PATH
 & $nu --no-config-file @nuArgs
 $setupExitCode = $LASTEXITCODE
 
+if ($setupExitCode -eq 130) {
+    Write-Host '[cancelled] setup.nu was interrupted by the user.'
+    exit 130
+}
 if ($setupExitCode -ne 0) {
     throw "setup.nu exited with code $setupExitCode."
 }

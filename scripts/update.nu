@@ -1,6 +1,8 @@
 #!/usr/bin/env nu
 
 const TOOLS_ROOT = path self ..
+const SUBPROCESS = path self ./modules/subprocess.nu
+use $SUBPROCESS [run-command command-failure-message]
 
 def nu-home [] {
     let test_mode = ($env.INITIAL_SETUP_TEST_MODE? | default "" | str trim)
@@ -41,10 +43,9 @@ def winget-package-state [
     let script = ($TOOLS_ROOT | path join "scripts" "winget-package-state.nu")
     let args = [$script $mode $package_id "--source" $source]
 
-    ^$nu.current-exe --no-config-file ...$args | ignore
-    let exit_code = ($env.LAST_EXIT_CODE | default 2)
+    let result = (run-command ($nu.current-exe | into string) (["--no-config-file"] | append $args))
 
-    match $exit_code {
+    match ($result.exit_code? | default 2) {
         0 => { "yes" }
         10 => { "no" }
         _ => { "error" }
@@ -63,17 +64,11 @@ def run-external [
 
     print ("[run] " + $label)
 
-    ^$program ...$args
-
-    let exit_code = ($env.LAST_EXIT_CODE | default 0)
-
-    if $exit_code != 0 {
-        print (
-            "[warn] " + $label + " returned exit code " + ($exit_code | into string)
-        )
+    let result = (run-command $program $args --live)
+    if not $result.ok {
+        print --stderr ("[warn] " + (command-failure-message $label $result))
         return false
     }
-
     true
 }
 
@@ -83,15 +78,11 @@ def run-script [
 ] {
     let script = ($TOOLS_ROOT | path join "scripts" $name)
 
-    ^$nu.current-exe --no-config-file $script ...$args
-
-    let exit_code = ($env.LAST_EXIT_CODE | default 0)
-
-    if $exit_code != 0 {
-        print ("[warn] Script failed: " + $name)
+    let result = (run-command ($nu.current-exe | into string) (["--no-config-file" ($script | into string)] | append $args) --live)
+    if not $result.ok {
+        print --stderr ("[warn] " + (command-failure-message ("Script " + $name) $result))
         return false
     }
-
     true
 }
 
@@ -108,8 +99,8 @@ def linux-is-root [] {
         return false
     }
 
-    let result = (do { ^id -u } | complete)
-    $result.exit_code == 0 and (($result.stdout | str trim) == "0")
+    let result = (run-command "id" ["-u"])
+    $result.ok and (($result.stdout | str trim) == "0")
 }
 
 def privileged-linux [label: string program: string args: list] {
@@ -118,7 +109,7 @@ def privileged-linux [label: string program: string args: list] {
     }
 
     if (which sudo | is-empty) {
-        print ("[warn] sudo is required to " + ($label | str downcase) + "; skipping.")
+        print ("[warn] sudo is required to " + ($label | str lowercase) + "; skipping.")
         return false
     }
 

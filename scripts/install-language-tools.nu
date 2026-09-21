@@ -1,277 +1,142 @@
 #!/usr/bin/env nu
 
 const TOOLS_ROOT = path self ..
+const UTILS = path self ./modules/install-utils.nu
+use $UTILS [probe-tool run-installer winget-package-state user-tool-paths]
 
-# ============================================================
-# Install Rust (rustup) and Julia (Juliaup).
-# Both are optional; failures do not abort the full setup.
-# ============================================================
-
-
-def winget-package-state [
-    mode: string
-    package_id: string
-    source: string = "winget"
-] {
-    let script = ($TOOLS_ROOT | path join "scripts" "winget-package-state.nu")
-    let args = [$script $mode $package_id "--source" $source]
-
-    ^$nu.current-exe --no-config-file ...$args | ignore
-    let exit_code = ($env.LAST_EXIT_CODE | default 2)
-
-    match $exit_code {
-        0 => { "yes" }
-        10 => { "no" }
-        _ => { "error" }
-    }
-}
+# Rust and Julia are optional developer toolchains. Presence alone is not enough:
+# the executable must answer its version probe successfully.
 
 def nu-home [] {
     let test_mode = ($env.INITIAL_SETUP_TEST_MODE? | default "" | str trim)
     let override = ($env.INITIAL_SETUP_HOME_OVERRIDE? | default "" | str trim)
-
-    if $test_mode == "1" and not ($override | is-empty) {
-        return ($override | path expand)
-    }
-
+    if $test_mode == "1" and not ($override | is-empty) { return ($override | path expand) }
     let home_path = ($nu | get --optional home-path)
-
-    if $home_path != null {
-        return $home_path
-    }
-
+    if $home_path != null { return $home_path }
     let home_dir = ($nu | get --optional home-dir)
-
-    if $home_dir != null {
-        return $home_dir
-    }
-
-    error make {
-        msg: "Unable to determine the Nushell home directory."
-    }
-}
-
-def run-program [label: string program: string args: list] {
-    print ("[run] " + $label)
-    print ""
-
-    ^$program ...$args
-
-    let exit_code = (
-        $env.LAST_EXIT_CODE
-        | default 0
-    )
-
-    if $exit_code != 0 {
-        print (
-            "[warn] Command returned exit code " + ($exit_code | into string)
-        )
-    }
-
-    $exit_code
-}
-
-def install-rust-windows [] {
-    if not (which rustup | is-empty) {
-        print "[ok] Rustup already installed"
-        return
-    }
-
-    if (which winget | is-empty) {
-        print "[warn] winget not found; Rustup installation skipped."
-        return
-    }
-
-    let package_state = (winget-package-state "installed" "Rustlang.Rustup")
-
-    if $package_state == "yes" {
-        print "[ok] Rustup WinGet package already installed; skipping reinstall"
-        print "[info] rustup is not visible in PATH in this process"
-        return
-    }
-
-    if $package_state == "error" {
-        print "[warn] Could not determine Rustup WinGet state; leaving package unchanged"
-        return
-    }
-
-    let args = [
-        "install"
-        "--id"
-        "Rustlang.Rustup"
-        "--exact"
-        "--source"
-        "winget"
-        "--accept-package-agreements"
-        "--accept-source-agreements"
-    ]
-
-    let exit_code = (
-        run-program "Install Rustup with winget" "winget" $args
-    )
-
-    if $exit_code != 0 {
-        print "[warn] Rustup could not be installed automatically."
-    }
-}
-
-def install-rust-unix [] {
-    if not (which rustup | is-empty) {
-        print "[ok] Rustup already installed"
-        return
-    }
-
-    if (which sh | is-empty) or (which curl | is-empty) {
-        print "[warn] curl and sh are required for Rustup installation."
-        return
-    }
-
-    let command = (
-        "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs " + "| sh -s -- -y"
-    )
-
-    let args = [
-        "-c"
-        $command
-    ]
-
-    let exit_code = (
-        run-program "Install Rustup with official installer" "sh" $args
-    )
-
-    if $exit_code != 0 {
-        print "[warn] Rustup could not be installed automatically."
-    }
-}
-
-def install-julia-windows [] {
-    if not (which juliaup | is-empty) or not (which julia | is-empty) {
-        print "[ok] Julia or Juliaup already installed"
-        return
-    }
-
-    if (which winget | is-empty) {
-        print "[warn] winget not found; Juliaup installation skipped."
-        return
-    }
-
-    let package_state = (winget-package-state "installed" "9NJNWW8PVKMN" "msstore")
-
-    if $package_state == "yes" {
-        print "[ok] Julia WinGet/MS Store package already installed; skipping reinstall"
-        print "[info] julia/juliaup is not visible in PATH in this process"
-        return
-    }
-
-    if $package_state == "error" {
-        print "[warn] Could not determine Julia WinGet/MS Store state; leaving package unchanged"
-        return
-    }
-
-    let args = [
-        "install"
-        "--name"
-        "Julia"
-        "--id"
-        "9NJNWW8PVKMN"
-        "--exact"
-        "--source"
-        "msstore"
-        "--accept-package-agreements"
-        "--accept-source-agreements"
-    ]
-
-    let exit_code = (
-        run-program "Install Juliaup from Microsoft Store" "winget" $args
-    )
-
-    if $exit_code != 0 {
-        print "[warn] Juliaup could not be installed automatically."
-    }
-}
-
-def install-julia-unix [] {
-    if not (which juliaup | is-empty) or not (which julia | is-empty) {
-        print "[ok] Julia or Juliaup already installed"
-        return
-    }
-
-    if (which sh | is-empty) or (which curl | is-empty) {
-        print "[warn] curl and sh are required for Juliaup installation."
-        return
-    }
-
-    let command = (
-        "curl -fsSL https://install.julialang.org " + "| sh -s -- --yes"
-    )
-
-    let args = [
-        "-c"
-        $command
-    ]
-
-    let exit_code = (
-        run-program "Install Juliaup with official installer" "sh" $args
-    )
-
-    if $exit_code != 0 {
-        print "[warn] Juliaup could not be installed automatically."
-    }
+    if $home_dir != null { return $home_dir }
+    error make {msg: "Unable to determine the Nushell home directory."}
 }
 
 def machine-context [] {
-    let file = (
-        (nu-home)
-        | path join ".config" "dotfiles" "config.nuon"
-    )
+    open ((nu-home) | path join ".config" "dotfiles" "config.nuon")
+}
 
-    open $file
+def rust-probe [] {
+    let paths = (user-tool-paths)
+    let exe = if $nu.os-info.name == "windows" { "rustup.exe" } else { "rustup" }
+    probe-tool "rustup" ["--version"] [($paths.cargo | path join $exe)]
+}
+
+def julia-probe [] {
+    let paths = (user-tool-paths)
+    let juliaup_exe = if $nu.os-info.name == "windows" { "juliaup.exe" } else { "juliaup" }
+    let julia_exe = if $nu.os-info.name == "windows" { "julia.exe" } else { "julia" }
+    let up = (probe-tool "juliaup" ["--version"] [($paths.juliaup | path join $juliaup_exe)])
+    if $up.healthy { return $up }
+    probe-tool "julia" ["--version"] [($paths.juliaup | path join $julia_exe)]
+}
+
+def install-rust [] {
+    let before = (rust-probe)
+    if $before.healthy {
+        print ("[ok] Rustup " + $before.version + " -> " + $before.path)
+        return true
+    }
+    if $before.found {
+        print ("[warn] Rustup exists but failed its health check: " + $before.path)
+        if $before.result != null and not ($before.result.diagnostic | str trim | is-empty) { print --stderr $before.result.diagnostic }
+    }
+
+    let installed = if $nu.os-info.name == "windows" {
+        if (which winget | is-empty) {
+            print "[warn] winget not found; Rustup installation skipped."
+            false
+        } else {
+            let state = (winget-package-state $TOOLS_ROOT "Rustlang.Rustup")
+            if $state == "error" {
+                print "[warn] Could not determine Rustup WinGet state; refusing a blind reinstall."
+                false
+            } else {
+                let verb = if $state == "yes" { "upgrade" } else { "install" }
+                let result = (run-installer ("Rustup WinGet " + $verb) "winget" [$verb "--id" "Rustlang.Rustup" "--exact" "--source" "winget" "--accept-package-agreements" "--accept-source-agreements"])
+                $result.ok
+            }
+        }
+    } else {
+        if (which curl | is-empty) or (which sh | is-empty) {
+            print "[warn] curl and sh are required for Rustup installation."
+            false
+        } else {
+            (run-installer "Install Rustup with official installer" "sh" ["-c" "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y"]).ok
+        }
+    }
+
+    if not $installed { return false }
+    let after = (rust-probe)
+    if $after.healthy {
+        print ("[ok] Rustup verified -> " + $after.path)
+        true
+    } else {
+        print "[warn] Rustup installer completed, but `rustup --version` still failed. Restart the shell or repair PATH."
+        false
+    }
+}
+
+def install-julia [] {
+    let before = (julia-probe)
+    if $before.healthy {
+        print ("[ok] Julia toolchain " + $before.version + " -> " + $before.path)
+        return true
+    }
+    if $before.found {
+        print ("[warn] Julia/Juliaup exists but failed its health check: " + $before.path)
+        if $before.result != null and not ($before.result.diagnostic | str trim | is-empty) { print --stderr $before.result.diagnostic }
+    }
+
+    let installed = if $nu.os-info.name == "windows" {
+        if (which winget | is-empty) {
+            print "[warn] winget not found; Juliaup installation skipped."
+            false
+        } else {
+            let state = (winget-package-state $TOOLS_ROOT "9NJNWW8PVKMN" "msstore")
+            if $state == "error" {
+                print "[warn] Could not determine Julia MS Store state; refusing a blind reinstall."
+                false
+            } else {
+                let verb = if $state == "yes" { "upgrade" } else { "install" }
+                let args = if $verb == "install" {
+                    [$verb "--name" "Julia" "--id" "9NJNWW8PVKMN" "--exact" "--source" "msstore" "--accept-package-agreements" "--accept-source-agreements"]
+                } else {
+                    [$verb "--id" "9NJNWW8PVKMN" "--exact" "--source" "msstore" "--accept-package-agreements" "--accept-source-agreements"]
+                }
+                (run-installer ("Julia WinGet " + $verb) "winget" $args).ok
+            }
+        }
+    } else {
+        if (which curl | is-empty) or (which sh | is-empty) {
+            print "[warn] curl and sh are required for Juliaup installation."
+            false
+        } else {
+            (run-installer "Install Juliaup with official installer" "sh" ["-c" "curl -fsSL https://install.julialang.org | sh -s -- --yes"]).ok
+        }
+    }
+
+    if not $installed { return false }
+    let after = (julia-probe)
+    if $after.healthy {
+        print ("[ok] Julia toolchain verified -> " + $after.path)
+        true
+    } else {
+        print "[warn] Julia installer completed, but Julia/Juliaup still failed its version probe. Restart the shell or repair PATH."
+        false
+    }
 }
 
 def main [] {
-    let context = (
-        machine-context
-    )
-
+    let context = (machine-context)
     print "=== Language toolchains ==="
     print ""
-
-    match $nu.os-info.name {
-        "windows" => {
-            if $context.features.rust {
-                install-rust-windows
-            }
-
-            if $context.features.julia {
-                print ""
-                install-julia-windows
-            }
-        }
-
-        "macos" => {
-            if $context.features.rust {
-                install-rust-unix
-            }
-
-            if $context.features.julia {
-                print ""
-                install-julia-unix
-            }
-        }
-
-        "linux" => {
-            if $context.features.rust {
-                install-rust-unix
-            }
-
-            if $context.features.julia {
-                print ""
-                install-julia-unix
-            }
-        }
-
-        _ => {
-            print "[warn] Unsupported OS for automatic Rust/Julia installation."
-        }
-    }
+    if ($context.features.rust? | default false) { install-rust | ignore }
+    if ($context.features.julia? | default false) { print ""; install-julia | ignore }
 }

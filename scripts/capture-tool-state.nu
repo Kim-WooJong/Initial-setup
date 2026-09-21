@@ -1,6 +1,8 @@
 #!/usr/bin/env nu
 
 const TOOLS_ROOT = path self ..
+const SUBPROCESS = path self ./modules/subprocess.nu
+use $SUBPROCESS [run-command]
 
 def nu-home [] {
     let test_mode = ($env.INITIAL_SETUP_TEST_MODE? | default "" | str trim)
@@ -45,14 +47,10 @@ def command-version [name: string args: list] {
         return null
     }
 
-    try {
-        ^$name ...$args
-        | lines
-        | first
-        | str trim
-    } catch {
-        null
-    }
+    let result = (run-command $name $args)
+    if not $result.ok { return null }
+    let lines = ($result.stdout | lines | where {|line| not ($line | str trim | is-empty) })
+    if ($lines | is-empty) { null } else { $lines | first | str trim }
 }
 
 def main [] {

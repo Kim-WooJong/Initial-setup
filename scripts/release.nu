@@ -1,6 +1,10 @@
 #!/usr/bin/env nu
 
 const TOOLS_ROOT = path self ..
+const SUBPROCESS = path self ./modules/subprocess.nu
+const INSTALL_UTILS = path self ./modules/install-utils.nu
+use $SUBPROCESS [run-command command-failure-message]
+use $INSTALL_UTILS [probe-tool]
 
 def version-file [] {
     $TOOLS_ROOT | path join "VERSION"
@@ -47,19 +51,24 @@ def bump-version [current: string mode: string requested: string] {
 }
 
 def git-output [args: list] {
-    let output = (^git -C $TOOLS_ROOT ...$args | str trim)
-    let exit_code = ($env.LAST_EXIT_CODE | default 1)
-    if $exit_code != 0 { "" } else { $output }
+    let git = (probe-tool "git" ["--version"])
+    if not $git.healthy { error make {msg: "git is unavailable or unhealthy."} }
+    let result = (run-command $git.path (["-C" ($TOOLS_ROOT | into string)] | append $args))
+    if not $result.ok { error make {msg: (command-failure-message "git" $result)} }
+    $result.stdout | str trim
 }
 
 def git-run [label: string args: list] {
+    let git = (probe-tool "git" ["--version"])
+    if not $git.healthy { error make {msg: "git is unavailable or unhealthy."} }
     print ("[git] " + $label)
-    ^git -C $TOOLS_ROOT ...$args
-    let exit_code = ($env.LAST_EXIT_CODE | default 0)
+    let result = (run-command $git.path (["-C" ($TOOLS_ROOT | into string)] | append $args) --live)
+    if not $result.ok { error make {msg: (command-failure-message $label $result)} }
+}
 
-    if $exit_code != 0 {
-        error make { msg: ($label + " failed with exit code " + ($exit_code | into string)) }
-    }
+def run-gate [label: string script: path args: list = []] {
+    let result = (run-command ($nu.current-exe | into string) (["--no-config-file" ($script | into string)] | append $args) --live)
+    if not $result.ok { error make {msg: (command-failure-message $label $result)} }
 }
 
 def update-readme-version [version: string] {
@@ -79,31 +88,11 @@ def update-readme-version [version: string] {
 }
 
 def validate-release [] {
-    let validator = ($TOOLS_ROOT | path join "scripts" "validate-project.nu")
-    ^$nu.current-exe --no-config-file $validator
-
-    let validation_exit = ($env.LAST_EXIT_CODE | default 0)
-
-    if $validation_exit != 0 {
-        error make { msg: "Project validation failed; release aborted." }
-    }
-
-    let self_test = ($TOOLS_ROOT | path join "scripts" "self-test.nu")
-    ^$nu.current-exe --no-config-file $self_test --sandbox
-
-    let test_exit = ($env.LAST_EXIT_CODE | default 0)
-
-    if $test_exit != 0 {
-        error make { msg: "Sandbox self-test failed; release aborted." }
-    }
-
-    ^$nu.current-exe --no-config-file ($TOOLS_ROOT | path join "scripts" "cloud-wins-build.nu") --test
-    if ($env.LAST_EXIT_CODE | default 1) != 0 { error make {msg: "Cloud-wins Rust release gate failed."} }
-    ^$nu.current-exe --no-config-file ($TOOLS_ROOT | path join "scripts" "cloud-wins-test.nu") --require-engine
-    if ($env.LAST_EXIT_CODE | default 1) != 0 { error make {msg: "Cloud-wins integration release gate failed."} }
-
-    ^$nu.current-exe --no-config-file ($TOOLS_ROOT | path join "scripts" "security-self-test.nu") --require-age --require-rclone
-    if ($env.LAST_EXIT_CODE | default 1) != 0 { error make {msg: "Security/integration release gate failed."} }
+    run-gate "Project validation" ($TOOLS_ROOT | path join "scripts" "validate-project.nu")
+    run-gate "Sandbox self-test" ($TOOLS_ROOT | path join "scripts" "self-test.nu") ["--sandbox"]
+    run-gate "Cloud-wins Rust release gate" ($TOOLS_ROOT | path join "scripts" "cloud-wins-build.nu") ["--test"]
+    run-gate "Cloud-wins integration release gate" ($TOOLS_ROOT | path join "scripts" "cloud-wins-test.nu") ["--require-engine"]
+    run-gate "Security/integration release gate" ($TOOLS_ROOT | path join "scripts" "security-self-test.nu") ["--require-age" "--require-rclone"]
 }
 
 def prepend-changelog [version: string] {
@@ -132,8 +121,9 @@ def main [
     --push
     --no-tag
 ] {
-    if (which git | is-empty) {
-        error make { msg: "git is required." }
+    let git_probe = (probe-tool "git" ["--version"])
+    if not $git_probe.healthy {
+        error make { msg: "git is required and must pass `git --version`." }
     }
 
     if not (($TOOLS_ROOT | path join ".git") | path exists) {
@@ -166,8 +156,7 @@ def main [
     let cargo_text = (open --raw $cargo_file)
     ($cargo_text | str replace --regex '(?m)^version = "[0-9]+\.[0-9]+\.[0-9]+"$' ('version = "' + $next + '"')) | save --force $cargo_file
     prepend-changelog $next
-    ^$nu.current-exe --no-config-file ($TOOLS_ROOT | path join "scripts" "make-release-manifest.nu")
-    if ($env.LAST_EXIT_CODE | default 1) != 0 { error make {msg: "Release manifest generation failed."} }
+    run-gate "Release manifest generation" ($TOOLS_ROOT | path join "scripts" "make-release-manifest.nu")
     validate-release
 
     git-run ("Stage release " + $next) ["add" "VERSION" "README.md" "CHANGELOG.md" "RELEASE-MANIFEST.json" "tools/cloudwins/Cargo.toml"]

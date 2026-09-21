@@ -1,5 +1,7 @@
 const PROCESS_OUTPUT = path self ./process-output.nu
 use $PROCESS_OUTPUT [output-text]
+const SUBPROCESS = path self ./subprocess.nu
+use $SUBPROCESS [run-command command-failure-message]
 # Toolchain desired-state lock and drift helpers.
 
 const RUNTIME = path self ./nu-runtime.nu
@@ -51,9 +53,9 @@ export def parse-julia-channel [output: string] {
 
 def command-output [program: string args: list] {
     if (which $program | is-empty) { return "" }
-    let result = (do { ^$program ...$args } | complete)
-    if $result.exit_code != 0 { return "" }
-    $result.stdout? | default ""
+    let result = (run-command $program $args)
+    if not $result.ok { return "" }
+    $result.stdout
 }
 
 export def current-toolchain-versions [] {
@@ -134,12 +136,11 @@ export def write-current-lock [] {
 }
 
 def require-toolchain-command [program: string args: list label: string] {
-    let result = (do { ^$program ...$args } | complete)
-    if $result.exit_code != 0 {
-        let details = ($result.stderr? | output-text | str trim)
-        error make { msg: ($label + " failed (exit " + ($result.exit_code | into string) + "). " + $details) }
+    let result = (run-command $program $args)
+    if not $result.ok {
+        error make { msg: (command-failure-message $label $result) }
     }
-    let output = ($result.stdout? | output-text | str trim)
+    let output = ($result.stdout | str trim)
     if not ($output | is-empty) { print $output }
 }
 

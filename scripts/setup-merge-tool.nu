@@ -6,7 +6,9 @@
 # editing only the generated file.
 
 const CORE_MODULE = path self ./modules/core.nu
+const SUBPROCESS = path self ./modules/subprocess.nu
 use $CORE_MODULE [nu-home machine-context]
+use $SUBPROCESS [run-command command-failure-message]
 
 const BEGIN = "# BEGIN Initial-setup managed merge tool"
 const END = "# END Initial-setup managed merge tool"
@@ -17,7 +19,7 @@ def data-root [] {
 }
 
 def template-value [root: path expression: string] {
-    let result = (do { ^chezmoi --source ($root | into string) execute-template $expression } | complete)
+    let result = (run-command "chezmoi" ["--source" ($root | into string) "execute-template" $expression])
     let output = ($result.stdout? | default "" | str trim)
     if $result.exit_code == 0 and not ($output | is-empty) { $output } else { "" }
 }
@@ -125,9 +127,9 @@ def main [--check --force] {
         if $changed {
             print ("[ok] Neovim merge configuration added to chezmoi config template: " + ($template | into string))
             print "[init] Regenerating chezmoi config from its template..."
-            ^chezmoi --source ($root | into string) init
-            if ($env.LAST_EXIT_CODE | default 0) != 0 {
-                error make { msg: "chezmoi init failed while regenerating the configuration file." }
+            let result = (run-command "chezmoi" ["--source" ($root | into string) "init"] --live)
+            if not $result.ok {
+                error make { msg: (command-failure-message "chezmoi init" $result) }
             }
         }
         return

@@ -1,6 +1,8 @@
 # Desired-state planner for packages, configuration, protected files, and toolchains.
 
 const TOOLS_ROOT = path self ../..
+const SUBPROCESS = path self ./subprocess.nu
+use $SUBPROCESS [run-command]
 const CORE_MODULE = path self ./core.nu
 const CONFLICTS_MODULE = path self ./conflicts.nu
 const TOOLCHAINS_MODULE = path self ./toolchains.nu
@@ -55,17 +57,17 @@ export def config-status [data_root: path] {
     if (which chezmoi | is-empty) or not ($data_root | path exists) {
         return { available: false lines: [] count: 0 diff_count: 0 verify_ok: false }
     }
-    let result = (do { ^chezmoi --source ($data_root | into string) status --path-style relative } | complete)
-    let lines = (($result.stdout? | default "") | lines | where { |line| not ($line | str trim | is-empty) })
-    let diff_result = (do { ^chezmoi --source ($data_root | into string) diff } | complete)
-    let diff_lines = (($diff_result.stdout? | default "") | lines | where { |line| not ($line | str trim | is-empty) })
-    let verify_result = (do { ^chezmoi --source ($data_root | into string) verify } | complete)
+    let result = (run-command "chezmoi" ["--source" ($data_root | into string) "status" "--path-style" "relative"])
+    let lines = ($result.stdout | lines | where { |line| not ($line | str trim | is-empty) })
+    let diff_result = (run-command "chezmoi" ["--source" ($data_root | into string) "--no-pager" "--use-builtin-diff" "diff"])
+    let diff_lines = ($diff_result.stdout | lines | where { |line| not ($line | str trim | is-empty) })
+    let verify_result = (run-command "chezmoi" ["--source" ($data_root | into string) "verify"])
     {
-        available: ($result.exit_code == 0)
+        available: $result.ok
         lines: $lines
         count: ($lines | length)
         diff_count: ($diff_lines | length)
-        verify_ok: ($verify_result.exit_code == 0)
+        verify_ok: $verify_result.ok
     }
 }
 

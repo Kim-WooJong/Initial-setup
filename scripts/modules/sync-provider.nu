@@ -7,16 +7,28 @@ const CLOUD_CONFIG = path self ./cloud-wins-config.nu
 use $CLOUD_CONFIG [assert-cloud-workspace]
 const CORE = path self ./core.nu
 const SAFETY = path self ./safety.nu
-use $CORE [machine-context nu-home error-message]
+use $CORE [machine-context nu-home error-message failure-envelope captured-failure]
 use $SAFETY [state-root checked atomic-record tree-files tree-manifest manifest-hash verify-tree disjoint-paths validate-relative private-directory lock-acquire lock-release]
 
 export def provider-config-path [] { (state-root) | path join "sync-provider.nuon" }
-export def provider-state-path [] { (state-root) | path join "provider-state.nuon" }
+export def provider-state-path [] {
+    let scope = ($env.INITIAL_SETUP_PROVIDER_STATE_SCOPE? | default "" | str trim)
+    if ($scope | is-empty) { return ((state-root) | path join "provider-state.nuon") }
+    if not ($scope =~ '^[a-f0-9]{64}$') { error make {msg: "Invalid provider state scope."} }
+    (state-root) | path join "provider-states" ("provider-state-" + $scope + ".nuon")
+}
 export def payload-roots [] { [".chezmoiroot" "home" "vscode" "toolchains" "secrets" ".dotfiles-sync-meta.nuon"] }
 
 export def load-provider [] {
     let file = (provider-config-path)
-    let config = if ($file | path exists) { open --raw $file | from nuon } else { {version: 1 kind: "directory" remote: ""} }
+    let remote_override = ($env.INITIAL_SETUP_PROVIDER_OVERRIDE_REMOTE? | default "" | str trim)
+    let config = if not ($remote_override | is-empty) {
+        {version: 1 kind: "rclone" remote: $remote_override}
+    } else if ($file | path exists) {
+        open --raw $file | from nuon
+    } else {
+        {version: 1 kind: "directory" remote: ""}
+    }
     if ($config.version? | default 0) != 1 or not ($config.kind in ["directory" "local" "rclone"]) { error make { msg: "Unsupported sync provider configuration." } }
     let ctx = (machine-context)
     assert-cloud-workspace $ctx
@@ -281,7 +293,7 @@ export def fetch-revision [config: record head: record destination: path] {
 
 export def publish-revision [config: record expected: record] {
     audit-export $config.data_root
-    if $config.kind == "directory" { return (provider-head $config) }
+    if $config.kind == "directory" { return (stable-provider-head $config) }
     let stage = (new-transfer-dir)
     let entries = (copy-workspace $config.data_root ($stage | path join "data"))
     let revision = (random uuid)
@@ -292,9 +304,22 @@ export def publish-revision [config: record expected: record] {
     let destination = (remote-location $config ("revisions/" + $revision))
     if $config.kind == "local" {
         if ($destination | path exists) { error make { msg: "Revision already exists; immutable data was not replaced." } }
-        mkdir ($destination | path dirname)
-        cp --recursive $stage $destination
-        verify-tree ($destination | path join "data") $entries | ignore
+        let revision_root = ($destination | path dirname)
+        mkdir $revision_root
+        let partial = ($revision_root | path join (".partial-" + $revision))
+        if ($partial | path exists) { rm --recursive --force $partial }
+        let staged = (try {
+            cp --recursive $stage $partial
+            verify-tree ($partial | path join "data") $entries | ignore
+            if ($destination | path exists) { error make {msg: "Revision destination appeared during publish."} }
+            mv $partial $destination
+            null
+        } catch {|err| failure-envelope $err })
+        let staged_failure = (captured-failure $staged)
+        if $staged_failure != null {
+            try { if ($partial | path exists) { rm --recursive --force $partial } } catch {}
+            error make {msg: (error-message $staged_failure "Local revision commit failed before HEAD publication.")}
+        }
     } else {
         checked "rclone" ["copy" $stage $destination "--immutable"] "Upload immutable revision" | ignore
         # --download avoids trusting weak/missing server hash support.
@@ -318,10 +343,14 @@ export def publish-revision [config: record expected: record] {
 }
 
 export def install-workspace [config: record fetched: path] {
+    # Validate the complete incoming payload before touching the current workspace.
+    let desired = (workspace-manifest $fetched)
+    audit-export $fetched
+
     let backup = (new-transfer-dir)
-    copy-workspace $config.data_root ($backup | path join "data") | ignore
+    let previous = (copy-workspace $config.data_root ($backup | path join "data"))
     let roots = (payload-roots)
-    try {
+    let apply_result = (try {
         for name in $roots {
             let dest = ($config.data_root | path join $name)
             let src = ($fetched | path join $name)
@@ -331,18 +360,32 @@ export def install-workspace [config: record fetched: path] {
                 if ($src | path type) == "dir" { cp --recursive $src $dest } else { cp $src $dest }
             }
         }
-        if (workspace-manifest $config.data_root) != (workspace-manifest $fetched) { error make { msg: "Workspace verification failed." } }
-    } catch {|err|
-        # Restore only our allowlisted source roots. Never apply to live HOME.
-        for name in $roots {
-            let dest = ($config.data_root | path join $name)
-            let old = ($backup | path join "data" $name)
-            if ($dest | path exists) { rm --recursive --force $dest }
-            if ($old | path exists) {
-                if ($old | path type) == "dir" { cp --recursive $old $dest } else { cp $old $dest }
+        if (workspace-manifest $config.data_root) != $desired { error make { msg: "Workspace verification failed after replacement." } }
+        null
+    } catch {|err| failure-envelope $err })
+    let apply_failure = (captured-failure $apply_result)
+    if $apply_failure != null {
+        let restore_result = (try {
+            for name in $roots {
+                let dest = ($config.data_root | path join $name)
+                let old = ($backup | path join "data" $name)
+                if ($dest | path exists) { rm --recursive --force $dest }
+                if ($old | path exists) {
+                    mkdir ($dest | path dirname)
+                    if ($old | path type) == "dir" { cp --recursive $old $dest } else { cp $old $dest }
+                }
             }
+            if (workspace-manifest $config.data_root) != $previous { error make {msg: "Workspace rollback verification failed."} }
+            null
+        } catch {|err| failure-envelope $err })
+        let restore_failure = (captured-failure $restore_result)
+        mut message = (error-message $apply_failure "Workspace update failed.")
+        if $restore_failure == null {
+            $message = ($message + " Previous workspace was restored automatically. Recovery copy: " + ($backup | into string))
+        } else {
+            $message = ($message + " Automatic workspace rollback also failed: " + (error-message $restore_failure) + ". Recovery copy: " + ($backup | into string))
         }
-        error make { msg: ((error-message $err "Workspace update failed.") + " Workspace backup: " + ($backup | into string)) }
+        error make {msg: $message}
     }
     print ("[backup] Previous workspace: " + ($backup | into string))
 }

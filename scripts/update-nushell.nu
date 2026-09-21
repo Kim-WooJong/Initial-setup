@@ -13,8 +13,7 @@ def main [--check --shell] {
         # the per-operation latest check into future unrelated user commands.
         with-env {PATH: ([($exe | path dirname)] | append $paths)
                   INITIAL_SETUP_NU_SESSION_EXE: "" INITIAL_SETUP_NU_SESSION_VERSION: "" INITIAL_SETUP_NU_SESSION_PROVIDER: ""} {
-            ^$exe
-            exit ($env.LAST_EXIT_CODE | default 1)
+            exec $exe
         }
     }
     print {executable: $selected.exe version: $selected.version provider: ($selected.provider? | default "current-v1")}

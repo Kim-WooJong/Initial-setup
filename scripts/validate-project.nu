@@ -1,6 +1,8 @@
 #!/usr/bin/env nu
 
 const TOOLS_ROOT = path self ..
+const SUBPROCESS = path self ./modules/subprocess.nu
+use $SUBPROCESS [run-command command-failure-message]
 
 def useful-lines [file: path] {
     open --raw $file
@@ -32,10 +34,10 @@ def main [] {
     # Validate all source files before any structural/version early-exit. This
     # standalone child does not import setup.nu or a project module itself.
     let syntax = ($TOOLS_ROOT | path join "scripts" "validate-syntax.nu")
-    let exe = $nu.current-exe
-    ^$exe --no-config-file $syntax
-    if ($env.LAST_EXIT_CODE | default 1) != 0 {
-        fail "Nushell syntax/startup validation failed; all diagnostics are listed above."
+    let exe = ($nu.current-exe | into string)
+    let syntax_result = (run-command $exe ["--no-config-file" ($syntax | into string)] --live)
+    if not $syntax_result.ok {
+        fail (command-failure-message "Nushell syntax/startup validation" $syntax_result)
     }
 
     let version = (
@@ -99,6 +101,18 @@ def main [] {
         "RELEASE-MANIFEST.json"
         "scripts/modules/safety.nu"
         "scripts/modules/process-output.nu"
+        "scripts/modules/subprocess.nu"
+        "scripts/modules/console.nu"
+        "scripts/modules/sync-local-guard.nu"
+        "scripts/modules/install-utils.nu"
+        "scripts/installer-health-test.nu"
+        "scripts/interactive-tty-policy-test.nu"
+        "scripts/sync-recovery-policy-test.nu"
+        "scripts/diagnostics-policy-test.nu"
+        "scripts/production-subprocess-policy-test.nu"
+        "scripts/modules/diagnostics.nu"
+        "scripts/subprocess-test.nu"
+        "scripts/subprocess-fixture.nu"
         "scripts/process-output-test.nu"
         "scripts/modules/vault.nu"
         "scripts/modules/sync-provider.nu"
@@ -124,6 +138,8 @@ def main [] {
         "scripts/install-rclone.nu"
         "scripts/modules/rclone-install.nu"
         "scripts/rclone-install-test.nu"
+        "scripts/rclone-sync.nu"
+        "scripts/rclone-explicit-sync-policy-test.nu"
         "scripts/make-release-manifest.nu"
         "scripts/windows/acquire-operation-lock.ps1"
         "scripts/posix/acquire-operation-lock.sh"
@@ -160,6 +176,7 @@ def main [] {
         "docs/wiki/Features-and-Roles.md"
         "docs/wiki/Installation-Linux.md"
         "docs/wiki/Command-Reference.md"
+        "docs/wiki/Code-Architecture.md"
         "scripts/migrate-config.nu"
         "scripts/capture-tool-state.nu"
         "scripts/audit.nu"
@@ -293,10 +310,21 @@ def main [] {
         {file: "scripts/setup-starship.nu" token: "probe-starship-candidates"}
         {file: "scripts/setup-starship.nu" token: "setup will continue"}
         {file: "scripts/modules/starship.nu" token: "init nu"}
-        {file: "scripts/modules/starship.nu" token: "| complete"}
+        {file: "scripts/modules/starship.nu" token: "run-command"}
     ] {
         if not (open --raw ($TOOLS_ROOT | path join $row.file) | str contains $row.token) {
             fail ("Missing Starship hardening integration: " + $row.file)
+        }
+    }
+
+    let entry_source = (open --raw ($TOOLS_ROOT | path join "setup.nu"))
+    for required_entry_token in [
+        "def interactive-child"
+        "exec $exe --no-config-file $script ...$args"
+        "interactive-child ($ROOT | path join \"setup-main.nu\") $args"
+    ] {
+        if not ($entry_source | str contains $required_entry_token) {
+            fail ("setup.nu is missing the interactive TTY boundary: " + $required_entry_token)
         }
     }
 
@@ -351,6 +379,16 @@ def main [] {
     }
 
     let dotfiles_module = (open --raw ($TOOLS_ROOT | path join "scripts" "modules" "dotfiles.nu"))
+    let init_private_source = (open --raw ($TOOLS_ROOT | path join "scripts" "init-private-data.nu"))
+    let refresh_commands_source = (open --raw ($TOOLS_ROOT | path join "scripts" "refresh-commands-main.nu"))
+    for runtime_module in ["dotfiles.nu" "subprocess.nu" "process-output.nu" "console.nu"] {
+        if not ($init_private_source | str contains $runtime_module) {
+            fail ("Private source initialization is missing command runtime dependency: " + $runtime_module)
+        }
+        if not ($refresh_commands_source | str contains $runtime_module) {
+            fail ("Command refresh is missing runtime dependency: " + $runtime_module)
+        }
+    }
 
     for required_sync_token in [
         "dotcloud"
@@ -366,6 +404,7 @@ def main [] {
         "--policy"
         "--backup"
         "--force"
+        "--discard-local"
     ] {
         if not ($dotfiles_module | str contains $required_sync_token) {
             fail ("Bidirectional sync command integration is incomplete: " + $required_sync_token)
@@ -392,7 +431,7 @@ def main [] {
         "machine-config"
         "sync-state"
         "present: false"
-        "version: 2"
+        "version: 3"
         "--force"
     ] {
         if not ($local_backup | str contains $required_backup_token) {
@@ -482,8 +521,12 @@ def main [] {
         }
     }
 
+    let provider_source = (open --raw ($TOOLS_ROOT | path join "scripts" "modules" "sync-provider.nu"))
+    if not ($provider_source | str contains '".dotfiles-sync-meta.nuon"') {
+        fail "Shared provider payload must include synchronization metadata."
+    }
     let rollback_source = (open --raw ($TOOLS_ROOT | path join "scripts" "rollback.nu"))
-    for required_rollback_token in ["--source-only" ".dotfiles-sync-meta.nuon"] {
+    for required_rollback_token in ["--source-only" "install-workspace" "workspace-manifest"] {
         if not ($rollback_source | str contains $required_rollback_token) {
             fail ("Private snapshot rollback is incomplete: " + $required_rollback_token)
         }

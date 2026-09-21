@@ -163,14 +163,15 @@ def main [
     # All engine invocations share the same operation lease as manual/auto sync.
     # No force unlock and no lock-age heuristic are introduced.
     let lease = (operation-lease)
-    let outcome = (try { {value: (perform $options)} } catch {|err| failure-envelope {msg: (error-message $err "cloud-wins failed.")} })
+    let outcome = (try { {value: (perform $options)} } catch {|err| failure-envelope $err })
     let failed = (captured-failure $outcome)
-    let cleanup = (try { release-lease $lease; null } catch {|err| failure-envelope {msg: (error-message $err "Could not release cloud operation lease.")} })
+    let cleanup = (try { release-lease $lease; null } catch {|err| failure-envelope $err })
     let cleanup_failure = (captured-failure $cleanup)
     if $failed != null {
-        if $cleanup_failure != null { print --stderr $cleanup_failure.msg }
-        error make {msg: $failed.msg}
+        mut message = (error-message $failed "cloud-wins failed.")
+        if $cleanup_failure != null { $message = ($message + (char nl) + "Cloud operation-lock cleanup also failed: " + (error-message $cleanup_failure)) }
+        error make {msg: $message}
     }
-    if $cleanup_failure != null { error make {msg: $cleanup_failure.msg} }
+    if $cleanup_failure != null { error make {msg: ("Cloud operation-lock cleanup failed: " + (error-message $cleanup_failure))} }
     $outcome.value | to json
 }

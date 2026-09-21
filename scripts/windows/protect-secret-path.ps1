@@ -20,7 +20,10 @@ try {
     $acl.SetAccessRuleProtection($true, $false)
     $acl.SetOwner($sid)
     $acl.AddAccessRule($rule)
-    Set-Acl -LiteralPath $Path -AclObject $acl
+    # Persist only the modified owner/DACL. Set-Acl may also request SACL
+    # privileges on a previously protected directory. The .NET method avoids
+    # that extra privilege and PowerShell-edition module autoload dependencies.
+    $item.SetAccessControl($acl)
     exit 0
 } catch {
     # Do not include paths, file contents, or credential values in error output.

@@ -2,6 +2,11 @@
 # Initial-setup Nushell convenience commands.
 # ============================================================
 
+const SUBPROCESS = path self ./subprocess.nu
+const CONSOLE = path self ./console.nu
+use $SUBPROCESS [run-command command-failure-message]
+use $CONSOLE [style print-heading print-info print-diff-text]
+
 def nu-home [] {
     let test_mode = ($env.INITIAL_SETUP_TEST_MODE? | default "" | str trim)
     let override = ($env.INITIAL_SETUP_HOME_OVERRIDE? | default "" | str trim)
@@ -65,7 +70,14 @@ def fingerprint [kind: string] {
         $kind
     ]
 
-    ^$nu.current-exe --no-config-file ...$args | str trim
+    let result = (run-command $nu.current-exe (["--no-config-file"] | append $args))
+    if not $result.ok {
+        error make {
+            msg: (command-failure-message ("sync fingerprint: " + $kind) $result)
+        }
+    }
+
+    $result.stdout | str trim
 }
 
 def edit-file [target: path] {
@@ -90,9 +102,8 @@ def edit-managed-target [target: path --push --path] {
     let exe = $nu.current-exe
     mut args = ["--no-config-file" $script ($target | into string)]
     if $push { $args = ($args | append "--push") }
-    ^$exe ...$args
-    let code = ($env.LAST_EXIT_CODE | default 1)
-    if $code != 0 { error make {msg: "Managed editor command did not complete; see the preceding diagnostic. Any local edit is preserved."} }
+    let result = (run-command $exe $args --live)
+    if not $result.ok { error make {msg: ((command-failure-message "Managed editor" $result) + (char nl) + "Any local edit is preserved.")} }
 }
 
 export def dotstatus [] {
@@ -100,7 +111,7 @@ export def dotstatus [] {
     let state_file = ((nu-home) | path join ".config" "dotfiles" "sync-state.nuon")
     let conflict_file = ((nu-home) | path join ".config" "dotfiles" "SYNC-CONFLICT.txt")
 
-    print "Automatic Sync"
+    print-heading "Automatic Sync"
     print "────────────────────────────────"
     print ("Machine       : " + $context.machine.name)
     print ("Profile       : " + $context.machine.profile)
@@ -114,8 +125,8 @@ export def dotstatus [] {
         let state = (open $state_file)
         let local_now = (fingerprint "local")
         let cloud_now = (fingerprint "cloud")
-        let local_status = (if $local_now == $state.local_hash { "clean" } else { "changed" })
-        let cloud_status = (if $cloud_now == $state.cloud_hash { "clean" } else { "changed" })
+        let local_status = (if $local_now == $state.local_hash { style "ok" "clean" } else { style "warn" "changed" })
+        let cloud_status = (if $cloud_now == $state.cloud_hash { style "ok" "clean" } else { style "warn" "changed" })
 
         print ("Last sync     : " + ($state.last_sync? | default "unknown"))
         print ("Last writer   : " + ($state.last_writer? | default "unknown"))
@@ -131,10 +142,10 @@ export def dotstatus [] {
     }
 
     if ($conflict_file | path exists) {
-        print "Conflict      : YES"
+        print ("Conflict      : " + (style "error" "YES"))
         print ("Details       : " + ($conflict_file | into string))
     } else {
-        print "Conflict      : none"
+        print ("Conflict      : " + (style "ok" "none"))
     }
 
     print ""
@@ -153,14 +164,23 @@ export def dotstatus [] {
 
 export def dotdiff [] {
     let root = (data-root)
-
     let args = [
         "--source"
         ($root | into string)
+        "--no-pager"
+        "--use-builtin-diff"
         "diff"
     ]
-
-    ^chezmoi ...$args
+    let result = (run-command "chezmoi" $args)
+    if not $result.ok {
+        error make {msg: (command-failure-message "chezmoi diff" $result)}
+    }
+    let text = ($result.stdout | str trim --right)
+    if ($text | is-empty) {
+        print-info "No managed-file differences."
+    } else {
+        print-diff-text $text
+    }
 }
 
 export def dotpush [] {
@@ -174,15 +194,14 @@ export def dotpull [
     --backup
     --source-only
     --discard-source
+    --discard-local
 ] {
     let script = (tool-script "sync-down.nu")
 
     if $backup {
-        ^$nu.current-exe --no-config-file (tool-script "backup-local-config.nu") --label "before-private-pull"
-
-        let backup_exit = ($env.LAST_EXIT_CODE | default 0)
-        if $backup_exit != 0 {
-            error make { msg: "Local backup failed; private pull was not started." }
+        let backup = (run-command $nu.current-exe ["--no-config-file" (tool-script "backup-local-config.nu") "--label" "before-private-pull"] --live)
+        if not $backup.ok {
+            error make { msg: ((command-failure-message "Local backup" $backup) + (char nl) + "Private pull was not started.") }
         }
     }
 
@@ -193,12 +212,56 @@ export def dotpull [
     }
     if $source_only { $args = ($args | append "--source-only") }
     if $discard_source { $args = ($args | append "--discard-source") }
+    if $discard_local { $args = ($args | append "--discard-local") }
 
     if $force or $backup {
         $args = ($args | append "--force")
     }
 
     ^$nu.current-exe --no-config-file ...$args
+}
+
+
+# Publish only the current private source snapshot to an rclone revision store.
+# This does not replace/capture the normal provider source.
+export def dotrpush [
+    --remote: string = ""
+    --save-remote
+] {
+    let script = (tool-script "rclone-sync.nu")
+    mut args = ["--no-config-file" $script "push"]
+    if not ($remote | str trim | is-empty) { $args = ($args | append ["--remote" $remote]) }
+    if $save_remote { $args = ($args | append "--save-remote") }
+    let result = (run-command $nu.current-exe $args --live)
+    if not $result.ok { error make {msg: (command-failure-message "dotrpush" $result)} }
+}
+
+# Pull/apply from an rclone revision store without replacing the normal
+# provider's private source. The transport itself also creates a verified
+# pre-apply backup; --backup adds an explicit named local backup first.
+export def dotrpull [
+    --remote: string = ""
+    --save-remote
+    --prune
+    --force
+    --backup
+    --discard-local
+] {
+    if $backup {
+        let backup_result = (run-command $nu.current-exe ["--no-config-file" (tool-script "backup-local-config.nu") "--label" "before-rclone-only-pull"] --live)
+        if not $backup_result.ok {
+            error make {msg: ((command-failure-message "Local backup" $backup_result) + (char nl) + "rclone-only pull was not started.")}
+        }
+    }
+    let script = (tool-script "rclone-sync.nu")
+    mut args = ["--no-config-file" $script "pull"]
+    if not ($remote | str trim | is-empty) { $args = ($args | append ["--remote" $remote]) }
+    if $save_remote { $args = ($args | append "--save-remote") }
+    if $prune { $args = ($args | append "--prune") }
+    if $force or $backup { $args = ($args | append "--force") }
+    if $discard_local { $args = ($args | append "--discard-local") }
+    let result = (run-command $nu.current-exe $args --live)
+    if not $result.ok { error make {msg: (command-failure-message "dotrpull" $result)} }
 }
 
 export def dotresolve [--policy] {
@@ -311,13 +374,13 @@ export def dotchecklist [] {
 }
 
 export def dotcapture [] {
-    ^$nu.current-exe --no-config-file (tool-script "capture-tool-state.nu")
-    if ($env.LAST_EXIT_CODE | default 1) != 0 {
-        error make {msg: "CAPTURE_FAILED: synchronization was not started; review the capture error above."}
+    let capture = (run-command $nu.current-exe ["--no-config-file" (tool-script "capture-tool-state.nu")] --live)
+    if not $capture.ok {
+        error make {msg: ("CAPTURE_FAILED: synchronization was not started." + (char nl) + (command-failure-message "Capture tool state" $capture))}
     }
-    ^$nu.current-exe --no-config-file (tool-script "sync-up.nu")
-    if ($env.LAST_EXIT_CODE | default 1) != 0 {
-        error make {msg: "CAPTURE_SYNC_FAILED: local capture remains, but synchronization did not complete."}
+    let sync = (run-command $nu.current-exe ["--no-config-file" (tool-script "sync-up.nu")] --live)
+    if not $sync.ok {
+        error make {msg: ("CAPTURE_SYNC_FAILED: local capture remains, but synchronization did not complete." + (char nl) + (command-failure-message "Capture synchronization" $sync))}
     }
 }
 
@@ -453,6 +516,11 @@ export def dotrclone [
     ^rclone config file
     print ""
     print ("Encrypted copy: " + ((data-root) | path join "secrets" "rclone.age" | into string))
+    let sync_config = ((nu-home) | path join ".config" "dotfiles" "rclone-sync.nuon")
+    if ($sync_config | path exists) {
+        let saved = (open --raw $sync_config | from nuon)
+        print ("rclone-only sync remote: " + ($saved.remote? | default "<invalid>"))
+    }
 }
 
 export def dotlocal [] {
@@ -706,9 +774,8 @@ export def --wrapped dotcloud [action: string = "help" ...args: string] {
         ^$exe --no-config-file $script $action ...$args
         return
     }
-    let result = (do { ^$exe --no-config-file $script $action ...$args } | complete)
-    let diagnostic = (try { $result.stderr | into string } catch { "Unable to decode child diagnostic." })
-    if not ($diagnostic | is-empty) { print --stderr $diagnostic }
-    if $result.exit_code != 0 { error make {msg: "dotcloud failed; see the preceding diagnostic. No success is assumed."} }
-    $result.stdout | into string | from json
+    let result = (run-command $exe (["--no-config-file" $script $action] | append $args))
+    if not ($result.stderr | str trim | is-empty) { print --stderr ($result.stderr | str trim --right) }
+    if not $result.ok { error make {msg: ((command-failure-message "dotcloud" $result) + (char nl) + "No success is assumed.")} }
+    $result.stdout | from json
 }

@@ -1,6 +1,8 @@
 #!/usr/bin/env nu
 
 const TOOLS_ROOT = path self ..
+const SUBPROCESS = path self ./modules/subprocess.nu
+use $SUBPROCESS [run-command]
 
 def nu-home [] {
     let test_mode = ($env.INITIAL_SETUP_TEST_MODE? | default "" | str trim)
@@ -34,7 +36,10 @@ def lock-file [] {
 def log [level: string message: string] {
     let script = ($TOOLS_ROOT | path join "scripts" "log-event.nu")
     let args = [$script "--level" $level "--message" $message]
-    ^$nu.current-exe --no-config-file ...$args | ignore
+    let result = (run-command ($nu.current-exe | into string) (["--no-config-file"] | append $args))
+    if not $result.ok {
+        print --stderr ("[warn] Event logging failed: " + ($result.diagnostic? | default "unknown logging error" | str trim))
+    }
 }
 
 def stale-lock [file: path] {
@@ -78,13 +83,18 @@ def main [] {
     if not (acquire-lock) { return }
 
     let worker = ($TOOLS_ROOT | path join "scripts" "auto-sync-worker.nu")
-    ^$nu.current-exe --no-config-file $worker
-
-    let exit_code = ($env.LAST_EXIT_CODE | default 0)
+    let result = (run-command ($nu.current-exe | into string) ["--no-config-file" ($worker | into string)] --live)
     release-lock
 
-    if $exit_code != 0 {
-        log "ERROR" ("Automatic sync worker exited with code " + ($exit_code | into string))
-        exit $exit_code
+    if not $result.ok {
+        let code = ($result.exit_code? | default 1)
+        let detail = ($result.diagnostic? | default "" | str trim)
+        let message = if ($detail | is-empty) {
+            "Automatic sync worker exited with code " + ($code | into string)
+        } else {
+            "Automatic sync worker exited with code " + ($code | into string) + ": " + $detail
+        }
+        log "ERROR" $message
+        exit $code
     }
 }

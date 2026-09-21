@@ -1,15 +1,29 @@
 #!/usr/bin/env nu
 
 const TOOLS_ROOT = path self ..
+const SUBPROCESS = path self ./modules/subprocess.nu
+const INSTALL_UTILS = path self ./modules/install-utils.nu
+use $SUBPROCESS [run-command command-failure-message]
+use $INSTALL_UTILS [probe-tool]
 
 def run-git [args: list] {
-    ^git -C $TOOLS_ROOT ...$args
-    $env.LAST_EXIT_CODE | default 0
+    let git = (probe-tool "git" ["--version"])
+    if not $git.healthy {
+        print "[warn] git is unavailable or unhealthy"
+        return false
+    }
+    let result = (run-command $git.path (["-C" ($TOOLS_ROOT | into string)] | append $args) --live)
+    if not $result.ok {
+        print --stderr ("[warn] " + (command-failure-message "git" $result))
+        return false
+    }
+    true
 }
 
 def main [] {
-    if (which git | is-empty) {
-        print "[warn] git not found"
+    let git = (probe-tool "git" ["--version"])
+    if not $git.healthy {
+        print "[warn] git not found or unhealthy"
         return
     }
 

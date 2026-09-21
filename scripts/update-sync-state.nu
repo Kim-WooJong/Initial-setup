@@ -1,5 +1,10 @@
 #!/usr/bin/env nu
 
+const SUBPROCESS = path self ./modules/subprocess.nu
+const SAFETY = path self ./modules/safety.nu
+use $SUBPROCESS [run-command command-failure-message]
+use $SAFETY [atomic-record]
+
 const TOOLS_ROOT = path self ..
 
 def nu-home [] {
@@ -37,8 +42,12 @@ def machine-context [] {
 }
 
 def state-file [] {
-    (nu-home)
-    | path join ".config" "dotfiles" "sync-state.nuon"
+    let scope = ($env.INITIAL_SETUP_PROVIDER_STATE_SCOPE? | default "" | str trim)
+    if ($scope | is-empty) {
+        return ((nu-home) | path join ".config" "dotfiles" "sync-state.nuon")
+    }
+    if not ($scope =~ '^[a-f0-9]{64}$') { error make {msg: "Invalid sync-state scope."} }
+    (nu-home) | path join ".config" "dotfiles" "sync-states" ("sync-state-" + $scope + ".nuon")
 }
 
 def conflict-file [] {
@@ -48,8 +57,8 @@ def conflict-file [] {
 
 def fingerprint [kind: string] {
     let script = ($TOOLS_ROOT | path join "scripts" "sync-fingerprint.nu")
-    let result = (do { ^$nu.current-exe --no-config-file $script --kind $kind } | complete)
-    if $result.exit_code != 0 { error make { msg: "Fingerprint unavailable; synchronization baseline was not advanced." } }
+    let result = (run-command $nu.current-exe ["--no-config-file" $script "--kind" $kind])
+    if not $result.ok { error make { msg: ((command-failure-message ("Fingerprint " + $kind) $result) + (char nl) + "Synchronization baseline was not advanced.") } }
     let value = ($result.stdout | str trim)
     if not ($value =~ '^[a-f0-9]{64}$') and not ($kind == "cloud" and ($value | is-empty)) {
         error make { msg: "Invalid fingerprint result." }
@@ -97,29 +106,15 @@ def main [] {
         | path dirname
     )
 
-    {
+    atomic-record $state_path {
         version: "2"
         local_hash: $local_hash
         cloud_hash: $cloud_hash
-        last_sync: (
-            date now
-            | format date "%Y-%m-%d %H:%M:%S %z"
-        )
-        last_writer: (
-            $meta.last_writer?
-            | default "unknown"
-        )
-        last_write_time: (
-            $meta.updated_at?
-            | default "unknown"
-        )
-        last_action: (
-            $meta.last_action?
-            | default "unknown"
-        )
+        last_sync: (date now | format date "%Y-%m-%d %H:%M:%S %z")
+        last_writer: ($meta.last_writer? | default "unknown")
+        last_write_time: ($meta.updated_at? | default "unknown")
+        last_action: ($meta.last_action? | default "unknown")
     }
-    | to nuon
-    | save --force $state_path
 
     let conflict_path = (
         conflict-file

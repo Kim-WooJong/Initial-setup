@@ -127,7 +127,8 @@ export def choose-reviewed-policy [] {
     mut selected = ""
 
     while ($selected | is-empty) {
-        let choice = (input "Select [1]: " | str trim)
+        print "Select [1] (press Enter for default):"
+        let choice = (input | str trim)
         let answer = (if ($choice | is-empty) { "1" } else { $choice })
 
         match $answer {
@@ -195,7 +196,8 @@ export def choose-config-policy [data_root: path] {
     mut selected = ""
 
     while ($selected | is-empty) {
-        let answer = (input ("Select [" + $default_choice + "]: ") | str trim)
+        print ("Select [" + $default_choice + "] (press Enter for default):")
+        let answer = (input | str trim)
         let choice = (if ($answer | is-empty) { $default_choice } else { $answer })
 
         match $choice {

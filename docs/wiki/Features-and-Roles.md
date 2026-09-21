@@ -13,3 +13,8 @@
 | secrets | Keeps machine-local secret material separate from public configuration | `dotsecrets`, `dotvault` |
 | Git/SSH | Manages folder-specific identities and local SSH settings | `dotgitids`, `dotsshkeys` |
 | update layer | Updates project/runtime components under safety checks | `dotupdate`, `dotupgrade`, `dotnuupdate` |
+
+
+## Explicit rclone-only transport
+
+`dotrpush` and `dotrpull` are for an additional rclone revision store that must remain independent from the machine's normal sync provider. They reuse the verified revision/HEAD implementation but keep provider baseline state separate and avoid mutating the normal provider source.

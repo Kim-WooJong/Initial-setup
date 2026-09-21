@@ -1,48 +1,21 @@
 #!/usr/bin/env nu
 
 const POLICY_MODULE = path self ./modules/setup-policy.nu
+const CORE = path self ./modules/core.nu
+const INSTALL_UTILS = path self ./modules/install-utils.nu
+const SUBPROCESS = path self ./modules/subprocess.nu
+const CONSOLE = path self ./modules/console.nu
 use $POLICY_MODULE [local-config-exists private-config-exists]
-
-def nu-home [] {
-    let test_mode = ($env.INITIAL_SETUP_TEST_MODE? | default "" | str trim)
-    let override = ($env.INITIAL_SETUP_HOME_OVERRIDE? | default "" | str trim)
-
-    if $test_mode == "1" and not ($override | is-empty) {
-        return ($override | path expand)
-    }
-
-    let home_path = ($nu | get --optional home-path)
-
-    if $home_path != null {
-        return $home_path
-    }
-
-    let home_dir = ($nu | get --optional home-dir)
-
-    if $home_dir != null {
-        return $home_dir
-    }
-
-    error make {
-        msg: "Unable to determine the Nushell home directory."
-    }
-}
-
-def machine-context [] {
-    let file = ((nu-home) | path join ".config" "dotfiles" "config.nuon")
-
-    if not ($file | path exists) {
-        error make { msg: ("Machine config not found: " + ($file | into string)) }
-    }
-
-    open $file
-}
+use $CORE [machine-context]
+use $INSTALL_UTILS [probe-tool]
+use $SUBPROCESS [run-command command-failure-message]
+use $CONSOLE [print-heading print-info print-diff-text]
 
 def main [--diff] {
     let context = (machine-context)
     let data_root = ($context.data_root | path expand)
 
-    print "Initial-setup preflight"
+    print-heading "Initial-setup preflight"
     print "────────────────────────────────────────────────────────────"
     print ("Machine       : " + $context.machine.name)
     print ("Profile       : " + $context.machine.profile)
@@ -51,23 +24,33 @@ def main [--diff] {
     print ("Private config: " + (if (private-config-exists $data_root) { "detected" } else { "not detected" }))
     print ""
 
-    if (which chezmoi | is-empty) {
-        print "[warn] chezmoi is not installed."
-        return
+    let chezmoi = (probe-tool "chezmoi" ["--version"])
+    if not $chezmoi.healthy {
+        let detail = if $chezmoi.found {
+            $chezmoi.result.diagnostic? | default "chezmoi health probe failed"
+        } else {
+            "chezmoi executable was not found"
+        }
+        error make {msg: ("Preflight requires a healthy chezmoi executable. " + $detail)}
     }
 
-    if not ($data_root | path exists) {
-        print "[warn] Private data root is unavailable."
-        return
+    let data_root_ok = if ($data_root | path exists) { ($data_root | path type) == "dir" } else { false }
+    if not $data_root_ok {
+        error make {msg: ("Private data root is unavailable: " + ($data_root | into string))}
     }
 
+    print ("chezmoi       : " + $chezmoi.version + " | " + $chezmoi.path)
+    print ""
     print "chezmoi status:"
     let status_args = [
         "--source"
         ($data_root | into string)
         "status"
     ]
-    ^chezmoi ...$status_args
+    let status = (run-command $chezmoi.path $status_args --live)
+    if not $status.ok {
+        error make {msg: (command-failure-message "chezmoi status" $status)}
+    }
 
     if $diff {
         print ""
@@ -75,9 +58,14 @@ def main [--diff] {
         let diff_args = [
             "--source"
             ($data_root | into string)
-            "diff"
+            "--no-pager" "--use-builtin-diff" "diff"
         ]
-        ^chezmoi ...$diff_args
+        let diff_result = (run-command $chezmoi.path $diff_args)
+        if not $diff_result.ok {
+            error make {msg: (command-failure-message "chezmoi diff" $diff_result)}
+        }
+        let diff_text = ($diff_result.stdout | str trim --right)
+        if ($diff_text | is-empty) { print-info "No managed-file differences." } else { print-diff-text $diff_text }
     } else {
         print ""
         print "Use `dotpreflight --diff` to show the full managed-file diff."
