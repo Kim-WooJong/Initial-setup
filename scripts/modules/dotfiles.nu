@@ -216,7 +216,7 @@ def edit-managed-target [target: path --push --path] {
     let exe = $nu.current-exe
     mut args = ["--no-config-file" $script ($target | into string)]
     if $push { $args = ($args | append "--push") }
-    let result = (run-command $exe $args --live)
+    let result = (run-command $exe $args --interactive)
     if not $result.ok { error make {msg: ((command-failure-message "Managed editor" $result) + (char nl) + "Any local edit is preserved.")} }
 }
 

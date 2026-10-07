@@ -10,7 +10,19 @@ export def run-command [
     args: list = []
     --sensitive
     --live
+    --interactive # Attach the child to the real terminal (no capture). Required
+                  # for full-screen TUIs such as editors: capturing their output
+                  # (even via --live tee) leaves them without a usable console
+                  # and they hang, especially on Windows.
 ] {
+    if $interactive {
+        # No pipe, no `complete`: the child inherits this process's stdin/stdout/
+        # stderr (the terminal). A non-zero exit raises, which we catch. stdout/
+        # stderr are not captured because they go straight to the terminal.
+        let ran = (try { ^$program ...$args; {launched: true exit_code: 0} } catch {|err| {launched: true exit_code: 1 launch_error: ($err.msg? | default ($err | into string))}})
+        let ok = ($ran.exit_code == 0)
+        return ($ran | merge {stdout: "" stderr: "" launch_error: ($ran.launch_error? | default "") ok: $ok diagnostic: (if $ok { "" } else { $ran.launch_error? | default "Interactive command failed." })})
+    }
     let live_output = ($live and not $sensitive)
     let executed = (try {
         let result = if $live_output {

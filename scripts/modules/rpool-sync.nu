@@ -437,7 +437,13 @@ export def rpool-local-hash [] {
     # The legacy JSON export needs neither age nor rclone and is enough to
     # fingerprint non-secret settings.
     if not $cap.legacy_config {
-        let stage = (artifact-export $cap "rpool export for local fingerprint")
+        # rpool 2.14+ `export` refuses to run without an rclone.conf. A fresh
+        # machine has none yet (rclone.conf arrives during the same pull), so a
+        # failed export here must NOT abort the whole sync fingerprint: fall back
+        # to a stable marker and let sync proceed. The crypt component is read
+        # from rclone.conf directly and already tolerates its absence.
+        let stage = (try { artifact-export $cap "rpool export for local fingerprint" } catch {|err| null })
+        if $stage == null { return ("EXPORT-UNAVAILABLE" + $crypt) }
         let result = (try { (validate-bundle $stage.config).artifact_semantic } catch {|err| $err })
         if ($stage.stage_root | path exists) { rm --recursive --force $stage.stage_root }
         if ($result | describe) == "string" { return ($result + $crypt) }
@@ -457,7 +463,9 @@ export def rpool-local-hash [] {
     } catch {|err| $err })
     if ($stage_root | path exists) { rm --recursive --force $stage_root }
     if ($result | describe) == "string" { return ($result + $crypt) }
-    rethrow $result
+    # Legacy export failed (e.g. rpool unusable here); stable marker instead of
+    # blocking the whole sync fingerprint.
+    ("EXPORT-UNAVAILABLE" + $crypt)
 }
 
 # Checks every local prerequisite for importing the artifact and returns the
