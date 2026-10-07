@@ -7,3 +7,4 @@ zoxide|zoxide|zoxide
 git-delta|delta|git-delta
 lazygit|lazygit|lazygit
 rclone|rclone|rclone
+age|age|age

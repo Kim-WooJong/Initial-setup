@@ -1,47 +1,12 @@
 #!/usr/bin/env nu
-
+const CORE = path self ./modules/core.nu
+use $CORE [nu-home project-version project-schema-version]
 const TOOLS_ROOT = path self ..
-
-def nu-home [] {
-    let test_mode = ($env.INITIAL_SETUP_TEST_MODE? | default "" | str trim)
-    let override = ($env.INITIAL_SETUP_HOME_OVERRIDE? | default "" | str trim)
-
-    if $test_mode == "1" and not ($override | is-empty) {
-        return ($override | path expand)
-    }
-
-    let home_path = ($nu | get --optional home-path)
-
-    if $home_path != null {
-        return $home_path
-    }
-
-    let home_dir = ($nu | get --optional home-dir)
-
-    if $home_dir != null {
-        return $home_dir
-    }
-
-    error make {
-        msg: "Unable to determine the Nushell home directory."
-    }
-}
+const MACHINE_CONFIG = path self ./modules/machine-config.nu
+use $MACHINE_CONFIG [write-machine-config]
 
 def config-path [] {
     (nu-home) | path join ".config" "dotfiles" "config.nuon"
-}
-
-def app-version [] {
-    open --raw ($TOOLS_ROOT | path join "VERSION")
-    | into string
-    | str trim
-}
-
-def schema-version [] {
-    open --raw ($TOOLS_ROOT | path join "SCHEMA_VERSION")
-    | into string
-    | str trim
-    | into int
 }
 
 def migrate-0-to-1 [config: record] {
@@ -54,7 +19,7 @@ def migrate-0-to-1 [config: record] {
     )
 
     $without_legacy
-    | upsert app_version (app-version)
+    | upsert app_version (project-version $TOOLS_ROOT)
     | upsert schema_version 1
 }
 
@@ -116,14 +81,25 @@ def migrate-step [config: record from_schema: int] {
     }
 }
 
-def main [--check] {
+def main [--check --transaction --expected-sha256: string = ""] {
     let file = (config-path)
-    let current_schema = (schema-version)
-    let current_app = (app-version)
+    let current_schema = (project-schema-version $TOOLS_ROOT)
+    let current_app = (project-version $TOOLS_ROOT)
 
     if not ($file | path exists) {
         print "[ok] No machine config exists yet; migration is not required."
         return
+    }
+
+    if $transaction and not $check {
+        let expected = ($expected_sha256 | str trim)
+        if not ($expected =~ '^[a-f0-9]{64}$') {
+            error make {msg: "Transaction mode requires --expected-sha256 from the verified preflight backup."}
+        }
+        let actual = (open --raw $file | hash sha256)
+        if $actual != $expected {
+            error make {msg: "Machine config changed after migration preflight; refusing to commit."}
+        }
     }
 
     let original = (open $file)
@@ -154,7 +130,7 @@ def main [--check] {
     mut migrated = $original
     mut schema = $detected_schema
 
-    if $schema < $current_schema {
+    if ($schema < $current_schema) and (not $transaction) {
         let backup = (($file | into string) + ".pre-schema-v" + ($current_schema | into string))
 
         if not ($backup | path exists) {
@@ -170,7 +146,7 @@ def main [--check] {
 
     $migrated = ($migrated | upsert app_version $current_app | upsert schema_version $current_schema)
 
-    $migrated | to nuon | save --force $file
+    write-machine-config $migrated | ignore
 
     print ("[ok] Machine config schema " + ($detected_schema | into string) + " -> " + ($current_schema | into string))
 }

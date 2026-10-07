@@ -49,6 +49,7 @@ def main [--root: path --manifest --strict-manifest --require-runtime --quiet] {
         "scripts/setup-entry.nu" "scripts/diagnose-project.nu" "scripts/verify-all.nu"
         "scripts/modules/nu-runtime.nu" "scripts/modules/core.nu"
         "scripts/modules/subprocess.nu" "scripts/modules/diagnostics.nu"
+        "scripts/modules/sync-conflict.nu"
         "scripts/modules/cloud-wins-config.nu" "scripts/modules/cloud-wins-engine.nu"
         "scripts/validate-project.nu" "scripts/validate-syntax.nu" "scripts/syntax-check-file.nu"
         "tools/cloudwins/Cargo.toml" "tools/cloudwins/src/main.rs" "tools/cloudwins/src/tests.rs"
@@ -147,7 +148,7 @@ def main [--root: path --manifest --strict-manifest --require-runtime --quiet] {
     if not $quiet or not ($failures | is-empty) {
         $summary | to json | print
     } else if $manifest and not ($manifest_diff | is-empty) {
-        print --stderr "[review] Project files differ from RELEASE-MANIFEST.json. Normal setup may continue; run `nu setup.nu --diagnose` for the list or `nu setup.nu --check` for strict validation."
+        print --stderr "[review] Project files differ from RELEASE-MANIFEST.json. Normal setup may continue; run `nu setup.nu --diagnose` for the list, `nu --no-config-file scripts/prune-obsolete.nu` to remove files left by an older release, or `nu setup.nu --check` for strict validation."
     }
 
     if not ($failures | is-empty) { exit 1 }

@@ -119,6 +119,16 @@ def test-suite [sandbox: path require_age: bool require_rclone: bool] {
     rejects "Renamed private-key material is rejected" { audit-export $workspace }
     rm ($workspace | path join "home" "dot_renamed_key")
 
+    let wg_fixture = ($workspace | path join "home" "dot_wireguard.conf")
+    for assignment in ["PrivateKey =" "  pRiVaTeKeY=" "\tPresharedKey\t="] {
+        ("[Interface]\n" + $assignment + " synthetic-test-value\n") | save --force $wg_fixture
+        rejects "Plaintext WireGuard key assignment blocks publication" { audit-export $workspace }
+    }
+    (["# PrivateKey = documented-placeholder" 'let example = "PresharedKey = placeholder"' "PublicKey = public-fixture"] | str join (char nl)) | save --force $wg_fixture
+    audit-export $workspace
+    print "[pass] Comments, code literals, and public keys are not WireGuard secret assignments"
+    rm $wg_fixture
+
     mkdir ($workspace | path join "secrets")
     "not encrypted" | save ($workspace | path join "secrets" "pretend.age")
     rejects "An age extension without a binary age header is not ciphertext" { audit-export $workspace }

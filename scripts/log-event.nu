@@ -1,52 +1,14 @@
 #!/usr/bin/env nu
-
-def nu-home [] {
-    let test_mode = ($env.INITIAL_SETUP_TEST_MODE? | default "" | str trim)
-    let override = ($env.INITIAL_SETUP_HOME_OVERRIDE? | default "" | str trim)
-
-    if $test_mode == "1" and not ($override | is-empty) {
-        return ($override | path expand)
-    }
-
-    let home_path = ($nu | get --optional home-path)
-
-    if $home_path != null {
-        return $home_path
-    }
-
-    let home_dir = ($nu | get --optional home-dir)
-
-    if $home_dir != null {
-        return $home_dir
-    }
-
-    error make {
-        msg: "Unable to determine the Nushell home directory."
-    }
-}
-
-def machine-context [] {
-    let file = ((nu-home) | path join ".config" "dotfiles" "config.nuon")
-
-    if ($file | path exists) {
-        open $file
-    } else {
-        {
-            machine: {
-                name: "unknown"
-            }
-            maintenance: {
-                log_keep_lines: 2000
-            }
-        }
-    }
-}
-
+const CORE = path self ./modules/core.nu
+use $CORE [nu-home try-machine-context]
 def main [
     --level: string = "INFO"
     --message: string
 ] {
-    let context = (machine-context)
+    let context = ((try-machine-context) | default {
+        machine: {name: "unknown"}
+        maintenance: {log_keep_lines: 2000}
+    })
     let log_dir = ((nu-home) | path join ".config" "dotfiles" "logs")
     let log_file = ($log_dir | path join "sync.log")
 

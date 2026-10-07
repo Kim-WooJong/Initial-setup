@@ -1,20 +1,11 @@
 #!/usr/bin/env nu
-
+const CORE = path self ./modules/core.nu
+use $CORE [project-version project-schema-version]
 const TOOLS_ROOT = path self ..
 const SUBPROCESS = path self ./modules/subprocess.nu
 const INSTALL_UTILS = path self ./modules/install-utils.nu
 use $SUBPROCESS [run-command]
 use $INSTALL_UTILS [probe-tool]
-
-def app-version [] {
-    let file = ($TOOLS_ROOT | path join "VERSION")
-    open $file --raw | into string | str trim
-}
-
-def schema-version [] {
-    let file = ($TOOLS_ROOT | path join "SCHEMA_VERSION")
-    open $file --raw | into string | str trim
-}
 
 def git-output [args: list] {
     let git = (probe-tool "git" ["--version"])
@@ -24,11 +15,11 @@ def git-output [args: list] {
 }
 
 def main [] {
-    let version = (app-version)
+    let version = (project-version $TOOLS_ROOT)
     let git_dir = ($TOOLS_ROOT | path join ".git")
 
     print ("Initial-setup : " + $version)
-    print ("Config schema : " + (schema-version))
+    print ("Config schema : " + ((project-schema-version $TOOLS_ROOT) | into string))
 
     if not ($git_dir | path exists) {
         print "Git repository : no"

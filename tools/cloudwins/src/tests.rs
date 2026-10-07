@@ -395,3 +395,86 @@ fn oversized_json_is_rejected_before_deserialization() {
     drop(file);
     assert!(read_json::<serde_json::Value>(&path).is_err());
 }
+#[cfg(unix)]
+#[test]
+fn symlinked_ancestor_of_roots_is_resolved() {
+    use std::os::unix::fs::symlink;
+    let f = Fixture::new();
+    let alias = f.base.join("alias");
+    symlink(&f.base, &alias).unwrap();
+    let args = Roots {
+        source: alias.join("cloud source 한글"),
+        target: alias.join("local target"),
+        state_dir: alias.join("state"),
+        settle_ms: 0,
+    };
+    let (source, target, state) = roots(&args).unwrap();
+    assert_eq!(source, f.args.source);
+    assert_eq!(target, f.args.target);
+    assert_eq!(state, f.args.state_dir);
+    // A not-yet-existing tail beneath the symlinked ancestor is also accepted.
+    assert_eq!(prospective(&alias.join("new/deeper")).unwrap(), f.base.join("new/deeper"));
+    let (p, path) = make_plan(&args).unwrap();
+    assert_eq!(p.target, f.args.target);
+    f.apply(&p, &path).unwrap();
+    verify(&args).unwrap();
+    assert_eq!(fs::read(f.args.target.join("config.nu")).unwrap(), b"new configuration");
+}
+#[cfg(unix)]
+#[test]
+fn symlinks_inside_trees_rejected_even_via_symlinked_ancestor() {
+    use std::os::unix::fs::symlink;
+    let f = Fixture::new();
+    let alias = f.base.join("alias");
+    symlink(&f.base, &alias).unwrap();
+    let args = Roots { source: alias.join("cloud source 한글"), target: alias.join("local target"), state_dir: alias.join("state"), settle_ms: 0 };
+    fs::create_dir(f.base.join("elsewhere")).unwrap();
+    symlink(f.base.join("elsewhere"), f.args.source.join("linked-dir")).unwrap();
+    assert!(make_plan(&args).is_err());
+    fs::remove_file(f.args.source.join("linked-dir")).unwrap();
+    symlink(f.args.source.join("config.nu"), f.args.target.join("linked-file")).unwrap();
+    assert!(make_plan(&args).is_err());
+    assert!(path_for(&f.args.target, "linked-file/x").is_err());
+    assert!(absolute(&f.args.target.join("../local target")).is_err());
+}
+#[test]
+fn foreign_items_in_runs_directory_are_ignored() {
+    let f = Fixture::new();
+    let (p, path) = f.plan();
+    f.apply(&p, &path).unwrap();
+    let runs = f.args.state_dir.join("runs");
+    fs::write(runs.join(".DS_Store"), b"finder").unwrap();
+    fs::create_dir(runs.join("not a run")).unwrap();
+    fs::write(runs.join("not a run/journal.json"), b"garbage").unwrap();
+    assert_eq!(journals(&f.args.state_dir).unwrap().len(), 1);
+    assert_no_pending(&f.args.state_dir).unwrap();
+    verify(&f.args).unwrap();
+    f.rollback(&f.run_id(), true).unwrap();
+    assert_eq!(fs::read(f.args.target.join("config.nu")).unwrap(), b"old configuration");
+}
+#[test]
+fn own_temp_name_pattern_is_exact() {
+    for name in [".cloudwins-1-2-3.tmp", ".cloudwins-1790000000000000000-4242-0.link-test"] {
+        assert!(is_own_temp(name), "{name}");
+    }
+    let foreign = [".cloudwins-notes.tmp", ".cloudwins-1-2.tmp", ".cloudwins-1-2-3.tmp.bak",
+        "cloudwins-1-2-3.tmp", ".cloudwins-1-2-x.tmp", ".cloudwins--2-3.tmp", ".cloudwins-1-2-3.TMP"];
+    for name in foreign {
+        assert!(!is_own_temp(name), "{name}");
+    }
+}
+#[test]
+fn stale_temp_files_do_not_invalidate_plan() {
+    let f = Fixture::new();
+    fs::write(f.args.target.join(".cloudwins-1-2-3.tmp"), b"stale before plan").unwrap();
+    let (p, path) = f.plan();
+    assert!(p.target_only_files.is_empty());
+    fs::create_dir(f.args.target.join("sub")).unwrap();
+    fs::write(f.args.target.join("sub/.cloudwins-4-5-6.link-test"), b"stale after plan").unwrap();
+    f.apply(&p, &path).unwrap();
+    verify(&f.args).unwrap();
+    // Look-alike names that the tool never generates remain payload.
+    fs::write(f.args.target.join(".cloudwins-notes.tmp"), b"user file").unwrap();
+    assert!(tree(&f.args.target).unwrap().contains_key(".cloudwins-notes.tmp"));
+    assert!(verify(&f.args).is_err());
+}

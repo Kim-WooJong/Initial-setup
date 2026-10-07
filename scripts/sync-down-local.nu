@@ -2,41 +2,21 @@
 
 const TOOLS_ROOT = path self ..
 const CONFLICTS_MODULE = path self ./modules/conflicts.nu
-use $CONFLICTS_MODULE [protected-conflicts print-protected-conflicts]
 const SUBPROCESS = path self ./modules/subprocess.nu
 const CONSOLE = path self ./modules/console.nu
+const CORE = path self ./modules/core.nu
+const RCLONE_SECRET = path self ./modules/rclone-secret-sync.nu
+const WIREGUARD = path self ./modules/wireguard-sync.nu
+const RPOOL = path self ./modules/rpool-sync.nu
+const SSH_KEYS = path self ./modules/ssh-key-sync.nu
+use $CONFLICTS_MODULE [protected-conflicts print-protected-conflicts]
 use $SUBPROCESS [run-command command-failure-message]
-use $CONSOLE [print-info print-ok print-warn]
-
-def nu-home [] {
-    let test_mode = ($env.INITIAL_SETUP_TEST_MODE? | default "" | str trim)
-    let override = ($env.INITIAL_SETUP_HOME_OVERRIDE? | default "" | str trim)
-
-    if $test_mode == "1" and not ($override | is-empty) {
-        return ($override | path expand)
-    }
-
-    let home_path = ($nu | get --optional home-path)
-
-    if $home_path != null {
-        return $home_path
-    }
-
-    let home_dir = ($nu | get --optional home-dir)
-
-    if $home_dir != null {
-        return $home_dir
-    }
-
-    error make {
-        msg: "Unable to determine the Nushell home directory."
-    }
-}
-
-def machine-context [] {
-    let file = ((nu-home) | path join ".config" "dotfiles" "config.nuon")
-    open $file
-}
+use $CONSOLE [print-info print-ok print-warn print-status]
+use $CORE [error-message nu-home machine-context]
+use $RCLONE_SECRET [prepare-rclone-restore commit-prepared-rclone discard-prepared-rclone]
+use $WIREGUARD [prepare-wireguard-restore commit-prepared-wireguard discard-prepared-wireguard]
+use $RPOOL [rpool-restore-preflight]
+use $SSH_KEYS [prepare-ssh-restore commit-prepared-ssh discard-prepared-ssh]
 
 def run-script [
     tools_root: path
@@ -66,7 +46,7 @@ def log [level: string message: string] {
     }
 }
 
-def main [--prune --force --allow-protected --source-root: string = ""] {
+def main [--prune --force --allow-protected --discard-local --source-root: string = ""] {
     let lock_file = ((nu-home) | path join ".config" "dotfiles" "locks" "operation.lock")
     let token = ($env.INITIAL_SETUP_OPERATION_TOKEN? | default "")
     if ($token | is-empty) or not ($lock_file | path exists) {
@@ -103,60 +83,111 @@ def main [--prune --force --allow-protected --source-root: string = ""] {
         }
     }
 
-    print "[1/4] Applying private chezmoi source..."
+    # Fail closed before any live change when an incoming rpool artifact carries
+    # crypt secrets this machine cannot import (vault/identity/age/rpool 0.7+).
+    # The actual import still runs after the rclone commit below.
+    rpool-restore-preflight $source_root | ignore
 
-    mut args = [
-        "--source"
-        ($source_root | into string)
-    ]
-
-    if $force {
-        $args = ($args | append "--force")
-    }
-
-    $args = ($args | append "apply")
-
-    let apply = (run-command "chezmoi" $args --live)
-    if not $apply.ok {
-        log "ERROR" "chezmoi apply failed."
-        error make {msg: (command-failure-message "chezmoi apply" $apply)}
-    }
-
-    if $context.features.rust or $context.features.julia {
-        run-script $tools_root "restore-work-environment.nu" "--source-root" ($source_root | into string)
-    }
-
-    if ($context.features.rclone_config? | default false) {
-        run-script $tools_root "restore-rclone-config.nu" "--source-root" ($source_root | into string)
-    }
-
-    if $context.features.vscode {
-        let configured_prune = ($context.sync.prune_extras? | default false)
-        let should_prune = ($prune or $configured_prune)
-
-        print "[2/4] Applying VS Code settings..."
-
-        if $should_prune {
-            run-script $tools_root "apply-vscode-config.nu" "--prune" "--source-root" ($source_root | into string)
-        } else {
-            run-script $tools_root "apply-vscode-config.nu" "--source-root" ($source_root | into string)
-        }
-
-        print "[3/4] Reconciling VS Code extensions..."
-
-        if $should_prune {
-            run-script $tools_root "install-vscode-extensions.nu" "--prune" "--source-root" ($source_root | into string)
-        } else {
-            run-script $tools_root "install-vscode-extensions.nu" "--source-root" ($source_root | into string)
-        }
+    # Authenticate/decrypt incoming rclone.age before chezmoi or any other live
+    # configuration is changed. The restricted plaintext staging is committed
+    # later only if the local apply path reaches the rclone restore phase.
+    let rclone_plan = if ($context.features.rclone_config? | default false) {
+        prepare-rclone-restore $source_root
     } else {
-        print "[2/4] VS Code synchronization disabled"
-        print "[3/4] VS Code synchronization disabled"
+        {status: "disabled"}
     }
 
-    print "[4/4] Updating sync baseline..."
-    # Sync baseline is committed by sync-transport.nu after remote verification.
+    let wireguard_plan = (try {
+        prepare-wireguard-restore $source_root --discard-local=$discard_local
+    } catch {|err|
+        discard-prepared-rclone $rclone_plan
+        error make {msg: (error-message $err "WireGuard restore preparation failed.")}
+    })
 
-    log "INFO" "Private cloud configuration applied locally."
-    print-ok "Private cloud configuration is now authoritative."
+    let ssh_plan = (try {
+        prepare-ssh-restore $source_root --discard-local=$discard_local
+    } catch {|err|
+        discard-prepared-rclone $rclone_plan
+        discard-prepared-wireguard $wireguard_plan
+        error make {msg: (error-message $err "SSH key restore preparation failed.")}
+    })
+
+    let apply_result = (try {
+        print-status "info" "1/4" "Applying private chezmoi source..."
+
+        mut args = [
+            "--source"
+            ($source_root | into string)
+        ]
+
+        if $force {
+            $args = ($args | append "--force")
+        }
+
+        $args = ($args | append "apply")
+
+        let apply = (run-command "chezmoi" $args --live)
+        if not $apply.ok {
+            log "ERROR" "chezmoi apply failed."
+            error make {msg: (command-failure-message "chezmoi apply" $apply)}
+        }
+
+        if $context.features.rust or $context.features.julia {
+            run-script $tools_root "restore-work-environment.nu" "--source-root" ($source_root | into string)
+        }
+
+        if ($context.features.rclone_config? | default false) and (($rclone_plan.status? | default "") == "prepared") {
+            commit-prepared-rclone $rclone_plan | ignore
+        }
+
+        # Import rpool only after the incoming rclone config is committed so
+        # portable remote/default-path references resolve against the new remotes.
+        run-script $tools_root "restore-rpool-config.nu" "--source-root" ($source_root | into string)
+
+        # Restores stored profiles only; does not start/restart VPN services.
+        commit-prepared-wireguard $wireguard_plan | ignore
+
+        # Restore enrolled SSH private keys (owner-only) after other secrets.
+        commit-prepared-ssh $ssh_plan | ignore
+
+        if $context.features.vscode {
+            let configured_prune = ($context.sync.prune_extras? | default false)
+            let should_prune = ($prune or $configured_prune)
+
+            print-status "info" "2/4" "Applying VS Code settings..."
+
+            if $should_prune {
+                run-script $tools_root "apply-vscode-config.nu" "--prune" "--source-root" ($source_root | into string)
+            } else {
+                run-script $tools_root "apply-vscode-config.nu" "--source-root" ($source_root | into string)
+            }
+
+            print-status "info" "3/4" "Reconciling VS Code extensions..."
+
+            if $should_prune {
+                run-script $tools_root "install-vscode-extensions.nu" "--prune" "--source-root" ($source_root | into string)
+            } else {
+                run-script $tools_root "install-vscode-extensions.nu" "--source-root" ($source_root | into string)
+            }
+        } else {
+            print-status "warn" "2/4" "VS Code synchronization disabled"
+            print-status "warn" "3/4" "VS Code synchronization disabled"
+        }
+
+        print-status "info" "4/4" "Updating sync baseline..."
+        # Sync baseline is committed by sync-transport.nu after remote verification.
+
+        log "INFO" "Private cloud configuration applied locally."
+        print-ok "Private cloud configuration is now authoritative."
+        null
+    } catch {|err| $err })
+
+    if $apply_result != null {
+        discard-prepared-rclone $rclone_plan
+        discard-prepared-wireguard $wireguard_plan
+        discard-prepared-ssh $ssh_plan
+        error make {msg: (error-message $apply_result "Private pull application failed.")}
+    }
+    discard-prepared-wireguard $wireguard_plan
+    discard-prepared-ssh $ssh_plan
 }

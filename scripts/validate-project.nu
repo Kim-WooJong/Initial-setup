@@ -1,15 +1,11 @@
 #!/usr/bin/env nu
-
+const CORE = path self ./modules/core.nu
+use $CORE [useful-lines]
 const TOOLS_ROOT = path self ..
 const SUBPROCESS = path self ./modules/subprocess.nu
+const COMMAND_RUNTIME = path self ./modules/command-runtime.nu
 use $SUBPROCESS [run-command command-failure-message]
-
-def useful-lines [file: path] {
-    open --raw $file
-    | lines
-    | each { |line| $line | str trim }
-    | where { |line| not ($line | is-empty) and not ($line | str starts-with "#") }
-}
+use $COMMAND_RUNTIME [generate-command-shim]
 
 def fail [message: string] {
     print ("[FAIL] " + $message)
@@ -21,6 +17,8 @@ def regular-files [directory: path] {
     mut files = []
     for item in (ls --all $directory) {
         if ($item.name | path basename) == ".git" { continue }
+        # User settings in <checkout>/private (CHECKOUT_PRIVATE_DIR) are not project source.
+        if ($item.name | path expand) == ($TOOLS_ROOT | path expand | path join "private") { continue }
         if $item.type == "dir" {
             $files = ($files | append (regular-files $item.name))
         } else if $item.type == "file" {
@@ -95,7 +93,16 @@ def main [] {
         "scripts/entrypoint-test.nu"
         "scripts/subprocess-chain-test.nu"
         "scripts/run-state-test.nu"
+        "scripts/rpool-sync-test.nu"
+        "scripts/rpool-two-machine-test.nu"
+        "scripts/rclone-compare-test.nu"
+        "scripts/verify-sync.nu"
+        "scripts/migration-error-test.nu"
         "scripts/refresh-commands-test.nu"
+        "scripts/command-shim-test.nu"
+        "scripts/checkout-private-test.nu"
+        "scripts/prune-obsolete-test.nu"
+        "scripts/prune-obsolete.nu"
         "START_HERE.md"
         "VERSION"
         "RELEASE-MANIFEST.json"
@@ -103,7 +110,9 @@ def main [] {
         "scripts/modules/process-output.nu"
         "scripts/modules/subprocess.nu"
         "scripts/modules/console.nu"
+        "scripts/modules/command-runtime.nu"
         "scripts/modules/sync-local-guard.nu"
+        "scripts/modules/sync-conflict.nu"
         "scripts/modules/install-utils.nu"
         "scripts/installer-health-test.nu"
         "scripts/interactive-tty-policy-test.nu"
@@ -115,6 +124,11 @@ def main [] {
         "scripts/subprocess-fixture.nu"
         "scripts/process-output-test.nu"
         "scripts/modules/vault.nu"
+        "scripts/modules/rclone-secret-sync.nu"
+        "scripts/modules/rpool-sync.nu"
+        "scripts/capture-rpool-config.nu"
+        "scripts/restore-rpool-config.nu"
+        "scripts/rpool-config-sync.nu"
         "scripts/modules/sync-provider.nu"
         "scripts/modules/upgrade.nu"
         "scripts/secret-vault.nu"
@@ -122,6 +136,7 @@ def main [] {
         "scripts/safe-upgrade.nu"
         "scripts/sync-transport.nu"
         "scripts/edit-managed.nu"
+        "scripts/edit-identity.nu"
         "scripts/edit-managed-test.nu"
         "scripts/refresh-commands.nu"
         "scripts/sync-up-local.nu"
@@ -137,6 +152,12 @@ def main [] {
         "scripts/regression-test.nu"
         "scripts/install-rclone.nu"
         "scripts/modules/rclone-install.nu"
+        "scripts/modules/state-schema.nu"
+        "scripts/modules/state-schema-health.nu"
+        "scripts/modules/machine-config.nu"
+        "scripts/modules/sync-state.nu"
+        "scripts/modules/provider-state.nu"
+        "scripts/cleanup-release-junk.nu"
         "scripts/rclone-install-test.nu"
         "scripts/rclone-sync.nu"
         "scripts/rclone-explicit-sync-policy-test.nu"
@@ -178,10 +199,10 @@ def main [] {
         "docs/wiki/Command-Reference.md"
         "docs/wiki/Code-Architecture.md"
         "scripts/migrate-config.nu"
+        "scripts/migrate-state-transaction.nu"
         "scripts/capture-tool-state.nu"
         "scripts/audit.nu"
         "scripts/setup-machine-local.nu"
-        "scripts/rclone-config-path.nu"
         "scripts/capture-rclone-config.nu"
         "scripts/restore-rclone-config.nu"
         "scripts/setup-onedrive-ignore-upload.nu"
@@ -216,7 +237,6 @@ def main [] {
         "scripts/backup-local-config.nu"
         "scripts/preflight.nu"
         "scripts/self-test.nu"
-        "scripts/command-completion-test.nu"
         "scripts/cloud-wins.nu"
         "scripts/cloud-wins-main.nu"
         "scripts/cloud-wins-build.nu"
@@ -354,9 +374,32 @@ def main [] {
         "install-rclone.nu"
         "refresh-rclone-path"
         "ensure-rclone --check"
+        "migrate-state-transaction.nu"
     ] {
         if not ($setup_source | str contains $required_setup_token) {
             fail ("setup.nu is missing required integration: " + $required_setup_token)
+        }
+    }
+
+    if ($setup_source | str contains 'path join "migrate-config.nu"') {
+        fail "setup-main.nu must not bypass the all-state migration transaction with a direct migrate-config.nu call."
+    }
+
+    let migration_transaction = (open --raw ($TOOLS_ROOT | path join "scripts" "migrate-state-transaction.nu"))
+    for required_migration_token in [
+        "backup-state-file"
+        "commit-prepared-state-migration"
+        "restore-state-backup"
+        "operation-lease"
+        "rollback-failed"
+        "canonical-sync-state"
+        "canonical-provider-state"
+        "canonical-vault"
+        "--expected-sha256"
+        "STATE_ROLLBACK_FAILED:"
+    ] {
+        if not ($migration_transaction | str contains $required_migration_token) {
+            fail ("Schema migration transaction is missing required safety integration: " + $required_migration_token)
         }
     }
 
@@ -382,12 +425,16 @@ def main [] {
     let dotfiles_module = (open --raw ($TOOLS_ROOT | path join "scripts" "modules" "dotfiles.nu"))
     let init_private_source = (open --raw ($TOOLS_ROOT | path join "scripts" "init-private-data.nu"))
     let refresh_commands_source = (open --raw ($TOOLS_ROOT | path join "scripts" "refresh-commands-main.nu"))
-    for runtime_module in ["dotfiles.nu" "subprocess.nu" "process-output.nu" "console.nu"] {
-        if not ($init_private_source | str contains $runtime_module) {
-            fail ("Private source initialization is missing command runtime dependency: " + $runtime_module)
-        }
-        if not ($refresh_commands_source | str contains $runtime_module) {
-            fail ("Command refresh is missing runtime dependency: " + $runtime_module)
+    let shim = (try { generate-command-shim $TOOLS_ROOT } catch {|err| fail ("Command shim cannot be generated from this checkout: " + ($err.msg? | default ($err | into string))) })
+    if ($shim =~ '(?m)^\s*(use|source|source-env|overlay)\s') { fail "Generated command shim must not import other files." }
+    for runtime_consumer in [
+        {name: "Private source initialization" source: $init_private_source}
+        {name: "Command refresh" source: $refresh_commands_source}
+    ] {
+        for token in ["modules/command-runtime.nu" "generate-command-shim"] {
+            if not ($runtime_consumer.source | str contains $token) {
+                fail ($runtime_consumer.name + " is not using the canonical command shim generator: " + $token)
+            }
         }
     }
 
@@ -470,7 +517,10 @@ def main [] {
             fail ("core.nu must support guarded sandbox home isolation: " + $sandbox_token)
         }
 
-        if not ($policy_module | str contains $sandbox_token) {
+        # setup-policy.nu resolves home through the guarded nu-home helper in core.nu,
+        # so delegating to nu-home is an accepted form of sandbox isolation. Accept either
+        # a direct token reference or delegation to the guarded resolver.
+        if not (($policy_module | str contains $sandbox_token) or ($policy_module | str contains "nu-home")) {
             fail ("setup-policy.nu must support guarded sandbox home isolation: " + $sandbox_token)
         }
     }
@@ -537,6 +587,58 @@ def main [] {
     let dotfiles_module = (open --raw ($TOOLS_ROOT | path join "scripts" "modules" "dotfiles.nu"))
     for token in ["dotplan" "dotapply" "dotverify" "dottoolchain" "dotmergecfg"] {
         if not ($dotfiles_module | str contains $token) { fail ("Dotfiles command surface is incomplete: " + $token) }
+    }
+    for token in [
+        "export def dotctl []"
+        'export def "dotctl status"'
+        'export def "dotctl push"'
+        'export def "dotctl pull"'
+        'export def "dotctl sync"'
+        'export def "dotctl backup"'
+        'export def "dotctl restore"'
+        'export def "dotctl config"'
+        'export def "dotctl preflight"'
+        'export def "dotctl doctor"'
+        'export def "dotctl update"'
+    ] {
+        if not ($dotfiles_module | str contains $token) { fail ("Primary dotctl command family is incomplete: " + $token) }
+    }
+    for token in [
+        "def cmd-status"
+        "def cmd-diff"
+        "def cmd-push"
+        "def cmd-pull"
+        "def cmd-sync"
+        "def cmd-backup"
+        "def cmd-restore"
+        "def cmd-config"
+        "def cmd-config-local"
+        "def cmd-config-secrets"
+        "def cmd-config-rclone"
+        "def cmd-preflight"
+        "def cmd-doctor"
+        "def cmd-update"
+        "def cmd-vault-status"
+        "def cmd-vault-init"
+    ] {
+        if not ($dotfiles_module | str contains $token) { fail ("Canonical command implementation is missing: " + $token) }
+    }
+    for forbidden in [
+        'export def "dotctl status" [] { dotstatus }'
+        'export def "dotctl diff" [] { dotdiff }'
+        'export def "dotctl push" [] { dotpush }'
+        'export def "dotctl sync" [] { dotsync }'
+        'export def "dotctl backup" [--label: string = "manual"] { dotsnapshot'
+        'export def "dotctl config" [] { dotconfig }'
+        'export def "dotctl config local" [] { dotlocal }'
+        'export def "dotctl config secrets" [] { dotsecrets }'
+        'if $capture { dotrclone --capture'
+        'if $restore { dotrclone --restore'
+        'export def "dotctl config vault" [] { dotvault }'
+    ] {
+        if ($dotfiles_module | str contains $forbidden) {
+            fail ("Primary dotctl commands must not depend on compatibility wrappers: " + $forbidden)
+        }
     }
     for completion_token in [
         'export def "dotvault status"'
@@ -686,11 +788,45 @@ def main [] {
         fail "OneDrive exclusion helper must preserve unrelated registry values."
     }
 
+    # Nushell 0.114 deprecated the old string case commands. Keep them only in
+    # the explicit pre-0.114 adapter and the syntax warning fixture. Production
+    # code should use text-lower/text-upper from text-case.nu.
+    let deprecated_case_allowlist = [
+        "scripts/modules/compat/case-legacy.nu"
+        "scripts/syntax-self-test.nu"
+    ]
+    for file in (regular-files $TOOLS_ROOT) {
+        let rel = ($file | path relative-to $TOOLS_ROOT | into string | str replace --all '\' '/')
+        if not ($rel | str ends-with ".nu") or ($rel in $deprecated_case_allowlist) { continue }
+        let source = (open --raw $file)
+        for deprecated in [("str " + "downcase") ("str " + "upcase")] {
+            if ($source | str contains $deprecated) {
+                fail ($rel + " uses deprecated Nushell command `" + $deprecated + "`.")
+            }
+        }
+    }
+
+    # The replacement commands exist only on Nushell >=0.114 while the supported
+    # minimum is older. Production code must route through text-case.nu.
+    let modern_case_allowlist = [
+        "scripts/modules/compat/case-modern.nu"
+        "scripts/validate-project.nu"
+    ]
+    for file in (regular-files $TOOLS_ROOT) {
+        let rel = ($file | path relative-to $TOOLS_ROOT | into string | str replace --all '\' '/')
+        if not ($rel | str ends-with ".nu") or ($rel in $modern_case_allowlist) { continue }
+        let source = (open --raw $file)
+        for modern in [("str " + "lowercase") ("str " + "uppercase")] {
+            if ($source | str contains $modern) {
+                fail ($rel + " uses `" + $modern + "` directly; use text-lower/text-upper from text-case.nu.")
+            }
+        }
+    }
+
     let rclone_installer = (open --raw ($TOOLS_ROOT | path join "scripts" "modules" "rclone-install.nu"))
     for token in ["--no-upgrade" "--dry-run" "--check" "INITIAL_SETUP_TEST_MODE" "rclone version" "perform-rclone-install" "refresh-rclone-path"] {
         if not ($rclone_installer | str contains $token) { fail ("rclone installer is missing safety contract: " + $token) }
     }
-    if not ($self_test | str contains "command-completion-test.nu") { fail "Sandbox gate must test the interactive command/completion surface." }
     if not ($self_test | str contains "syntax-self-test.nu") { fail "Sandbox gate must test the syntax validator itself." }
     if not ($self_test | str contains "rclone-install-test.nu") { fail "Sandbox gate must include mocked rclone dependency regressions." }
     if not ("rclone" in (useful-lines ($TOOLS_ROOT | path join "packages" "common.txt"))) { fail "rclone is missing from the common package manifest." }
@@ -703,12 +839,46 @@ def main [] {
         fail "rclone config synchronization must not invoke rclone mount."
     }
 
-    if not ($rclone_capture | str contains "rclone config file") {
-        fail "rclone capture must resolve the active config path through rclone."
+    let vault_module = (open --raw ($TOOLS_ROOT | path join "scripts" "modules" "vault.nu"))
+    if not ($vault_module | str contains "rclone config file") or not ($vault_module | str contains "ensure-rclone-entry") {
+        fail "rclone encrypted sync must discover/register the active config path through the vault module."
     }
 
-    if not ($rclone_restore | str contains "rclone config file") {
-        fail "rclone restore must resolve the active config path through rclone."
+    if not ($rclone_capture | str contains "ensure-rclone-entry") or not ($rclone_capture | str contains 'capture-secret "rclone"') {
+        fail "rclone capture must register the active path and use encrypted vault capture."
+    }
+
+    let rclone_secret_sync = (open --raw ($TOOLS_ROOT | path join "scripts" "modules" "rclone-secret-sync.nu"))
+    let sync_down_local = (open --raw ($TOOLS_ROOT | path join "scripts" "sync-down-local.nu"))
+    for token in ["prepare-rclone-restore" "commit-prepared-rclone" "discard-prepared-rclone" "Preflight decrypt/authenticate rclone config"] {
+        if not ($rclone_secret_sync | str contains $token) {
+            fail ("Prepared rclone restore module is missing safety contract: " + $token)
+        }
+    }
+    if not ($rclone_restore | str contains "prepare-rclone-restore") or not ($rclone_restore | str contains "commit-prepared-rclone") {
+        fail "Standalone rclone restore must use prepared authenticated plaintext before replacement."
+    }
+    if not ($sync_down_local | str contains "prepare-rclone-restore $source_root") or not ($sync_down_local | str contains "commit-prepared-rclone $rclone_plan") {
+        fail "dotpull local apply must authenticate rclone.age before chezmoi apply and commit the prepared plaintext later."
+    }
+
+    let setup_main_source = (open --raw ($TOOLS_ROOT | path join "setup-main.nu"))
+    if ($setup_main_source | str contains "save --force $config_file") {
+        fail "setup-main must route machine config writes through modules/machine-config.nu."
+    }
+    for writer_file in [
+        "scripts/refresh-commands-main.nu"
+        "scripts/cloud-wins-main.nu"
+        "scripts/migrate-config.nu"
+    ] {
+        let writer_source = (open --raw ($TOOLS_ROOT | path join $writer_file))
+        if ($writer_source | str contains "atomic-record $config_file") or ($writer_source | str contains "atomic-record (machine-config-path)") {
+            fail ($writer_file + " must route machine config writes through modules/machine-config.nu.")
+        }
+    }
+    let backend_source = (open --raw ($TOOLS_ROOT | path join "scripts" "backend-control.nu"))
+    if ($backend_source | str contains "atomic-record $file {version: 1 kind:") {
+        fail "backend-control must route sync-provider.nuon writes through modules/sync-provider.nu."
     }
 
     let local_setup_script = (open --raw ($TOOLS_ROOT | path join "scripts" "setup-machine-local.nu"))

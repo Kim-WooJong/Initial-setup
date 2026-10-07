@@ -1,0 +1,10 @@
+# Machine-local ~/.config/dotfiles/wireguard.nuon. Contains NO private keys.
+# Install and enroll the protected OS helper first; its device/tunnel allowlist
+# must match this policy. See WIREGUARD-CONFIG-SYNC.md.
+{
+    schema_version: 1
+    enabled: true
+    device_id: "my-laptop"
+    backend: "linux-wg-quick" # Windows: "windows-dpapi"
+    tunnels: ["wg0"]
+}

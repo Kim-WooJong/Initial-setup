@@ -1,45 +1,11 @@
 #!/usr/bin/env nu
-
+const CORE = path self ./modules/core.nu
+use $CORE [nu-home machine-context]
 const SUBPROCESS = path self ./modules/subprocess.nu
 use $SUBPROCESS [run-command print-result]
 
 const INSTALL_UTILS = path self ./modules/install-utils.nu
 use $INSTALL_UTILS [run-installer probe-tool winget-package-state linux-is-root privileged-command]
-
-def nu-home [] {
-    let test_mode = ($env.INITIAL_SETUP_TEST_MODE? | default "" | str trim)
-    let override = ($env.INITIAL_SETUP_HOME_OVERRIDE? | default "" | str trim)
-
-    if $test_mode == "1" and not ($override | is-empty) {
-        return ($override | path expand)
-    }
-
-    let home_path = ($nu | get --optional home-path)
-
-    if $home_path != null {
-        return $home_path
-    }
-
-    let home_dir = ($nu | get --optional home-dir)
-
-    if $home_dir != null {
-        return $home_dir
-    }
-
-    error make {
-        msg: "Unable to determine the Nushell home directory."
-    }
-}
-
-def machine-context [] {
-    let file = ((nu-home) | path join ".config" "dotfiles" "config.nuon")
-
-    if not ($file | path exists) {
-        error make { msg: ("Machine config not found: " + ($file | into string)) }
-    }
-
-    open $file
-}
 
 def main [--prune --source-root: string = ""] {
     if (which code | is-empty) {

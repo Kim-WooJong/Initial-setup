@@ -1,4 +1,6 @@
 #!/usr/bin/env nu
+const CORE = path self ./modules/core.nu
+use $CORE [nu-home]
 # Explicit rclone-only transport. This intentionally does not replace the
 # normal provider configuration or its trusted baseline.
 
@@ -9,17 +11,6 @@ const SUBPROCESS = path self ./modules/subprocess.nu
 use $PROVIDER [load-provider]
 use $SAFETY [atomic-record]
 use $SUBPROCESS [run-command command-failure-message]
-
-def nu-home [] {
-    let test_mode = ($env.INITIAL_SETUP_TEST_MODE? | default "" | str trim)
-    let override = ($env.INITIAL_SETUP_HOME_OVERRIDE? | default "" | str trim)
-    if $test_mode == "1" and not ($override | is-empty) { return ($override | path expand) }
-    let home_path = ($nu | get --optional home-path)
-    if $home_path != null { return $home_path }
-    let home_dir = ($nu | get --optional home-dir)
-    if $home_dir != null { return $home_dir }
-    error make {msg: "Unable to determine the Nushell home directory."}
-}
 
 def dedicated-config-path [] {
     (nu-home) | path join ".config" "dotfiles" "rclone-sync.nuon"

@@ -1,77 +1,10 @@
 #!/usr/bin/env nu
-
+const CORE = path self ./modules/core.nu
+use $CORE [machine-context vscode-user-dir]
 # ============================================================
 # Capture VS Code settings, keybindings, and snippets into the
 # private cloud `vscode/` directory.
 # ============================================================
-
-def nu-home [] {
-    let test_mode = ($env.INITIAL_SETUP_TEST_MODE? | default "" | str trim)
-    let override = ($env.INITIAL_SETUP_HOME_OVERRIDE? | default "" | str trim)
-
-    if $test_mode == "1" and not ($override | is-empty) {
-        return ($override | path expand)
-    }
-
-    let home_path = ($nu | get --optional home-path)
-
-    if $home_path != null {
-        return $home_path
-    }
-
-    let home_dir = ($nu | get --optional home-dir)
-
-    if $home_dir != null {
-        return $home_dir
-    }
-
-    error make {
-        msg: "Unable to determine the Nushell home directory."
-    }
-}
-
-def machine-context [] {
-    let file = (
-        (nu-home)
-        | path join ".config" "dotfiles" "config.nuon"
-    )
-
-    if not ($file | path exists) {
-        error make {
-            msg: ("Machine config not found: " + ($file | into string))
-        }
-    }
-
-    open $file
-}
-
-def vscode-user-dir [] {
-    match $nu.os-info.name {
-        "windows" => {
-            let appdata = ($env.APPDATA? | default "")
-
-            if ($appdata | is-empty) {
-                return null
-            }
-
-            $appdata | path join "Code" "User"
-        }
-
-        "macos" => {
-            (nu-home)
-            | path join "Library" "Application Support" "Code" "User"
-        }
-
-        "linux" => {
-            (nu-home)
-            | path join ".config" "Code" "User"
-        }
-
-        _ => {
-            null
-        }
-    }
-}
 
 def copy-file-if-exists [source: path destination: path] {
     if not ($source | path exists) {

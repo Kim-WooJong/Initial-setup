@@ -1,54 +1,18 @@
 #!/usr/bin/env nu
+const CORE = path self ./modules/core.nu
+use $CORE [nu-home try-machine-context]
 const CLOUD_CONFIG = path self ./modules/cloud-wins-config.nu
 use $CLOUD_CONFIG [cloud-mode-active]
 const SUBPROCESS = path self ./modules/subprocess.nu
+const SYNC_STATE = path self ./modules/sync-state.nu
 use $SUBPROCESS [run-command command-failure-message]
+use $SYNC_STATE [sync-state-file read-sync-state]
 
 const TOOLS_ROOT = path self ..
-
-def nu-home [] {
-    let test_mode = ($env.INITIAL_SETUP_TEST_MODE? | default "" | str trim)
-    let override = ($env.INITIAL_SETUP_HOME_OVERRIDE? | default "" | str trim)
-
-    if $test_mode == "1" and not ($override | is-empty) {
-        return ($override | path expand)
-    }
-
-    let home_path = ($nu | get --optional home-path)
-
-    if $home_path != null {
-        return $home_path
-    }
-
-    let home_dir = ($nu | get --optional home-dir)
-
-    if $home_dir != null {
-        return $home_dir
-    }
-
-    error make {
-        msg: "Unable to determine the Nushell home directory."
-    }
-}
-
-def state-file [] {
-    (nu-home)
-    | path join ".config" "dotfiles" "sync-state.nuon"
-}
 
 def conflict-file [] {
     (nu-home)
     | path join ".config" "dotfiles" "SYNC-CONFLICT.txt"
-}
-
-def machine-context [] {
-    let file = ((nu-home) | path join ".config" "dotfiles" "config.nuon")
-
-    if not ($file | path exists) {
-        return null
-    }
-
-    open $file
 }
 
 def log [
@@ -178,7 +142,7 @@ def resolve-both-changed [
 
 def main [] {
     if (cloud-mode-active) { return }
-    let context = (machine-context)
+    let context = (try-machine-context)
 
     if $context == null {
         return
@@ -195,7 +159,7 @@ def main [] {
         return
     }
 
-    let state_path = (state-file)
+    let state_path = (sync-state-file)
 
     if not ($state_path | path exists) {
         log "WARN" "Sync baseline is missing."
@@ -203,7 +167,7 @@ def main [] {
         return
     }
 
-    let state = (open $state_path)
+    let state = (read-sync-state $state_path)
     let current_local = (fingerprint "local")
     let current_cloud = (fingerprint "cloud")
     let local_changed = ($current_local != $state.local_hash)

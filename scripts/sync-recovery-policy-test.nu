@@ -39,6 +39,7 @@ def main [] {
         "scripts/cloud-wins-main.nu"
         "scripts/modules/cloud-wins-engine.nu"
         "scripts/modules/sync-provider.nu"
+        "scripts/modules/sync-conflict.nu"
         "scripts/modules/conflicts.nu"
         "scripts/modules/sync-local-guard.nu"
         "scripts/auto-sync-worker.nu"
@@ -59,12 +60,16 @@ def main [] {
     require-text $transport "last-transport-error.nuon" "failed transports must retain a recovery diagnostic record"
     require-text $transport "guard-pull-local" "manual pulls must guard live changes before apply"
     require-text $transport "assert-local-unchanged" "manual pulls must recheck live state immediately before apply"
-    require-text $transport "--discard-local" "local overwrite must require an explicit pull flag"
+    require-text $transport "--discard-local" "non-interactive local overwrite must retain the explicit pull flag"
+    require-text $transport "preserve-provider-recovery" "manual directory-provider push must preserve a changed provider before local-wins capture"
+    require-text $transport '$manual' "manual and automatic push policy must remain explicitly separated"
 
     let local_guard = (read-source "scripts/modules/sync-local-guard.nu")
     require-text $local_guard "state.local_hash" "local pull guard must compare against the saved local baseline"
     require-text $local_guard "print-diff-text" "blocked manual pulls must show the incoming managed-file diff"
-    require-text $local_guard "dotpull --discard-local" "local overwrite guidance must name the explicit override"
+    require-text $local_guard "dotctl pull --discard-local" "local overwrite guidance must name the explicit override"
+    require-text $local_guard "confirm-private-authority" "manual pull must require an explicit confirmation before replacing changed local state"
+    require-text $local_guard "is-terminal --stdin" "interactive pull confirmation must require a real terminal"
 
     let provider = (read-source "scripts/modules/sync-provider.nu")
     require-text $provider "stable-provider-head" "directory providers must have a settling check"
@@ -72,6 +77,11 @@ def main [] {
     require-text $provider "verify-tree ($partial | path join \"data\") $entries" "staged revisions must be verified before commit"
     require-text $provider "Workspace rollback verification failed." "workspace replacement must verify automatic rollback"
     require-text $provider "Previous workspace was restored automatically." "workspace replacement must report successful rollback"
+
+    let conflict = (read-source "scripts/modules/sync-conflict.nu")
+    require-text $conflict "assert-same-head $config $head" "manual local-wins recovery must recheck the provider around its copy"
+    require-text $conflict "copy-workspace $config.data_root $destination" "manual local-wins recovery must preserve the provider payload"
+    require-text $conflict "recovery.nuon" "manual local-wins recovery must record self-describing metadata"
 
     let down = (read-source "scripts/sync-down-local.nu")
     require-text $down "--source-root: string" "sync-down-local must accept an immutable staged source"

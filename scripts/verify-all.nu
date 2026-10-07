@@ -104,9 +104,23 @@ def main [--full --offline --report-dir: path --skip-build --working-tree] {
         {name: "locks" script: "lock-test.nu" args: []}
         {name: "managed-editor" script: "edit-managed-test.nu" args: []}
         {name: "vault-init" script: "vault-init-test.nu" args: []}
+        {name: "edit-identity" script: "edit-identity-test.nu" args: []}
+        {name: "platform-shim" script: "platform-shim-test.nu" args: []}
+        {name: "rpool-install" script: "rpool-install-test.nu" args: []}
+        {name: "ssh-key-sync" script: "ssh-key-sync-test.nu" args: []}
         {name: "command-refresh" script: "refresh-commands-test.nu" args: []}
+        {name: "command-shim" script: "command-shim-test.nu" args: []}
+        {name: "checkout-private" script: "checkout-private-test.nu" args: []}
+        {name: "prune-obsolete" script: "prune-obsolete-test.nu" args: []}
         {name: "subprocess-chain" script: "subprocess-chain-test.nu" args: []}
         {name: "run-state" script: "run-state-test.nu" args: []}
+        {name: "rpool-sync" script: "rpool-sync-test.nu" args: []}
+        {name: "rclone-compare" script: "rclone-compare-test.nu" args: []}
+        {name: "rpool-two-machine" script: "rpool-two-machine-test.nu" args: []}
+        {name: "wireguard-policy" script: "wireguard-policy-test.nu" args: []}
+        {name: "rpool-hidden" script: "rpool-hidden-test.nu" args: []}
+        {name: "rpool-resolver" script: "rpool-resolver-test.nu" args: []}
+        {name: "migration-errors" script: "migration-error-test.nu" args: []}
     ] {
         let row = (invoke $stage.script $stage.args $directory $stage.name)
         $results = ($results | append $row)

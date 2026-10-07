@@ -1,39 +1,13 @@
 #!/usr/bin/env nu
-
+const CORE = path self ./modules/core.nu
+use $CORE [nu-home machine-context useful-lines]
 const TOOLS_ROOT = path self ..
 const SUBPROCESS = path self ./modules/subprocess.nu
+const CONSOLE = path self ./modules/console.nu
 use $SUBPROCESS [run-command command-failure-message]
-
-def nu-home [] {
-    let test_mode = ($env.INITIAL_SETUP_TEST_MODE? | default "" | str trim)
-    let override = ($env.INITIAL_SETUP_HOME_OVERRIDE? | default "" | str trim)
-
-    if $test_mode == "1" and not ($override | is-empty) {
-        return ($override | path expand)
-    }
-
-    let home_path = ($nu | get --optional home-path)
-
-    if $home_path != null {
-        return $home_path
-    }
-
-    let home_dir = ($nu | get --optional home-dir)
-
-    if $home_dir != null {
-        return $home_dir
-    }
-
-    error make {
-        msg: "Unable to determine the Nushell home directory."
-    }
-}
-
-def machine-context [] {
-    let file = ((nu-home) | path join ".config" "dotfiles" "config.nuon")
-    open $file
-}
-
+use $CONSOLE [print-status print-command]
+const TEXT_CASE = path self ./modules/text-case.nu
+use $TEXT_CASE [text-lower]
 
 def winget-package-state [
     mode: string
@@ -58,15 +32,15 @@ def run-external [
     args: list
 ] {
     if (which $program | is-empty) {
-        print ("[skip] " + $program + " not found")
+        print-status "warn" "skip" ($program + " not found")
         return false
     }
 
-    print ("[run] " + $label)
+    print-status "info" "run" $label
 
     let result = (run-command $program $args --live)
     if not $result.ok {
-        print --stderr ("[warn] " + (command-failure-message $label $result))
+        print-status "warn" "warn" (command-failure-message $label $result) --stderr
         return false
     }
     true
@@ -80,19 +54,11 @@ def run-script [
 
     let result = (run-command ($nu.current-exe | into string) (["--no-config-file" ($script | into string)] | append $args) --live)
     if not $result.ok {
-        print --stderr ("[warn] " + (command-failure-message ("Script " + $name) $result))
+        print-status "warn" "warn" (command-failure-message ("Script " + $name) $result) --stderr
         return false
     }
     true
 }
-
-def useful-lines [file: path] {
-    open --raw $file
-    | lines
-    | each { |line| $line | str trim }
-    | where { |line| not ($line | is-empty) and not ($line | str starts-with "#") }
-}
-
 
 def linux-is-root [] {
     if (which id | is-empty) {
@@ -109,7 +75,7 @@ def privileged-linux [label: string program: string args: list] {
     }
 
     if (which sudo | is-empty) {
-        print ("[warn] sudo is required to " + ($label | str lowercase) + "; skipping.")
+        print-status "warn" "warn" ("sudo is required to " + ($label | text-lower) + "; skipping.")
         return false
     }
 
@@ -140,24 +106,24 @@ def update-windows [] {
             let installed_state = (winget-package-state "installed" $package_id)
 
             if $installed_state == "error" {
-                print ("[warn] Could not determine installed state for " + $package_id + "; leaving it unchanged")
+                print-status "warn" "warn" ("Could not determine installed state for " + $package_id + "; leaving it unchanged")
                 continue
             }
 
             if $installed_state == "no" {
-                print ("[skip] " + $package_id + " is not installed")
+                print-status "warn" "skip" ($package_id + " is not installed")
                 continue
             }
 
             let upgrade_state = (winget-package-state "upgrade-available" $package_id)
 
             if $upgrade_state == "error" {
-                print ("[warn] Could not determine upgrade state for " + $package_id + "; leaving it unchanged")
+                print-status "warn" "warn" ("Could not determine upgrade state for " + $package_id + "; leaving it unchanged")
                 continue
             }
 
             if $upgrade_state == "no" {
-                print ("[ok] " + $package_id + " already up to date; skipping reinstall")
+                print-status "ok" "ok" ($package_id + " already up to date; skipping reinstall")
                 continue
             }
 
@@ -212,7 +178,7 @@ def update-linux [] {
     }
 
     if $manager == null {
-        print "[warn] No supported Linux package manager found; CLI package update skipped."
+        print-status "warn" "warn" "No supported Linux package manager found; CLI package update skipped."
         return
     }
 
@@ -297,9 +263,9 @@ def main [
     }
 
     if $do_all or $repo {
-        print "[safe-update] Repository files are not updated by a blind git pull."
-        print "Run dotupgrade --ref <tag> --commit <trusted-full-commit> --yes for a Git checkout."
-        print "For an extracted release, run dotupgrade --from <folder> --manifest-sha256 <trusted-digest> --yes."
+        print-status "info" "safe-update" "Repository files are not updated by a blind git pull."
+        print-command "dotupgrade --ref <tag> --commit <trusted-full-commit> --yes"
+        print-command "dotupgrade --from <folder> --manifest-sha256 <trusted-digest> --yes"
     }
 
     if $do_all or $tools {
@@ -317,7 +283,7 @@ def main [
             }
 
             _ => {
-                print "[warn] Unsupported OS for package updates"
+                print-status "warn" "warn" "Unsupported OS for package updates"
             }
         }
 

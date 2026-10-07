@@ -1,7 +1,172 @@
 # Changelog
 
+## Unreleased
+
+- New `rpool-install` command: installs or updates the RPool binary from its public GitHub releases (https://github.com/Kim-WooJong/RPool) into `~/.cargo/bin`, where `resolve-rpool-executable` finds it without a PATH change and which is machine-local (never the cloud-synced checkout). Auto-detects OS/arch and the matching asset, verifies the download against `SHA256SUMS.txt` before replacing anything, backs up the previous binary (`.prev`), installs `rpool-gui` too when present, removes the macOS quarantine attribute, and confirms `rpool --version`. `--version vX.Y.Z` (default latest), `--check` compares installed vs target only. Idempotent (no-op when already current); refuses to replace a running/mounted rpool; reports network/rate-limit failures; ARM Linux/Windows report "unsupported". No background or scheduled updates — it runs only when invoked. New `scripts/modules/rpool-install.nu`, `scripts/rpool-install.nu`, `scripts/rpool-install-test.nu`.
+- Fix cross-OS Nushell startup: `platform.nu` (sourced by the synchronized `config.nu`) is now created on every OS, so a `config.nu` synced from macOS/Linux no longer makes Windows Nushell fail to start with "File not found: ~/.config/dotfiles/platform.nu".
+- dotpull no longer fails on a machine that does not have rpool installed. When the synced source contains an rpool artifact but this machine has no rpool (and no active rpool settings), the rpool restore is skipped with a warning and the rest of the pull proceeds; it still fails closed if active rpool settings exist but the CLI is missing. Install rpool (or set RPOOL_BIN) and re-run dotpull to restore rpool settings.
+
+- The "age identity is not the vault recipient" readiness message now names the exact fix (`dotvault rekey --execute` to adopt this identity as the recipient, or `dotvault edit-identity` to restore the shared identity) and notes that `dotctl verify` tests real decryption. This recipient-vs-identity drift (from running `dotvault init` separately on each machine) — not any OS path difference — is what blocks cross-machine pull; `dotvault rekey --execute` aligns a machine whose identity already decrypts the synced data.
+
+- Sync no longer aborts on cloud-client conflict copies in the private source. Files whose names look like a sync-client conflict copy (containing "# Edit conflict", "sync-conflict" or "conflicted copy", e.g. the ones Proton Drive/Dropbox create) are ignored by the publish audit and manifest instead of failing `dotpush` with "...allowed in the portable rpool sync payload" / "Only named .age ciphertext files...". Delete the stray copy from the private source at your convenience.
+- New age-encrypted SSH private key sync. `dotvault ssh-key add-all` enrolls every private key in `~/.ssh` at once (skipping `.pub`, certificates, `config`, `known_hosts` and PuTTY `.ppk`; idempotent), and `dotvault ssh-key add <name>` enrolls `~/.ssh/<name>`: the private key is encrypted to the vault recipients at `<data_root>/secrets/ssh/<name>.age` (the set of those files is the manifest — no extra metadata is published); `dotpush` re-encrypts changed enrolled keys and `dotpull` restores them to `~/.ssh/<name>` with owner-only permissions, backing up any existing local key first. `dotvault ssh-key remove`/`list` manage enrollment; `dotctl verify` reports per-key match/differ. Plaintext private keys never enter the chezmoi tree and are never printed; restore fails closed without the vault identity. New `scripts/modules/ssh-key-sync.nu`, `scripts/ssh-key-sync-test.nu`.
+
+## 0.24.0
+
+- New `dotvault edit-identity` (`scripts/edit-identity.nu`): opens the machine-local age identity (`~/.config/dotfiles/age/identity.txt`, or the path in the vault policy) in an editor — default `nvim`, `--editor`/`--editor-argument` to override — so it can be set to the same private key as another machine. Creates the file owner-only if missing, re-restricts permissions after editing, validates it with `age-keygen -y`, and reports whether its public key matches the vault recipient (with the next step on a mismatch). Local only: no provider is read or written and the secret value is never printed. New `edit-identity-test.nu`.
+
+## 0.23.1
+
+- The repository no longer ships the internal `.project/` work notes (they contained machine-specific paths); `.project/` is git-ignored. Copies that still have it lose it on the next `prune-obsolete.nu --execute`.
+
+## 0.23.0
+
+- New `scripts/prune-obsolete.nu` for the copy-over-existing-folder update workflow: lists (preview) or deletes (`--execute`) files not in `RELEASE-MANIFEST.json`, removes folders left empty, never touches `private/`, `.git/` or `tools/cloudwins/target/`, refuses when VERSION and the manifest disagree, and reports missing/modified release files. The setup preflight's manifest-difference notice now points to it. New `prune-obsolete-test.nu`.
+- New `dotvault rekey [--execute]`: after an identity/recipient mismatch, makes this machine's age identity the only vault recipient (policy backed up under `~/.config/dotfiles/vault-backups/`); the next `dotpush` re-encrypts rclone.conf and rpool crypt passwords for it. Other machines then need this identity file.
+- rclone capture no longer reuses an existing encrypted copy that this machine cannot decrypt (for example after a rekey), even when the recorded hashes are unchanged.
+- `dotctl verify` explains a decryption failure with matching local keys as "encrypted for a different key (another machine ran dotvault rekey)". The rpool e2e covers mismatch -> rekey -> dotpush -> verify on both machines.
+
+## 0.22.1
+
+- New age key check: `identity-recipient-status` (vault.nu) derives the local identity's public key with `age-keygen -y` and checks it is a vault recipient. `dotctl verify` shows it first ("age keys"), and `dotctl config rclone`/doctor show an "Identity key" line; Pull is no longer reported READY when the identity is not a recipient (encrypted copies could never be decrypted there). Public keys only.
+- `dotctl verify` reports rpool crypt passwords that cannot be decrypted as `decrypt-failed` (private copy) or `decrypt-failed-local` (fresh export, i.e. the vault recipient is not this identity) instead of "DIFFER".
+
+## 0.22.0
+
+- New read-only `dotctl verify` (`scripts/verify-sync.nu`): compares this machine's `rclone.conf` with the private encrypted copy (decrypted in memory; per-remote/key names, OAuth token-only refresh reported as normal) and this machine's rpool settings and crypt passwords with the private artifact (fresh export to a private stage, differing settings sections named, `rpool import --dry-run` must pass). Never writes the private source or live config and never prints secret values; `--json` output, exit 1 on a difference.
+- rclone.conf parsing/comparison moved to `scripts/modules/rclone-compare.nu` (shared by the crypt fingerprint and verification); new `rclone-compare-test.nu`; the rpool two-machine e2e now checks `dotctl verify` before publish, after pull, after the round trip, and for token-only refresh.
+- Existing installs: the command list changed, so run `scripts/refresh-commands.nu` once (or setup) to get `dotctl verify` in the shell.
+
+## 0.21.0
+
+- The private data location is now fixed to `<checkout>/private`. Commands resolve `data_root` as `<tools_root>/private` regardless of the saved value (`core.nu` `fixed-private-context`), so a `data_root` saved by an older version (the checkout's parent folder or `../home`) is ignored: setup prints a notice and starts fresh in `private/`; the old folder is never read, changed or deleted. `--data-dir` is accepted only in isolated test mode. `relocate-private-data.nu` and its move/adopt modes are removed.
+
+## 0.20.0
+
+- Fix two stale test fixtures that kept the release gates red: the sandbox setup self-test now strips ANSI colors before matching `Mode : initial/existing`, and the partial-extraction entrypoint test copies setup.nu's computed parse-time closure (now including `console.nu` and `nushell-config-dir.nu`).
+- New installations store the synchronized private settings in `<checkout>/private` (next to `setup.nu`, git-ignored) instead of the sibling `../home`. `private/` is excluded from release manifests, `dotupgrade` verification, `cleanup-release-junk.nu`, syntax and project validation (new `scripts/checkout-private-test.nu`). Existing installations move with `scripts/relocate-private-data.nu --execute` (default destination is now `<checkout>/private`); this also fixes `dotpush` failing with "Only rpool/config/portable-config.json ... File: rpool/Cargo.lock" when `data_root` is a parent folder that contains rpool source code (covered by a new legacy-parent e2e scenario). Machine-local state, vault policy and age identity stay in `~/.config/dotfiles`. Cloud-wins cannot target a data root inside the checkout. The relocation test now resolves macOS temp symlinks and passes.
+- Cleanup: remove the orphaned Nu binary extractors (`scripts/posix/extract-nu-runtime.sh`, `scripts/windows/extract-nu-runtime.ps1`; superseded since the native bootstrap change), the unused `scripts/rclone-config-path.nu`, and the copied-module dependency list/closure check made obsolete by the command shim (generating the shim now validates the checkout).
+- Installed commands now run from the checkout: `refresh-commands.nu`/setup install a small generated `~/.config/nushell/modules/dotfiles.nu` shim (no imports) instead of copying 14 runtime modules. Each command forwards to `<tools_root>/scripts/dotcmd.nu`, which loads the checkout's `dotfiles.nu`, converts arguments by the real signature, and runs it, so checkout script/module edits apply without setup or refresh. A signature hash in the shim makes the runner print a refresh hint when commands or flags change. `dotpull --reload` reloads the user's own shell. Existing installs: run `scripts/refresh-commands.nu` once from the checkout. Shim flags have no tab-completion; `--help` shows a generated usage line. New `scripts/command-shim-test.nu`; the rpool two-machine e2e now calls dotpush/dotpull through the shim. The refresh test fixture now declares schema 5.
+- Fix RPool crypt-password-only changes being invisible to the local sync fingerprint when `rclone.conf` sync is disabled: with an artifact-capable rpool, the fingerprint now includes a SHA-256 digest of the active `rclone.conf` crypt sections (OAuth token refreshes of other remotes are ignored), so auto-sync and push detect the change. New `scripts/rpool-two-machine-test.nu` runs a real two-sandbox push/pull (rpool, age, chezmoi, rclone; skipped when missing).
+- RPool settings sync now carries crypt-remote passwords: with an artifact-capable rpool (`rpool export`/`rpool import`, 0.7.x), `dotpush` writes `rpool/config/portable-config.json` plus age-encrypted `rpool/secrets/rclone.age` (vault recipient), and `dotpull` imports it with a dry-run first, after the encrypted `rclone.conf` commit. Pulls fail before live changes when an incoming crypt vault cannot be decrypted. Unchanged settings/secrets keep the existing files. Legacy JSON-only bundles are still restored and are migrated to the new layout on the next capture.
+- Fix `bootstrap.sh` on macOS's default bash 3.2: empty optional-argument arrays no longer abort under `set -u`, so the pinned Nushell release fast path and the Cargo fallback both work on a stock Mac.
+- Route the remaining direct `str lowercase` calls (setup-main, update, nushell-config-dir) through the version-aware `text-case.nu` adapter so Nushell 0.109.1-0.113.x can parse setup; project validation now rejects direct `str lowercase`/`str uppercase` outside the modern adapter.
+- `dotpull --source-only` no longer lets the next push silently re-capture stale live files over the fetched private changes: directory/transport-only source-only pulls no longer advance the baseline, and revision-store source-only pulls leave a pending marker that blocks automatic pushes and manual pushes whose live files still differ. `dotresolve` "Save this machine" remains an explicit local-wins push (`--local-wins`).
+- Live `dotrollback` now runs the same local-change guard and `before-rollback` local backup as a normal pull (new `--discard-local` override).
+- Exclude Nushell history files from the local sync fingerprint so ordinary shell use is not treated as a configuration change (the stored local baseline differs once after upgrading).
+- `dotvault migrate-rclone` choosing ACTIVE no longer copies the live plaintext `rclone.conf` into the synchronized private folder; the legacy copy is left superseded (or removed with `--remove-legacy`).
+- An rclone pull whose ciphertext is unchanged since the last synchronization no longer restores it over a locally refreshed `rclone.conf` (OAuth token rollback); plaintext restore backups are pruned to the newest five.
+- `dotfiles-secrets.nu` is created/edited with owner-only permissions on POSIX.
+- Push/pull select the Nushell runtime like auto-sync (current supported Nu or cached managed runtime) instead of requiring a live crates.io query and the newest release; offline push/pull works and a newer crates.io release no longer forces a Cargo build.
+- Build/toolchain output from the runtime gate goes to stderr so captured single-path stdout protocols stay intact; `setup.nu` delegates an unsupported Nushell to bootstrap before running the preflight.
+- `prepare-nu-release.sh`: correct single-backslash archive member rejection, exit 129/130/143 after signal cleanup, and pipefail-safe musl detection.
+- cloudwins: resolve symlinked ancestors of source/target/state roots (for example macOS `/tmp`) while still rejecting symlinks inside managed trees; ignore foreign entries in `state/runs/`; ignore the tool's own stale temp files in target scans.
+
+## 0.19.2
+
+- Fix Windows runtime-module closure validation by comparing expanded dependency paths instead of separator-sensitive relative-path strings.
+- Correct erroneous double-backslash normalization literals in command-runtime validation, release cleanup, and project validation so Windows `\` paths normalize consistently.
+- Keep the canonical 14-module installed runtime closure unchanged; this release fixes validation/path normalization rather than adding another dependency.
+
+## 0.19.1
+
+- Fix installed Nushell command startup after the v0.19.0 helper consolidation by deploying the complete parse-time dependency closure for `dotfiles.nu`, not only the original four runtime modules.
+- Centralize the installed command-runtime module set in `scripts/modules/command-runtime.nu` and reuse it from private-source initialization, local command refresh, refresh regression coverage, and project validation.
+- Preserve nested runtime module paths such as `compat/case-legacy.nu` / `compat/case-modern.nu` during copy, backup, rollback, and private-source seeding.
+- Add a static runtime-closure guard that follows every `.nu` `path self` dependency in the installed module set and fails validation if a newly introduced parse-time module is not deployed.
+
+## 0.19.0
+
+- Reduce shared-module API surface by making internal helpers private and removing dead exports while preserving the public `dotctl` / legacy command set.
+- Route machine config, provider config, Cloud-wins config, sync state, provider state, and vault state through canonical owner modules instead of ad-hoc production writers; keep raw transaction rollback writes explicit where byte-for-byte recovery is required.
+- Consolidate repeated home/config/VS Code path discovery and NUON parsing into shared helpers, while retaining bootstrap- and compatibility-sensitive local implementations where centralization would weaken early-startup support.
+- Make `dotctl` the canonical command surface and keep existing `dot*` commands as thin compatibility wrappers over the same private implementations rather than having primary commands depend on legacy wrappers.
+- Remove the obsolete `scripts/verify-0.13.2.nu` wrapper and keep historical data-format compatibility tests separately from retired command aliases.
+- Eliminate active Nushell 0.114+ case-conversion deprecation warnings by routing release cleanup through the version-aware `text-case.nu` adapter; legacy syntax remains isolated to the pre-0.114 compatibility module and warning fixture.
+- Reorganize README, START_HERE, command reference, architecture, synchronization, troubleshooting, and Cloud-wins guidance around the compact `dotctl` routine interface, with advanced and compatibility commands documented separately.
+- Extend static maintenance guards for canonical state writers, primary-command direction, deprecated case commands, module imports, and release inventory consistency.
+
+## 0.18.8
+
+- Start incremental state-schema migration work with one shared registry for `sync-state`, `provider-state`, and `vault` records while leaving the existing machine-config `SCHEMA_VERSION=5` migration unchanged.
+- Add verified owner-only migration backups and an atomic commit/rollback primitive for future state migrations; no sync/provider/vault state file is rewritten automatically in this step.
+- Extend `dotmigrate --check` with a read-only inventory of legacy/scoped sync state, provider state, and vault files so upcoming migrations can be reviewed before they are enabled.
+- Keep current legacy `version` fields readable during the transition while defining `schema_version` as the canonical field for migrated state records.
+- Add explicit sync-state `2 -> 3`, provider-state `1 -> 2`, and vault `1 -> 2` migration paths with legacy readers, canonical writers, verified backups, atomic replacement, future-schema guards, and owner-only vault migration handling.
+- Keep vault migration scoped to the machine-local policy only; the age private identity is never copied into migration backups or rewritten by schema migration.
+- Make `dotmigrate` the single schema-write entrypoint: preflight every machine/sync/provider/vault state, create and verify every recovery backup before the first commit, recheck live hashes, and roll back committed files in reverse order on failure.
+- Route setup through the same all-state migration transaction instead of directly migrating only machine config, and remove the now-redundant per-state migration/status scripts and standalone commit path.
+- Add shared read-only schema health to `dotdoctor`, including CURRENT / MIGRATION NEEDED / BLOCKED / INVALID / NOT INITIALIZED reporting without mutating state or bypassing the transaction.
+- Add `cleanup-release-junk.nu` for conservative version-close cleanup of known editor/build/cache artifacts; no-op successfully when nothing matches, with `--check` for read-only review.
+- Complete the schema migration architecture/validation inventory and restore README/version documentation consistency found during the final static audit.
+- Close final transaction safety gaps by rechecking the machine-config backup SHA-256 inside transaction-mode migration and preserving a `rollback-failed` transaction status if an individual state cannot restore its verified backup.
+
+## 0.18.7
+
+- Simplify the primary `dotctl pull` interface by removing the redundant `--backup` flag; every normal pull already creates a verified `before-verified-pull` local backup before live configuration changes.
+- Stop coupling a backup request to `--force` in the primary command surface. The legacy `dotpull --backup` behavior remains available unchanged for compatibility with existing scripts that explicitly request an additional named backup.
+- Add concise flag descriptions to `dotctl pull` so completion distinguishes normal pull controls from advanced conflict/force overrides.
+
+## 0.18.6
+
+- Route the primary human-readable output of `dotstatus`, `dotdoctor`, vault/rclone reconciliation, `dotrun`, `dotupdate`, and `dotupgrade` through the shared `console.nu` presentation layer.
+- Standardize terminal semantics: headings magenta, labels/info cyan, successful states green, warnings/cancellations yellow, and failures/recovery failures red while continuing to respect `NO_COLOR`.
+- Extend shared child-output coloring for vault/rclone/push/pull/encrypted status tags without changing raw structured tables, event logs, or live external-program streams.
+- Keep diagnostics details, machine-readable values, paths, hashes, and IDs copyable by coloring only their labels/status markers where practical.
+
+## 0.18.5
+
+- Add one read-only rclone readiness inspector shared by `dotctl config rclone` / `dotrclone` and `dotdoctor`.
+- Report active rclone config discovery, `rclone` / `age` / `age-keygen` health, vault policy, age recipient count, local age identity, and encrypted `secrets/rclone.age` availability separately.
+- Split encrypted-sync readiness into independent `Push` and `Pull` results so a recipient-only machine can be recognized as push-capable while a missing identity or ciphertext keeps pull unavailable.
+- Keep readiness inspection non-mutating: it never registers vault entries, creates keys, rewrites policy, or changes `rclone.conf`.
+
+## 0.18.4
+
+- Route `dotrclone --capture` through the same active-path discovery, unchanged-content reuse, encryption, and sync-state implementation used by automatic `dotpush`.
+- Route `dotrclone --restore` through the authenticated staging, SHA-256 recheck, recovery-backup, and transactional commit implementation used by automatic `dotpull`.
+- Add `--capture` / `--restore` to `dotctl config rclone` so manual rclone synchronization stays inside the compact primary command surface while legacy `dotrclone` remains compatible.
+- Make manual rclone capture/restore fail clearly when the machine profile has `rclone_config` disabled instead of silently doing nothing.
+
+## 0.18.3
+
+- Add automatic rpool v0.5.3+ portable configuration capture on `dotpush` and import on `dotpull`.
+- Synchronize only `rpool/portable-config.json`; rclone credentials remain in the separate age-encrypted vault.
+- Restore rpool after the incoming rclone config so portable remote/default-path references use the current remotes.
+- Add `dotctl config rpool` status/manual capture/restore controls while keeping rpool optional on machines where it is not installed.
+
+## 0.18.2
+
+- Authenticate/decrypt an incoming `secrets/rclone.age` into a restricted machine-local staging directory before `dotpull` starts chezmoi or other live configuration changes.
+- Commit the exact pre-authenticated plaintext later in the pull transaction instead of decrypting the ciphertext again after local apply has already started.
+- Fail closed before live apply when the age identity is missing/wrong, ciphertext is corrupt, or the ciphertext changes during authentication; clean restricted staging on failed local apply.
+- Recheck both the ciphertext SHA-256 and active rclone config destination before commit, preserve the previous local config in the existing verified recovery area, and keep unchanged encrypted config on the fast path.
+
+## 0.18.1
+
+- Treat `age`/`age-keygen` as required setup dependencies whenever `features.rclone_config` is enabled, independently of the optional `cli_tools` feature.
+- Reuse the existing cross-platform package installer in a required-single-package mode instead of adding age to the normal optional CLI manifest.
+- Add verified package mappings for WinGet (`FiloSottile.age`), Homebrew (`age`), and supported Linux package managers (`age`), and require both `age --version` and `age-keygen --version` to succeed before the dependency is considered healthy.
+
+## 0.18.0
+
+- Make encrypted rclone configuration part of normal synchronization: when `rclone_config` is enabled, `dotpush`/`dotctl push` always capture the active `rclone.conf` into the age-backed `secrets/rclone.age`, and `dotpull`/`dotctl pull` authenticate and restore it automatically.
+- Lazily register/migrate the machine-local `rclone` vault entry for existing vaults and enable automatic capture/restore flags. New vault initialization registers rclone with automatic synchronization enabled.
+- Track machine-local plaintext/ciphertext SHA-256 pairs so unchanged rclone configuration reuses the existing age ciphertext instead of generating a new randomized file on every push/pull.
+- Preserve the previous local `rclone.conf` in a private verified recovery directory before an incoming encrypted config replaces it. The age identity remains machine-local and is never synchronized.
+- Add the compact `dotctl ...` primary command family for day-to-day use (`status`, `diff`, `push`, `pull`, `sync`, `backup`, `restore`, `config`, `preflight`, `doctor`, `update`) while keeping all existing `dot*` commands compatible for advanced workflows.
+
+## 0.17.1
+
+- Restore `dotpush` as an explicit local-authoritative conflict resolution for the `directory`/cloud-client provider. When the provider changed since the saved baseline, a manual `dotpush` now preserves a verified recovery copy under `~/.config/dotfiles/sync-recovery/<id>` before recapturing local configuration. Automatic/background pushes retain the strict saved-baseline guard.
+- Make manual `dotpull` usable without memorizing a destructive flag: when post-baseline local edits are detected, show the existing colorized incoming diff and ask whether the private source should replace them. The default remains cancel; non-interactive replacement still requires `--discard-local`.
+- Replace the raw transport `Original failure` stack dump with concise colored synchronization errors after lock cleanup, while preserving nonzero exit status and `last-transport-error.nuon`.
+- Route push/pull phase progress, provider workspace-backup notices, and Nushell runtime status lines through colored terminal output while continuing to respect `NO_COLOR`.
+- Keep manual pull terminal ownership direct through the transport path so conflict confirmation remains a real TTY interaction.
+
 ## 0.17.0
 
+- Add Nushell-native Tab completion for `dotvault`, `dotbackend`, and `dotcloud` subcommands, plus local-only target/value completion for registered vault entries, snapshots, backups, setup runs, release modes, project kinds, and plan directions. Completion performs no network or mutation work.
 - Prevent manual `dotpull`/`dotrpull` from silently rolling back live configuration changed after the last successful local sync baseline. Pull now shows the incoming managed-file diff and stops before changing live configuration or the private workspace unless `--discard-local` is supplied explicitly.
 - Recheck the live fingerprint immediately before apply so edits made while a pull is being prepared also stop the operation.
 - Add a shared terminal presentation module with consistent colored `info`, `ok`, `warn`, `error`, and diff output while respecting `NO_COLOR`. Apply it to pull/push status, preflight diffs, protected conflicts, `dotstatus`, and `dotdiff`.

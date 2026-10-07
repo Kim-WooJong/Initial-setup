@@ -1,5 +1,8 @@
 #!/usr/bin/env nu
-
+const CORE = path self ./modules/core.nu
+const COMMAND_RUNTIME = path self ./modules/command-runtime.nu
+use $CORE [nu-home machine-context]
+use $COMMAND_RUNTIME [generate-command-shim]
 # ============================================================
 # Create the private data structure.
 #
@@ -8,46 +11,6 @@
 # ============================================================
 
 const TOOLS_ROOT = path self ..
-
-def nu-home [] {
-    let test_mode = ($env.INITIAL_SETUP_TEST_MODE? | default "" | str trim)
-    let override = ($env.INITIAL_SETUP_HOME_OVERRIDE? | default "" | str trim)
-
-    if $test_mode == "1" and not ($override | is-empty) {
-        return ($override | path expand)
-    }
-
-    let home_path = ($nu | get --optional home-path)
-
-    if $home_path != null {
-        return $home_path
-    }
-
-    let home_dir = ($nu | get --optional home-dir)
-
-    if $home_dir != null {
-        return $home_dir
-    }
-
-    error make {
-        msg: "Unable to determine the Nushell home directory."
-    }
-}
-
-def machine-context [] {
-    let file = (
-        (nu-home)
-        | path join ".config" "dotfiles" "config.nuon"
-    )
-
-    if not ($file | path exists) {
-        error make {
-            msg: $"Machine config not found: ($file)"
-        }
-    }
-
-    open $file
-}
 
 def copy-if-missing [source: path destination: path] {
     if ($destination | path exists) {
@@ -78,6 +41,7 @@ def main [] {
     mkdir ($data_root | path join "toolchains" "rust")
     mkdir ($data_root | path join "toolchains" "julia" "environments")
     mkdir ($data_root | path join "rclone")
+    mkdir ($data_root | path join "rpool")
 
     let chezmoi_root = ($data_root | path join ".chezmoiroot")
 
@@ -123,24 +87,16 @@ def main [] {
 
     copy-if-missing $starship_default $starship_target
 
-    let runtime_modules = ["dotfiles.nu" "subprocess.nu" "process-output.nu" "console.nu"]
     let module_target_root = (
         $data_root
         | path join "home" "dot_config" "nushell" "modules"
     )
     mkdir $module_target_root
 
-    for name in $runtime_modules {
-        let module_source = ($TOOLS_ROOT | path join "scripts" "modules" $name)
-        let module_target = ($module_target_root | path join $name)
-
-        if not ($module_source | path exists) or ($module_source | path type) != "file" {
-            error make { msg: $"Management runtime module not found: ($module_source)" }
-        }
-
-        cp $module_source $module_target
-        print $"[sync] Management module -> ($module_target)"
-    }
+    # Only the generated shim is seeded; commands run from tools_root.
+    let shim_target = ($module_target_root | path join "dotfiles.nu")
+    generate-command-shim $TOOLS_ROOT | save --force --raw $shim_target
+    print $"[sync] Command shim -> ($shim_target)"
 
 
     let vscode_extensions = (

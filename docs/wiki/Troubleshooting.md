@@ -19,7 +19,7 @@ Use `bash bootstrap.sh` on Linux/macOS or `bootstrap.ps1` on Windows once.
 
 ## Setup stopped
 
-Run `dotdoctor`, inspect `dotrun --status`, and use `nu setup.nu --check` to separate project validation failures from machine configuration failures.
+Run `dotctl doctor`, inspect `dotrun --status`, and use `nu setup.nu --check` to separate project validation failures from machine configuration failures.
 
 
 ## `manifest_status` is `changed`

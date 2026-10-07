@@ -1,54 +1,12 @@
 #!/usr/bin/env nu
-
+const CORE = path self ./modules/core.nu
+use $CORE [nu-home machine-context]
 const SUBPROCESS = path self ./modules/subprocess.nu
-const SAFETY = path self ./modules/safety.nu
+const SYNC_STATE = path self ./modules/sync-state.nu
 use $SUBPROCESS [run-command command-failure-message]
-use $SAFETY [atomic-record]
+use $SYNC_STATE [sync-state-file write-sync-state]
 
 const TOOLS_ROOT = path self ..
-
-def nu-home [] {
-    let test_mode = ($env.INITIAL_SETUP_TEST_MODE? | default "" | str trim)
-    let override = ($env.INITIAL_SETUP_HOME_OVERRIDE? | default "" | str trim)
-
-    if $test_mode == "1" and not ($override | is-empty) {
-        return ($override | path expand)
-    }
-
-    let home_path = ($nu | get --optional home-path)
-
-    if $home_path != null {
-        return $home_path
-    }
-
-    let home_dir = ($nu | get --optional home-dir)
-
-    if $home_dir != null {
-        return $home_dir
-    }
-
-    error make {
-        msg: "Unable to determine the Nushell home directory."
-    }
-}
-
-def machine-context [] {
-    let file = (
-        (nu-home)
-        | path join ".config" "dotfiles" "config.nuon"
-    )
-
-    open $file
-}
-
-def state-file [] {
-    let scope = ($env.INITIAL_SETUP_PROVIDER_STATE_SCOPE? | default "" | str trim)
-    if ($scope | is-empty) {
-        return ((nu-home) | path join ".config" "dotfiles" "sync-state.nuon")
-    }
-    if not ($scope =~ '^[a-f0-9]{64}$') { error make {msg: "Invalid sync-state scope."} }
-    (nu-home) | path join ".config" "dotfiles" "sync-states" ("sync-state-" + $scope + ".nuon")
-}
 
 def conflict-file [] {
     (nu-home)
@@ -98,23 +56,18 @@ def main [] {
     )
 
     let state_path = (
-        state-file
+        sync-state-file
     )
 
-    mkdir (
-        $state_path
-        | path dirname
-    )
-
-    atomic-record $state_path {
-        version: "2"
+    write-sync-state $state_path {
+        schema_version: 3
         local_hash: $local_hash
         cloud_hash: $cloud_hash
         last_sync: (date now | format date "%Y-%m-%d %H:%M:%S %z")
         last_writer: ($meta.last_writer? | default "unknown")
         last_write_time: ($meta.updated_at? | default "unknown")
         last_action: ($meta.last_action? | default "unknown")
-    }
+    } | ignore
 
     let conflict_path = (
         conflict-file

@@ -1,40 +1,15 @@
 #!/usr/bin/env nu
-
+const CORE = path self ./modules/core.nu
+use $CORE [nu-home machine-context]
 const TOOLS_ROOT = path self ..
 const SUBPROCESS = path self ./modules/subprocess.nu
 const CONSOLE = path self ./modules/console.nu
+const WIREGUARD = path self ./modules/wireguard-sync.nu
+use $WIREGUARD [capture-wireguard]
+const SSH_KEYS = path self ./modules/ssh-key-sync.nu
+use $SSH_KEYS [capture-ssh-keys]
 use $SUBPROCESS [run-command command-failure-message]
-use $CONSOLE [print-info print-ok print-warn]
-
-def nu-home [] {
-    let test_mode = ($env.INITIAL_SETUP_TEST_MODE? | default "" | str trim)
-    let override = ($env.INITIAL_SETUP_HOME_OVERRIDE? | default "" | str trim)
-
-    if $test_mode == "1" and not ($override | is-empty) {
-        return ($override | path expand)
-    }
-
-    let home_path = ($nu | get --optional home-path)
-
-    if $home_path != null {
-        return $home_path
-    }
-
-    let home_dir = ($nu | get --optional home-dir)
-
-    if $home_dir != null {
-        return $home_dir
-    }
-
-    error make {
-        msg: "Unable to determine the Nushell home directory."
-    }
-}
-
-def machine-context [] {
-    let file = ((nu-home) | path join ".config" "dotfiles" "config.nuon")
-    open $file
-}
+use $CONSOLE [print-info print-ok print-warn print-status]
 
 def run-script [
     tools_root: path
@@ -96,8 +71,19 @@ def main [] {
         run-script $tools_root "capture-rclone-config.nu"
     }
 
+    # rpool owns its portable schema. Capture only when the CLI is available;
+    # machines without rpool keep the existing synchronized bundle untouched.
+    run-script $tools_root "capture-rpool-config.nu"
+
+    # Explicitly enrolled devices only; protected native settings never enter
+    # the ordinary chezmoi tree. Only the age-encrypted bundle is published.
+    capture-wireguard $data_root | ignore
+
+    # Explicitly enrolled SSH private keys, encrypted to the vault recipients.
+    capture-ssh-keys $data_root
+
     print-info ("Private data: " + ($data_root | into string))
-    print "[1/4] Updating managed chezmoi files..."
+    print-status "info" "1/4" "Updating managed chezmoi files..."
 
     let args = [
         "--source"
@@ -112,17 +98,17 @@ def main [] {
     }
 
     if $context.features.vscode {
-        print "[2/4] Updating VS Code extension list..."
+        print-status "info" "2/4" "Updating VS Code extension list..."
         run-script $tools_root "capture-vscode-extensions.nu"
 
-        print "[3/4] Updating VS Code settings..."
+        print-status "info" "3/4" "Updating VS Code settings..."
         run-script $tools_root "capture-vscode-config.nu"
     } else {
-        print "[2/4] VS Code synchronization disabled"
-        print "[3/4] VS Code synchronization disabled"
+        print-status "warn" "2/4" "VS Code synchronization disabled"
+        print-status "warn" "3/4" "VS Code synchronization disabled"
     }
 
-    print "[4/4] Updating synchronization metadata..."
+    print-status "info" "4/4" "Updating synchronization metadata..."
     run-script $tools_root "write-sync-meta.nu" "--action" "push"
     # Sync baseline is committed by sync-transport.nu after remote verification.
 

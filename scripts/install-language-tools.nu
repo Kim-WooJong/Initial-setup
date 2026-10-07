@@ -1,26 +1,12 @@
 #!/usr/bin/env nu
-
+const CORE = path self ./modules/core.nu
+use $CORE [nu-home machine-context]
 const TOOLS_ROOT = path self ..
 const UTILS = path self ./modules/install-utils.nu
 use $UTILS [probe-tool run-installer winget-package-state user-tool-paths]
 
 # Rust and Julia are optional developer toolchains. Presence alone is not enough:
 # the executable must answer its version probe successfully.
-
-def nu-home [] {
-    let test_mode = ($env.INITIAL_SETUP_TEST_MODE? | default "" | str trim)
-    let override = ($env.INITIAL_SETUP_HOME_OVERRIDE? | default "" | str trim)
-    if $test_mode == "1" and not ($override | is-empty) { return ($override | path expand) }
-    let home_path = ($nu | get --optional home-path)
-    if $home_path != null { return $home_path }
-    let home_dir = ($nu | get --optional home-dir)
-    if $home_dir != null { return $home_dir }
-    error make {msg: "Unable to determine the Nushell home directory."}
-}
-
-def machine-context [] {
-    open ((nu-home) | path join ".config" "dotfiles" "config.nuon")
-}
 
 def rust-probe [] {
     let paths = (user-tool-paths)

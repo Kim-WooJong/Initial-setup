@@ -4,11 +4,6 @@ const ROOT = path self ..
 
 # Static regression guard for Phase 2. Installer scripts must use the shared
 # subprocess contract instead of reading LAST_EXIT_CODE after the fact.
-def fail [message: string] {
-    print --stderr ("[FAIL] " + $message)
-    exit 1
-}
-
 def main [] {
     let installers = (ls ($ROOT | path join "scripts") | where type == file | get name | where {|file| ($file | path basename | str starts-with "install-") and ($file | str ends-with ".nu") })
     mut failures = []

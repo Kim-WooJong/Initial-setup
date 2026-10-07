@@ -6,7 +6,7 @@ use $CORE_MODULE [nu-home]
 use $SUBPROCESS [run-command]
 use $GIT_IDENTITIES_MODULE [active-git-identities]
 
-export def ssh-dir [] {
+def ssh-dir [] {
     (nu-home) | path join ".ssh"
 }
 
@@ -33,7 +33,7 @@ def conventional-private-keys [] {
     | each { |item| $item.name | path expand }
 }
 
-export def ssh-private-key-candidates [] {
+def ssh-private-key-candidates [] {
     (conventional-private-keys)
     | append (configured-private-keys)
     | uniq

@@ -1,39 +1,12 @@
 #!/usr/bin/env nu
-
+const CORE = path self ./modules/core.nu
+use $CORE [nu-home machine-context]
 const INSTALL_UTILS = path self ./modules/install-utils.nu
 const SUBPROCESS = path self ./modules/subprocess.nu
+const SYNC_STATE = path self ./modules/sync-state.nu
 use $INSTALL_UTILS [probe-tool]
 use $SUBPROCESS [run-command]
-
-def nu-home [] {
-    let test_mode = ($env.INITIAL_SETUP_TEST_MODE? | default "" | str trim)
-    let override = ($env.INITIAL_SETUP_HOME_OVERRIDE? | default "" | str trim)
-
-    if $test_mode == "1" and not ($override | is-empty) {
-        return ($override | path expand)
-    }
-
-    let home_path = ($nu | get --optional home-path)
-
-    if $home_path != null {
-        return $home_path
-    }
-
-    let home_dir = ($nu | get --optional home-dir)
-
-    if $home_dir != null {
-        return $home_dir
-    }
-
-    error make {
-        msg: "Unable to determine the Nushell home directory."
-    }
-}
-
-def machine-context [] {
-    let file = ((nu-home) | path join ".config" "dotfiles" "config.nuon")
-    open $file
-}
+use $SYNC_STATE [read-sync-state]
 
 def first-version [command: string args: list] {
     let probe = (probe-tool $command $args)
@@ -53,7 +26,7 @@ def main [
     let conflict_file = ((nu-home) | path join ".config" "dotfiles" "SYNC-CONFLICT.txt")
     let state = (
         if ($state_file | path exists) {
-            open $state_file
+            read-sync-state $state_file
         } else {
             {}
         }

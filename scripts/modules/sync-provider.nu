@@ -7,17 +7,48 @@ const CLOUD_CONFIG = path self ./cloud-wins-config.nu
 use $CLOUD_CONFIG [assert-cloud-workspace]
 const CORE = path self ./core.nu
 const SAFETY = path self ./safety.nu
+const CONSOLE = path self ./console.nu
+const PROVIDER_STATE = path self ./provider-state.nu
+const TEXT_CASE = path self ./text-case.nu
+use $TEXT_CASE [text-lower]
 use $CORE [machine-context nu-home error-message failure-envelope captured-failure]
 use $SAFETY [state-root checked atomic-record tree-files tree-manifest manifest-hash verify-tree disjoint-paths validate-relative private-directory lock-acquire lock-release]
+use $CONSOLE [print-status]
+use $PROVIDER_STATE [provider-state-file read-provider-state write-provider-state]
 
 export def provider-config-path [] { (state-root) | path join "sync-provider.nuon" }
-export def provider-state-path [] {
-    let scope = ($env.INITIAL_SETUP_PROVIDER_STATE_SCOPE? | default "" | str trim)
-    if ($scope | is-empty) { return ((state-root) | path join "provider-state.nuon") }
-    if not ($scope =~ '^[a-f0-9]{64}$') { error make {msg: "Invalid provider state scope."} }
-    (state-root) | path join "provider-states" ("provider-state-" + $scope + ".nuon")
+
+def validate-provider-config [config: record] {
+    if ($config.version? | default 0) != 1 or not ($config.kind in ["directory" "local" "rclone"]) {
+        error make {msg: "Unsupported sync provider configuration."}
+    }
+    let remote = ($config.remote? | default null)
+    if ($remote | describe) != "string" {
+        error make {msg: "Sync provider remote must be a string."}
+    }
+    $config
 }
-export def payload-roots [] { [".chezmoiroot" "home" "vscode" "toolchains" "secrets" ".dotfiles-sync-meta.nuon"] }
+
+export def write-provider-config [config: record] {
+    validate-provider-config $config | ignore
+    let file = (provider-config-path)
+    atomic-record $file $config
+    let saved = (open --raw $file | from nuon)
+    validate-provider-config $saved | ignore
+    if $saved != $config {
+        error make {msg: "Sync provider configuration verification failed after atomic write."}
+    }
+    $file
+}
+
+export def remove-provider-config [] {
+    let file = (provider-config-path)
+    if ($file | path exists) { rm --force $file }
+}
+
+# Compatibility export retained for callers/tests that already import this name.
+export def provider-state-path [] { provider-state-file }
+def payload-roots [] { [".chezmoiroot" "home" "vscode" "toolchains" "secrets" "rpool" ".dotfiles-sync-meta.nuon"] }
 
 export def load-provider [] {
     let file = (provider-config-path)
@@ -29,7 +60,7 @@ export def load-provider [] {
     } else {
         {version: 1 kind: "directory" remote: ""}
     }
-    if ($config.version? | default 0) != 1 or not ($config.kind in ["directory" "local" "rclone"]) { error make { msg: "Unsupported sync provider configuration." } }
+    validate-provider-config $config | ignore
     let ctx = (machine-context)
     assert-cloud-workspace $ctx
     let root = ($ctx.data_root | path expand)
@@ -52,6 +83,46 @@ export def provider-id [config: record] {
     [$config.kind $config.remote $config.data_root] | to json --raw | hash sha256
 }
 
+# Cloud sync clients (Proton Drive, Dropbox, Syncthing, ...) drop conflict
+# copies like "portable-config (# Edit conflict ... #).json" into the synced
+# folder. They are not part of the rpool payload; skip them so one stray
+# conflict copy cannot block every sync. The original managed files remain.
+export def sync-conflict-copy [name: string] {
+    let lower = ($name | path basename | text-lower)
+    ($lower | str contains "# edit conflict") or ($lower | str contains "sync-conflict") or ($lower | str contains "conflicted copy")
+}
+
+# Only rpool metadata is excluded; other roots may contain meaningful dotfiles.
+# Skip before descending so ignored metadata is neither read nor transported.
+def rpool-payload-files [root: path] {
+    mut files = []
+    for item in (ls --all $root | sort-by name) {
+        if ($item.name | path basename | str starts-with ".") { continue }
+        if (sync-conflict-copy $item.name) { continue }
+        if $item.type == "dir" {
+            $files = ($files | append (rpool-payload-files $item.name))
+        } else if $item.type == "file" {
+            $files = ($files | append $item.name)
+        } else {
+            error make {msg: "Symlink/special-file rpool payloads are not supported."}
+        }
+    }
+    $files
+}
+
+# Legacy single-file bundle stays managed so pulls can delete it.
+def rpool-json-paths [] { ["rpool/config/portable-config.json" "rpool/portable-config.json"] }
+def rpool-secret-paths [] { ["rpool/secrets/rclone.age"] }
+
+def rpool-managed-path [rel: string] {
+    ($rel in (rpool-json-paths)) or ($rel in (rpool-secret-paths)) or (($rel | str starts-with "rpool/") and ($rel =~ '(?i)\.md$'))
+}
+
+def payload-install-paths [previous: list desired: list] {
+    let docs = ($previous | append $desired | get path | where {|rel| rpool-managed-path $rel } | uniq | sort)
+    payload-roots | where {|name| $name != "rpool" } | append $docs
+}
+
 export def workspace-manifest [root: path] {
     mut rows = []
     for name in (payload-roots) {
@@ -59,7 +130,18 @@ export def workspace-manifest [root: path] {
         if not ($source | path exists) { continue }
         let kind = ($source | path type)
         if $kind == "dir" {
-            let subtree = (tree-manifest $source | each {|row| {path: ($name + "/" + $row.path) sha256: $row.sha256} })
+            let entries = if $name == "rpool" {
+                rpool-payload-files $source | each {|file|
+                    let rel = ($file | path relative-to $source | into string | str replace --all '\' '/')
+                    validate-relative $rel | ignore
+                    {path: $rel sha256: (open --raw $file | hash sha256)}
+                }
+            } else {
+                # Ignore cloud-sync conflict copies anywhere in a managed root so
+                # one stray duplicate cannot block the whole sync.
+                tree-manifest $source | where {|row| not (sync-conflict-copy ($row.path | path basename)) }
+            }
+            let subtree = ($entries | each {|row| {path: ($name + "/" + $row.path) sha256: $row.sha256} })
             $rows = ($rows | append $subtree)
         } else if $kind == "file" {
             $rows = ($rows | append {path: $name sha256: (open --raw $source | hash sha256)})
@@ -84,15 +166,31 @@ export def audit-export [root: path] {
             error make { msg: "A known secret/private-key filename is present in the plain sync payload." }
         }
         let file = ($root | path join $rel)
-        if ($rel | str starts-with "secrets/") {
-            if not ($rel =~ '^secrets/[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}\.age$') { error make { msg: "Only named .age ciphertext files are allowed in secrets/." } }
+        if ($rel | str starts-with "rpool/") {
+            if not (rpool-managed-path $rel) {
+                error make {msg: ("Only rpool/config/portable-config.json, rpool/secrets/rclone.age, legacy rpool/portable-config.json and Markdown (.md) files are allowed in the portable rpool sync payload. File: " + $rel)}
+            }
+            if $rel in (rpool-json-paths) {
+                try { open --raw $file | from json | ignore } catch {|err|
+                    error make {msg: ("Invalid rpool portable config JSON: " + (error-message $err))}
+                }
+            }
+        }
+        if ($rel | str starts-with "secrets/") or ($rel in (rpool-secret-paths)) {
+            if ($rel | str starts-with "secrets/") and not ($rel =~ '^secrets/([a-zA-Z0-9][a-zA-Z0-9_-]{0,63}|ssh/[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63})\.age$') { error make { msg: "Only named .age ciphertext files (secrets/<name>.age or secrets/ssh/<name>.age) are allowed in secrets/." } }
             if not (open --raw $file | into binary | bytes starts-with ("age-encryption.org/v1\n" | into binary)) {
                 error make {msg: "A .age file lacks the binary age header. Plaintext disguised by its extension is not published."}
             }
         } else {
             let text = (try { open --raw $file | into string } catch { "" })
-            if ($text | str contains "PRIVATE KEY-----") or ($text | str contains "AGE-SECRET-KEY-") {
-                error make { msg: "Private key material is present in the plain sync payload." }
+            if ($text | str contains ("PRIVATE" + " KEY-----")) or ($text | str contains ("AGE-SECRET-" + "KEY-")) {
+                error make { msg: ("Private key material is present in the plain sync payload. File: " + $rel) }
+            }
+            # WireGuard keys are INI assignments, not PEM blocks. Match only
+            # complete assignment keys so comments and code literals are not
+            # mistaken for exported plaintext configuration. Never echo values.
+            if ($text =~ '(?im)^[\t ]*(PrivateKey|PresharedKey)[\t ]*=') {
+                error make {msg: ("WireGuard key material is present in the plain sync payload. File: " + $rel)}
             }
         }
     }
@@ -117,7 +215,7 @@ export def copy-workspace [source: path destination: path] {
     $before
 }
 
-export def remote-location [config: record rel: string] {
+def remote-location [config: record rel: string] {
     if $config.kind == "local" { $config.remote | path join $rel } else { ($config.remote | str trim --right --char '/') + "/" + $rel }
 }
 
@@ -180,24 +278,24 @@ export def stable-provider-head [config: record] {
     }
 
     error make {
-        msg: "Private cloud mirror is still changing locally. Wait for the cloud client to settle, then retry dotpush/dotpull."
+        msg: "Private cloud mirror is still changing locally. Wait for the cloud client to settle, then retry `dotctl push` / `dotctl pull`."
     }
 }
 
 export def load-provider-state [config: record] {
     let file = (provider-state-path)
     if not ($file | path exists) { return null }
-    let state = (open --raw $file | from nuon)
+    let state = (read-provider-state $file)
     if ($state.provider_id? | default "") != (provider-id $config) { return null }
     $state
 }
 
 export def record-provider-state [config: record head: record] {
-    atomic-record (provider-state-path) {
-        version: 1 provider_id: (provider-id $config) revision: $head.revision
+    write-provider-state (provider-state-path) {
+        schema_version: 2 provider_id: (provider-id $config) revision: $head.revision
         tree_hash: $head.tree_hash source_hash: (workspace-hash $config.data_root)
         observed_at: (date now | format date "%+")
-    }
+    } | ignore
 }
 
 export def assert-expected-head [config: record] {
@@ -212,7 +310,7 @@ export def assert-expected-head [config: record] {
                 ("Baseline revision: " + ($state.revision? | default "<missing>"))
                 ("Current revision : " + $head.revision)
                 ("Data root        : " + ($config.data_root | into string))
-                "Push stopped before capture/upload. Run dotbackend status and dotpreflight --diff before reconciling."
+                "Push stopped before capture/upload. Run `dotbackend status` and `dotctl preflight --diff` before reconciling."
             ] | str join (char nl))
         }
     }
@@ -349,7 +447,14 @@ export def install-workspace [config: record fetched: path] {
 
     let backup = (new-transfer-dir)
     let previous = (copy-workspace $config.data_root ($backup | path join "data"))
-    let roots = (payload-roots)
+    # Preserve local-only metadata; reconcile the union for deletion and rollback.
+    let roots = (payload-install-paths $previous $desired)
+    for name in ($roots | where {|name| $name | str starts-with "rpool/" }) {
+        let dest = ($config.data_root | path join $name)
+        if ($dest | path exists) and (($dest | path type) != "file") {
+            error make {msg: ("Managed rpool file conflicts with a local non-file path: " + $name)}
+        }
+    }
     let apply_result = (try {
         for name in $roots {
             let dest = ($config.data_root | path join $name)
@@ -387,5 +492,5 @@ export def install-workspace [config: record fetched: path] {
         }
         error make {msg: $message}
     }
-    print ("[backup] Previous workspace: " + ($backup | into string))
+    print-status "info" "backup" ("Previous workspace: " + ($backup | into string))
 }

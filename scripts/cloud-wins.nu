@@ -5,7 +5,7 @@ const IMPL = path self ./cloud-wins-main.nu
 use $RUNTIME [runtime-execute]
 
 def --wrapped main [action: string = "help" ...args: string] {
-    if $action == "help" or "--help" in $args {
+    if ($action in ["help" "--help"]) or ("--help" in $args) {
         print "dotcloud configure --source <mirror> --target <local-workspace> [--execute]"
         print "dotcloud probe | plan | verify | status"
         print "dotcloud apply --plan <file> [--execute --confirm <plan-id>]"

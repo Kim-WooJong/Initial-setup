@@ -139,15 +139,8 @@ choose_quick_defaults() {
         esac
     fi
 
-    # Preserve existing machine configuration: setup.nu will reuse its saved
-    # data_root when --data-dir is omitted.
-    local machine_config="$HOME/.config/dotfiles/config.nuon"
-    if [ -z "$DATA_DIR" ] && [ ! -f "$machine_config" ]; then
-        case "$(uname -s)" in
-            Linux) DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/initial-setup/private" ;;
-            Darwin) DATA_DIR="$HOME/Library/Application Support/Initial-setup/private" ;;
-        esac
-    fi
+    # setup.nu always uses <checkout>/private; --data-dir is test-only.
+
 
     if [ "$CONFIG_POLICY" = "ask" ] && [ ! -f "$machine_config" ]; then
         # Existing source is never silently pulled over local files. Let review
@@ -295,7 +288,7 @@ if [ "$FORCE_CARGO_NU" -eq 0 ]; then
     RELEASE_ARGS=()
     if [ "$DRY_RUN" -eq 1 ] || [ "$CONFIG_POLICY" = "preview" ]; then RELEASE_ARGS+=(--check); fi
     if [ "$NO_SHELL_PROFILE" -eq 1 ]; then RELEASE_ARGS+=(--no-link); fi
-    if NU_RUNTIME="$(bash "$ROOT/scripts/posix/prepare-nu-release.sh" "${RELEASE_ARGS[@]}")"; then
+    if NU_RUNTIME="$(bash "$ROOT/scripts/posix/prepare-nu-release.sh" ${RELEASE_ARGS[@]+"${RELEASE_ARGS[@]}"})"; then
         export INITIAL_SETUP_NU_SESSION_PROVIDER="release-v1"
     else
         NU_RUNTIME=""
@@ -311,7 +304,7 @@ if [ -z "$NU_RUNTIME" ]; then
     ensure_cargo || { printf '[error] Rust/Cargo fallback could not be prepared.\n' >&2; exit 1; }
     PREPARE_ARGS=()
     if [ "$DRY_RUN" -eq 1 ] || [ "$CONFIG_POLICY" = "preview" ]; then PREPARE_ARGS+=(--check); fi
-    NU_RUNTIME="$(bash "$ROOT/scripts/posix/prepare-nu-cargo.sh" "${PREPARE_ARGS[@]}")"
+    NU_RUNTIME="$(bash "$ROOT/scripts/posix/prepare-nu-cargo.sh" ${PREPARE_ARGS[@]+"${PREPARE_ARGS[@]}"})"
     export INITIAL_SETUP_NU_SESSION_PROVIDER="cargo-v1"
 fi
 

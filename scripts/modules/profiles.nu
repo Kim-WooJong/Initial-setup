@@ -5,11 +5,11 @@ const PROFILES_ROOT = path self ../../profiles
 const CORE_MODULE = path self ./core.nu
 use $CORE_MODULE [nu-home]
 
-export def profile-names [] {
+def profile-names [] {
     ["workstation" "laptop" "server" "minimal"]
 }
 
-export def machine-overlay-path [] {
+def machine-overlay-path [] {
     (nu-home) | path join ".config" "dotfiles" "machine-overlay.nuon"
 }
 

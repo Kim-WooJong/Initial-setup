@@ -5,6 +5,9 @@
 # This file is intentionally outside the synchronized source.
 # ============================================================
 
+const SAFETY = path self ./modules/safety.nu
+use $SAFETY [private-file]
+
 def main [] {
     let autoload_dir = ($nu.data-dir | path join "vendor" "autoload")
     let secrets_file = ($autoload_dir | path join "dotfiles-secrets.nu")
@@ -28,4 +31,8 @@ def main [] {
     } else {
         print "[ok] Local secrets autoload already exists"
     }
+
+    # The file is meant to hold API tokens: restrict it to the owner, and also
+    # repair files created by earlier versions with default permissions.
+    private-file $secrets_file
 }

@@ -68,6 +68,19 @@ def main [] {
     require-text $orchestration 'exit 130' "Ctrl+C must terminate with the conventional interrupted exit code"
     require-text $run_state '"running" "failed" "interrupted"' "interrupted runs must remain resumable"
 
+    let dotfiles = (open --raw ($ROOT | path join "scripts" "modules" "dotfiles.nu"))
+    let sync_up = (open --raw ($ROOT | path join "scripts" "sync-up.nu"))
+    let sync_down = (open --raw ($ROOT | path join "scripts" "sync-down.nu"))
+    let transport = (open --raw ($ROOT | path join "scripts" "sync-transport.nu"))
+    let runtime = (open --raw ($ROOT | path join "scripts" "modules" "nu-runtime.nu"))
+    let local_guard = (open --raw ($ROOT | path join "scripts" "modules" "sync-local-guard.nu"))
+    require-text $dotfiles '"--manual"' "manual dotpush/dotpull must enter the explicit manual sync path"
+    require-text $sync_up 'exec $exe ...$args' "manual dotpush must preserve native terminal ownership through sync-up"
+    require-text $sync_down 'exec $nu.current-exe ...$args' "manual dotpull must preserve native terminal ownership through sync-down"
+    require-text $transport 'runtime-execute $IMPL $args' "sync transport must delegate through the runtime TTY boundary"
+    require-text $runtime 'exec $exe --no-config-file $script ...$args' "selected runtime must receive native terminal ownership"
+    require-text $local_guard 'let choice = (input | str trim)' "manual pull confirmation must read from the native terminal"
+
     # Captured setup leaves must not gain interactive input or import the menu.
     # Scan the actual run-script call sites, including future additions.
     let leaves = ($orchestration | parse --regex 'run-script [^\r\n]*\(\$scripts \| path join "(?P<name>[^\"]+\.nu)"\)' | get name | uniq)

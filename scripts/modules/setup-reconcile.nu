@@ -1,8 +1,10 @@
 # Interactive setup only. Background writers retain assert-expected-head.
 const PROVIDER = path self ./sync-provider.nu
 const SAFETY = path self ./safety.nu
+const CONSOLE = path self ./console.nu
 use $PROVIDER [assert-same-head copy-workspace workspace-manifest]
 use $SAFETY [state-root private-directory atomic-record manifest-hash]
+use $CONSOLE [print-heading print-text print-key-value print-choice print-status]
 
 export def setup-head-changed [state: any head: record] {
     if $state == null { return false }
@@ -16,27 +18,27 @@ export def choose-changed-source [config: record state: record head: record prev
         error make {msg: "Private source changed. Run nu setup.nu in an interactive terminal to review and choose which configuration to keep."}
     }
     print --stderr ""
-    print --stderr "Private source changed since the last synchronization."
-    print --stderr ("Baseline revision: " + $state.revision)
-    print --stderr ("Current revision : " + $head.revision)
-    print --stderr ("Private source   : " + ($config.data_root | into string))
-    print --stderr "Choose which managed configuration to keep. Unmanaged files are unaffected."
-    print --stderr "Continuing creates a local configuration backup and a verified private-source recovery copy."
+    print-heading "Private source changed since the last synchronization." --stderr
+    print-key-value "Baseline revision: " $state.revision --stderr
+    print-key-value "Current revision : " $head.revision --stderr
+    print-key-value "Private source   : " ($config.data_root | into string) --stderr
+    print-text "info" "Choose which managed configuration to keep. Unmanaged files are unaffected." --stderr
+    print-text "info" "Continuing creates a local configuration backup and a verified private-source recovery copy." --stderr
     loop {
         print --stderr ""
-        print --stderr "  1) Review local/private differences, then return to this menu"
-        print --stderr "  2) Keep this machine's managed configuration (local -> private)"
-        print --stderr "  3) Keep the current private configuration (private -> this machine)"
-        print --stderr "     Protected Git/SSH targets still require their existing individual review."
-        print --stderr "  4) Cancel without applying changes"
-        print --stderr "Select [4] (press Enter to cancel):"
+        print-choice "1" "Review local/private differences, then return to this menu" --stderr
+        print-choice "2" "Keep this machine's managed configuration (local -> private)" --stderr
+        print-choice "3" "Keep the current private configuration (private -> this machine)" --stderr
+        print-text "info" "     Protected Git/SSH targets still require their existing individual review." --stderr
+        print-choice "4" "Cancel without applying changes" --stderr
+        print-text "prompt" "Select [4] (press Enter to cancel):" --stderr
         let choice = (input | str trim)
         match $choice {
             "1" => { do $preview }
             "2" => { return "push-local" }
             "3" => { return "backup-private" }
             "4" | "" => { return "cancel" }
-            _ => { print --stderr "Choose 1, 2, 3, or 4." }
+            _ => { print-text "warn" "Choose 1, 2, 3, or 4." --stderr }
         }
     }
 }
@@ -50,7 +52,7 @@ export def preserve-reviewed-source [config: record head: record run_id: string]
     private-directory $root
     let destination = ($root | path join (random uuid))
     private-directory $destination
-    print ("[recovery] Preserving private source at: " + ($destination | into string))
+    print-status "info" "recovery" ("Preserving private source at: " + ($destination | into string))
     let entries = (copy-workspace $config.data_root $destination)
     if (manifest-hash $entries) != $head.tree_hash or (workspace-manifest $destination) != $entries {
         error make {msg: ("Private source changed or recovery verification failed. Setup stopped; incomplete recovery retained at: " + ($destination | into string))}

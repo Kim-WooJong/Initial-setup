@@ -5,7 +5,7 @@ const PROVIDER = path self ./modules/sync-provider.nu
 const SAFETY = path self ./modules/safety.nu
 const CORE = path self ./modules/core.nu
 use $PROVIDER *
-use $SAFETY [atomic-record operation-lock lock-release]
+use $SAFETY [operation-lock lock-release]
 use $CORE [error-message]
 
 def main [action: string = "status" --kind: string = "directory" --remote: string = "" --expected: string = "" --force] {
@@ -62,9 +62,9 @@ def main [action: string = "status" --kind: string = "directory" --remote: strin
                 let existed = ($file | path exists)
                 if $existed and not $force { error make { msg: "Provider already configured. Use --force only after reviewing the existing configuration." } }
                 let previous = if $existed { open --raw $file | from nuon } else { null }
-                atomic-record $file {version: 1 kind: $kind remote: $remote}
+                write-provider-config {version: 1 kind: $kind remote: $remote} | ignore
                 try { load-provider | ignore } catch {|err|
-                    if $previous == null { rm --force $file } else { atomic-record $file $previous }
+                    if $previous == null { remove-provider-config } else { write-provider-config $previous | ignore }
                     error make { msg: (error-message $err "Provider configuration failed.") }
                 }
                 print "[ok] Provider configured. No data was moved. Run dotbackend init, then dotpull or dotpush."

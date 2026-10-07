@@ -1,3 +1,5 @@
+const CORE = path self ./core.nu
+use $CORE [nu-home]
 const SUBPROCESS = path self ./subprocess.nu
 use $SUBPROCESS [run-command]
 # Shared Starship discovery and health checks.
@@ -5,16 +7,6 @@ use $SUBPROCESS [run-command]
 # A Starship executable is considered usable only when both `--version`
 # and `init nu` complete successfully. This avoids treating a stale PATH
 # entry or a broken package installation as a valid prompt integration.
-
-export def nu-home [] {
-    let home_path = ($nu | get --optional home-path)
-    if $home_path != null { return $home_path }
-
-    let home_dir = ($nu | get --optional home-dir)
-    if $home_dir != null { return $home_dir }
-
-    error make {msg: "Unable to determine the Nushell home directory."}
-}
 
 def add-candidate [paths: list candidate: any] {
     if $candidate == null {
@@ -38,7 +30,7 @@ def add-candidate [paths: list candidate: any] {
     $paths | append $expanded
 }
 
-export def starship-candidates [] {
+def starship-candidates [] {
     mut paths = []
 
     let discovered = (which starship)
@@ -67,7 +59,7 @@ export def starship-candidates [] {
     $paths
 }
 
-export def probe-starship [path: path] {
+def probe-starship [path: path] {
     let version_result = (run-command ($path | into string) ["--version"])
     let version_stdout = ($version_result.stdout? | default "" | str trim)
     let version_stderr = ($version_result.stderr? | default "" | str trim)

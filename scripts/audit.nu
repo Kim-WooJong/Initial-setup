@@ -3,21 +3,8 @@
 const TOOLS_ROOT = path self ..
 const CORE = path self ./modules/core.nu
 const DIAGNOSTICS = path self ./modules/diagnostics.nu
-use $CORE [nu-home]
+use $CORE [nu-home project-version project-schema-version fixed-private-context]
 use $DIAGNOSTICS [diagnostic-check tool-diagnostic print-diagnostic summarize-diagnostics]
-
-def app-version [] {
-    open --raw ($TOOLS_ROOT | path join "VERSION")
-    | into string
-    | str trim
-}
-
-def schema-version [] {
-    open --raw ($TOOLS_ROOT | path join "SCHEMA_VERSION")
-    | into string
-    | str trim
-    | into int
-}
 
 def main [] {
     let config_file = ((nu-home) | path join ".config" "dotfiles" "config.nuon")
@@ -32,9 +19,9 @@ def main [] {
         exit 1
     }
 
-    let context = (open $config_file)
-    let expected_app = (app-version)
-    let expected_schema = (schema-version)
+    let context = (fixed-private-context (open $config_file))
+    let expected_app = (project-version $TOOLS_ROOT)
+    let expected_schema = (project-schema-version $TOOLS_ROOT)
     let actual_app = ($context.app_version? | default (($context | get --optional version) | default "unknown"))
     let actual_schema = ($context.schema_version? | default 0)
     let data_root = ($context.data_root | path expand)

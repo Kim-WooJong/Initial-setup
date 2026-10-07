@@ -1,31 +1,11 @@
+const CORE = path self ./core.nu
+use $CORE [nu-home]
 # Configuration source selection helpers.
 
-def nu-home [] {
-    let test_mode = ($env.INITIAL_SETUP_TEST_MODE? | default "" | str trim)
-    let override = ($env.INITIAL_SETUP_HOME_OVERRIDE? | default "" | str trim)
+const CONSOLE = path self ./console.nu
+use $CONSOLE [print-heading print-text print-key-value print-choice]
 
-    if $test_mode == "1" and not ($override | is-empty) {
-        return ($override | path expand)
-    }
-
-    let home_path = ($nu | get --optional home-path)
-
-    if $home_path != null {
-        return $home_path
-    }
-
-    let home_dir = ($nu | get --optional home-dir)
-
-    if $home_dir != null {
-        return $home_dir
-    }
-
-    error make {
-        msg: "Unable to determine the Nushell home directory."
-    }
-}
-
-export def local-config-markers [] {
+def local-config-markers [] {
     let home_path = (nu-home)
 
     mut markers = [
@@ -61,7 +41,7 @@ export def local-config-markers [] {
     $markers
 }
 
-export def private-config-markers [data_root: path] {
+def private-config-markers [data_root: path] {
     [
         ($data_root | path join "home" "dot_config" "nvim" "init.lua")
         ($data_root | path join "home" "dot_config" "nushell" "config.nu")
@@ -110,24 +90,24 @@ export def normalize-config-policy [policy: string] {
 
 export def choose-reviewed-policy [] {
     print ""
-    print "Choose synchronization direction"
-    print "────────────────────────────────────────────────────────────"
-    print "  1) Save this machine -> private drive"
-    print "     Current local managed files become authoritative."
+    print-heading "Choose synchronization direction"
+    print-heading "────────────────────────────────────────────────────────────"
+    print-choice "1" "Save this machine -> private drive"
+    print-text "info" "     Current local managed files become authoritative."
     print ""
-    print "  2) Apply private drive -> this machine"
-    print "     Private managed files become authoritative."
+    print-choice "2" "Apply private drive -> this machine"
+    print-text "info" "     Private managed files become authoritative."
     print ""
-    print "  3) Backup this machine, then apply private drive"
-    print "     Create a restorable local backup before pulling."
+    print-choice "3" "Backup this machine, then apply private drive"
+    print-text "info" "     Create a restorable local backup before pulling."
     print ""
-    print "  4) Cancel"
+    print-choice "4" "Cancel"
     print ""
 
     mut selected = ""
 
     while ($selected | is-empty) {
-        print "Select [1] (press Enter for default):"
+        print-text "prompt" "Select [1] (press Enter for default):"
         let choice = (input | str trim)
         let answer = (if ($choice | is-empty) { "1" } else { $choice })
 
@@ -136,7 +116,7 @@ export def choose-reviewed-policy [] {
             "2" => { $selected = "pull-private" }
             "3" => { $selected = "backup-private" }
             "4" => { $selected = "cancel" }
-            _ => { print "Choose 1, 2, 3, or 4." }
+            _ => { print-text "warn" "Choose 1, 2, 3, or 4." }
         }
     }
 
@@ -158,27 +138,27 @@ export def choose-config-policy [data_root: path] {
     )
 
     print ""
-    print "Configuration synchronization policy"
-    print "────────────────────────────────────────────────────────────"
-    print ("Local configuration   : " + (if $local_exists { "detected" } else { "not detected" }))
-    print ("Private configuration : " + (if $private_exists { "detected" } else { "not detected" }))
+    print-heading "Configuration synchronization policy"
+    print-heading "────────────────────────────────────────────────────────────"
+    print-key-value "Local configuration   : " (if $local_exists { "detected" } else { "not detected" })
+    print-key-value "Private configuration : " (if $private_exists { "detected" } else { "not detected" })
     print ""
-    print "  1) Review differences, then choose direction"
-    print "     Show chezmoi status/diff first. Initial-setup will then ask push or pull."
+    print-choice "1" "Review differences, then choose direction"
+    print-text "info" "     Show chezmoi status/diff first. Initial-setup will then ask push or pull."
     print ""
-    print "  2) Save local changes to private drive"
-    print "     This machine is authoritative; publish managed local files to private storage."
+    print-choice "2" "Save local changes to private drive"
+    print-text "info" "     This machine is authoritative; publish managed local files to private storage."
     print ""
-    print "  3) Apply private configuration to this machine"
-    print "     Private synchronized files are authoritative; replace managed local files."
+    print-choice "3" "Apply private configuration to this machine"
+    print-text "info" "     Private synchronized files are authoritative; replace managed local files."
     print ""
-    print "  4) Backup local, then apply private configuration"
-    print "     Save a restorable local backup before replacing managed files."
+    print-choice "4" "Backup local, then apply private configuration"
+    print-text "info" "     Save a restorable local backup before replacing managed files."
     print ""
-    print "  5) Preview only"
-    print "     Show the setup plan and chezmoi differences, then exit without applying."
+    print-choice "5" "Preview only"
+    print-text "info" "     Show the setup plan and chezmoi differences, then exit without applying."
     print ""
-    print "  6) Cancel"
+    print-choice "6" "Cancel"
     print ""
 
     let recommendation = (
@@ -190,13 +170,13 @@ export def choose-config-policy [data_root: path] {
         }
     )
 
-    print ("Recommended for the detected state: " + $recommendation)
+    print-key-value "Recommended for the detected state: " $recommendation
     print ""
 
     mut selected = ""
 
     while ($selected | is-empty) {
-        print ("Select [" + $default_choice + "] (press Enter for default):")
+        print-text "prompt" ("Select [" + $default_choice + "] (press Enter for default):")
         let answer = (input | str trim)
         let choice = (if ($answer | is-empty) { $default_choice } else { $answer })
 
@@ -207,7 +187,7 @@ export def choose-config-policy [data_root: path] {
             "4" => { $selected = "backup-private" }
             "5" => { $selected = "preview" }
             "6" => { $selected = "cancel" }
-            _ => { print "Choose 1, 2, 3, 4, 5, or 6." }
+            _ => { print-text "warn" "Choose 1, 2, 3, 4, 5, or 6." }
         }
     }
 

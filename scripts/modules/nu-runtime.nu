@@ -2,6 +2,28 @@
 # interpreters must parse it before setup/sync implementation modules are loaded.
 # All version conversions below run at execution time, never in a const selector.
 
+
+# Keep runtime presentation local: this module must remain import-free so an old
+# seed Nushell can parse it before the project modules are available.
+def runtime-color-enabled [] {
+    (($env.NO_COLOR? | default "" | str trim) | is-empty)
+}
+
+def runtime-style [kind: string text: string] {
+    if not (runtime-color-enabled) { return $text }
+    let code = match $kind {
+        "ok" => (ansi green)
+        "warn" => (ansi yellow)
+        "error" => (ansi red)
+        _ => (ansi cyan)
+    }
+    $code + $text + (ansi reset)
+}
+
+def runtime-status [kind: string tag: string message: string] {
+    print --stderr ((runtime-style $kind ("[" + $tag + "]")) + " " + $message)
+}
+
 # Bootstrap boundary runner. This module intentionally cannot import the shared
 # subprocess module because old seed interpreters must parse it first. Keep the
 # same result contract locally so diagnostics and exit codes are still preserved.
@@ -15,9 +37,17 @@ def runtime-output-text [value] {
     }
 }
 
-def runtime-run [program args: list = [] --live] {
+# --to-stderr: stream the child's stdout to this process's stderr instead of
+# stdout. Build/toolchain progress must never pollute `runtime-launch.nu
+# --prepare`, whose stdout is captured by bootstrap wrappers as one path.
+def runtime-run [program args: list = [] --live --to-stderr] {
     let executed = (try {
-        let result = if $live {
+        let result = if $live and $to_stderr {
+            do -i { ^$program ...$args }
+            | tee { print --stderr --raw $in }
+            | tee --stderr { print --stderr --raw $in }
+            | complete
+        } else if $live {
             do -i { ^$program ...$args }
             | tee { print --raw $in }
             | tee --stderr { print --stderr --raw $in }
@@ -58,7 +88,7 @@ def runtime-failure [label: string result: record] {
     if ($detail | is-empty) { $label + " failed (" + $code + ")." } else { $label + " failed (" + $code + ").\n" + $detail }
 }
 
-export def runtime-version [value: string] {
+def runtime-version [value: string] {
     let clean = ($value | str trim)
     if not ($clean =~ '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') {
         error make {msg: "NU_VERSION_INVALID: expected stable major.minor.patch."}
@@ -102,22 +132,22 @@ export def runtime-release [index: string] {
     $best
 }
 
-export def runtime-latest [] {
+def runtime-latest [] {
     try {
         let index = (http get --raw --max-time 30sec --headers [User-Agent Initial-setup/0.14] "https://index.crates.io/2/nu")
         let text = if ($index | describe) == "binary" { $index | decode utf-8 } else { $index }
         runtime-release $text
     } catch {|err|
-        print --stderr "[nushell] crates.io latest-stable check failed. No setup/sync will start; check TLS, network or proxy configuration."
+        runtime-status "error" "nushell" "crates.io latest-stable check failed. No setup/sync will start; check TLS, network or proxy configuration."
         error make {msg: ($err.msg? | default "NU_REGISTRY_CHECK_FAILED")}
     }
 }
 
-export def runtime-fixture-mode [] {
+def runtime-fixture-mode [] {
     ($env.INITIAL_SETUP_TEST_MODE? | default "") == "1" and not (($env.INITIAL_SETUP_HOME_OVERRIDE? | default "") | is-empty)
 }
 
-export def runtime-home [] {
+def runtime-home [] {
     if (runtime-fixture-mode) { return ($env.INITIAL_SETUP_HOME_OVERRIDE | path expand) }
     let home = ($env.USERPROFILE? | default ($env.HOME? | default ""))
     if ($home | is-empty) { error make {msg: "NU_RUNTIME_HOME: no user home is available."} }
@@ -158,8 +188,8 @@ def runtime-compiler [release: record] {
     let cargo = (runtime-command "cargo")
     let rustc = (runtime-command "rustc")
     let command = if $rustup != null {
-        print --stderr "[nushell] Preparing the stable Rust toolchain for the new Cargo build."
-        let install = (runtime-run ($rustup | into string) ["toolchain" "install" "stable" "--profile" "minimal"] --live)
+        runtime-status "info" "nushell" "Preparing the stable Rust toolchain for the new Cargo build."
+        let install = (runtime-run ($rustup | into string) ["toolchain" "install" "stable" "--profile" "minimal"] --live --to-stderr)
         if not $install.ok { error make {msg: ("NU_RUST_UPDATE_FAILED: " + (runtime-failure "Rust stable toolchain preparation" $install) + " Current Nushell is retained.")} }
         {program: $rustup prefix: ["run" "stable" "cargo"] rustc: $rustup rustc_args: ["run" "stable" "rustc"]}
     } else {
@@ -271,12 +301,12 @@ export def runtime-install [release: record] {
     mkdir $directory
     let args = ($compiler.prefix | append (runtime-build-args $release $directory $compiler.host))
     let program = $compiler.program
-    print --stderr ("[nushell] Cargo building nu " + $release.version + ". Existing running binaries are not replaced.")
+    runtime-status "info" "nushell" ("Cargo building nu " + $release.version + ". Existing running binaries are not replaced.")
     let result = (try {
         # One shared build cache lets Cargo use its own OS-backed build locks.
         # There is no extra, age-deleted operation/provider lock in this updater.
         with-env {CARGO_TARGET_DIR: ($root | path join "target") RUSTUP_TOOLCHAIN: "stable"} {
-            let build = (runtime-run ($program | into string) $args --live)
+            let build = (runtime-run ($program | into string) $args --live --to-stderr)
             if not $build.ok {
                 error make {msg: ("NU_CARGO_BUILD_FAILED: " + (runtime-failure "Cargo Nushell build" $build) + " Install native build prerequisites; the previous runtime and configuration were not replaced.")}
             }
@@ -285,10 +315,10 @@ export def runtime-install [release: record] {
         {ok: true exe: $exe}
     } catch {|err| {ok: false message: ($err.msg? | default "NU_CARGO_BUILD_FAILED")} })
     if not $result.ok {
-        print --stderr ("[nushell] Incomplete build retained for inspection: " + ($directory | into string))
+        runtime-status "warn" "nushell" ("Incomplete build retained for inspection: " + ($directory | into string))
         error make {msg: $result.message}
     }
-    print --stderr ("[nushell] Cargo runtime ready: " + ($result.exe | into string))
+    runtime-status "ok" "nushell" ("Cargo runtime ready: " + ($result.exe | into string))
     $result.exe
 }
 
@@ -312,9 +342,16 @@ export def runtime-check [] {
     }
 }
 
-export def runtime-ensure [--read-only] {
+# --prefer-current (manual push/pull): an already usable runtime wins. A valid
+# managed Cargo runtime or the running interpreter at/above the supported
+# minimum is selected WITHOUT a registry query, exactly like auto-sync, so sync
+# works offline and does not force a Cargo build merely because crates.io
+# published a newer nu than the pinned release. Updates stay explicit
+# (update-nushell.nu / setup / bootstrap). Only when no usable runtime exists
+# does it fall through to the checked registry/build path below.
+export def runtime-ensure [--read-only --prefer-current] {
     if (runtime-fixture-mode) {
-        print --stderr "[nushell:test] Isolated HOME: registry/build disabled."
+        runtime-status "info" "nushell:test" "Isolated HOME: registry/build disabled."
         return {exe: $nu.current-exe version: (version).version checked: false provider: "current-v1"}
     }
     if (runtime-session-valid) {
@@ -328,14 +365,19 @@ export def runtime-ensure [--read-only] {
     # Read-only work must remain possible during a registry outage. A present
     # but corrupt managed receipt is still an error: never hide tampering.
     if $read_only { return (runtime-background) }
+    if $prefer_current {
+        let has_receipt = ((runtime-root) | path join "current.json" | path exists)
+        let current_ok = ((runtime-version-compare (version).version "0.109.1") >= 0)
+        if $has_receipt or $current_ok { return (runtime-background --reason "sync") }
+    }
     let status = (runtime-check)
     if $status.current_satisfies_latest {
         runtime-probe $nu.current-exe $status.current
-        print --stderr ("[nushell] Current Nu " + $status.current + " satisfies latest checked stable " + $status.latest + "; no rebuild.")
+        runtime-status "ok" "nushell" ("Current Nu " + $status.current + " satisfies latest checked stable " + $status.latest + "; no rebuild.")
         return {exe: $nu.current-exe version: $status.current checked: true provider: "current-v1"}
     }
     if not $status.update_required {
-        print --stderr ("[nushell] Cargo nu " + $status.latest + " is current; no rebuild.")
+        runtime-status "ok" "nushell" ("Cargo nu " + $status.latest + " is current; no rebuild.")
         return {exe: $status.managed_executable version: $status.latest checked: true provider: "cargo-v1"}
     }
     {exe: (runtime-install $status.release) version: $status.latest checked: true provider: "cargo-v1"}
@@ -343,7 +385,7 @@ export def runtime-ensure [--read-only] {
 
 # Idle scheduler cycles do not query the registry or build. Actual sync is a fresh
 # checked invocation. The previous GitHub-managed store is never read or deleted.
-export def runtime-background [] {
+def runtime-background [--reason: string = "read-only/recovery work"] {
     if (runtime-fixture-mode) { return {exe: $nu.current-exe version: (version).version checked: false} }
     let root = (runtime-root)
     let file = ($root | path join "current.json")
@@ -354,7 +396,8 @@ export def runtime-background [] {
         if $exe != null { runtime-probe $exe $release.version; return {exe: $exe version: $release.version checked: false provider: "cargo-v1"} }
     }
     if (runtime-version-compare (version).version "0.109.1") >= 0 {
-        print --stderr "[nushell] Using the current compatible interpreter for read-only/recovery work. Latest registry version was not checked."
+        let kind = if $reason == "sync" { "warn" } else { "info" }
+        runtime-status $kind "nushell" ("Using the current compatible Nu " + (version).version + " for " + $reason + ". Latest registry version was not checked; run scripts/update-nushell.nu to update explicitly.")
         return {exe: $nu.current-exe version: (version).version checked: false provider: "current-v1"}
     }
     error make {msg: "NU_RUNTIME_TOO_OLD: no prepared compatible runtime. Run scripts/update-nushell.nu --shell; no setup/sync has started."}
@@ -362,8 +405,8 @@ export def runtime-background [] {
 
 # Native argv forwarding and streaming output. Never capture this function's
 # output as a result record; it terminates this process with the child's status.
-export def runtime-execute [script: path args: list --read-only --background --preflight: string = ""] {
-    let selected = if $background { runtime-background } else { runtime-ensure --read-only=$read_only }
+export def runtime-execute [script: path args: list --read-only --background --prefer-current --preflight: string = ""] {
+    let selected = if $background { runtime-background } else { runtime-ensure --read-only=$read_only --prefer-current=$prefer_current }
     let path_items = if ($env.PATH | describe) == "string" {
         $env.PATH | split row (if $nu.os-info.name == "windows" { ";" } else { ":" })
     } else { $env.PATH }

@@ -128,14 +128,21 @@ def main [
         return
     }
 
+    let args = (common-args $mode $data_dir $profile $config_policy $run_id $no_auto_sync $dry_run $resume $validate)
+    let non_mutating = ($dry_run or $config_policy == "preview")
+    # An interpreter below the supported runtime cannot be relied on to run the
+    # preflight (it may reject it as SEED_TOO_OLD or fail to parse it), so it
+    # delegates to bootstrap first. Bootstrap re-enters this setup.nu with a
+    # prepared runtime, where the preflight below then runs before any setup.
+    let runtime_ready = (version-at-least (version).version $MIN_RUNTIME)
+
     # Normal setup only blocks on files that are required to start safely.
     # Release-manifest drift is reviewed explicitly by --diagnose/--check instead
     # of forcing setup into a no-change mode before the user can review config diffs.
-    child $preflight ["--root" ($ROOT | into string) "--quiet"]
+    # A compatible runtime still rejects incomplete releases before bootstrap.
+    if $runtime_ready { child $preflight ["--root" ($ROOT | into string) "--quiet"] }
 
-    let args = (common-args $mode $data_dir $profile $config_policy $run_id $no_auto_sync $dry_run $resume $validate)
-    let non_mutating = ($dry_run or $config_policy == "preview")
-    if not (native-ready $non_mutating) {
+    if not $runtime_ready or not (native-ready $non_mutating) {
         print --stderr ("[setup] Preparing prerequisites for `nu setup.nu` (Nu >= " + $MIN_RUNTIME + ", git, chezmoi).")
         if $nu.os-info.name == "windows" {
             bootstrap-windows $mode $data_dir $profile $config_policy $run_id $no_auto_sync $dry_run $resume $validate

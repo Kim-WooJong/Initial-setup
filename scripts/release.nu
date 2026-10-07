@@ -1,5 +1,6 @@
 #!/usr/bin/env nu
-
+const CORE = path self ./modules/core.nu
+use $CORE [project-version]
 const TOOLS_ROOT = path self ..
 const SUBPROCESS = path self ./modules/subprocess.nu
 const INSTALL_UTILS = path self ./modules/install-utils.nu
@@ -8,10 +9,6 @@ use $INSTALL_UTILS [probe-tool]
 
 def version-file [] {
     $TOOLS_ROOT | path join "VERSION"
-}
-
-def app-version [] {
-    open (version-file) --raw | into string | str trim
 }
 
 def parse-version [value: string] {
@@ -139,7 +136,7 @@ def main [
         error make { msg: "Working tree is not clean. Commit or stash existing changes before creating a release." }
     }
 
-    let current = (app-version)
+    let current = (project-version $TOOLS_ROOT)
     let next = (bump-version $current $mode $requested)
     let tag = ("v" + $next)
 

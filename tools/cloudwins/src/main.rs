@@ -219,6 +219,17 @@ fn is_excluded(rel: &str) -> bool {
     EXCLUDES.iter().any(|x| rel.eq_ignore_ascii_case(x)
         || rel.to_ascii_lowercase().starts_with(&format!("{x}/")))
 }
+/// Exactly the names temporary()/check_target_storage() create:
+/// `.cloudwins-<stamp>-<pid>-<serial>.tmp` or `.link-test`. A killed process can
+/// leave them behind in the target; they are never payload.
+fn is_own_temp(file_name: &str) -> bool {
+    let Some(rest) = file_name.strip_prefix(".cloudwins-") else { return false };
+    let Some(id) = rest.strip_suffix(".tmp").or_else(|| rest.strip_suffix(".link-test")) else {
+        return false;
+    };
+    let parts: Vec<&str> = id.split('-').collect();
+    parts.len() == 3 && parts.iter().all(|part| !part.is_empty() && part.bytes().all(|b| b.is_ascii_digit()))
+}
 fn check_ancestors(path: &Path) -> Result<()> {
     // read_link also recognizes Windows directory junctions. Non-redirection cloud
     // placeholders are allowed on the source; opening them can cause hydration.
@@ -240,8 +251,31 @@ fn check_ancestors(path: &Path) -> Result<()> {
 }
 fn absolute(path: &Path) -> Result<PathBuf> {
     let full = if path.is_absolute() { path.to_path_buf() } else { std::env::current_dir()?.join(path) };
-    check_ancestors(&full)?;
-    Ok(full)
+    ensure!(!full.components().any(|part| matches!(part, Component::ParentDir)),
+        "Parent traversal is forbidden");
+    // System-level redirections above a root (macOS /tmp -> /private/tmp, a
+    // symlinked /home) are resolved once here. Only the canonical prefix plus the
+    // not-yet-existing tail is checked; links inside the managed trees are still
+    // rejected by layout/path_for/fingerprint.
+    let mut prefix = full.as_path();
+    let mut tail = Vec::new();
+    loop {
+        match fs::symlink_metadata(prefix) {
+            Ok(_) => break,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                tail.push(prefix.file_name().context("Path has no existing ancestor")?);
+                prefix = prefix.parent().context("Path has no existing ancestor")?;
+            }
+            Err(e) => return Err(e).with_context(|| format!("Cannot inspect {}", prefix.display())),
+        }
+    }
+    let mut resolved = canonical_existing(prefix)
+        .with_context(|| format!("Cannot resolve {}", prefix.display()))?;
+    for part in tail.iter().rev() {
+        resolved.push(part);
+    }
+    check_ancestors(&resolved)?;
+    Ok(resolved)
 }
 fn canonical_existing(path: &Path) -> Result<PathBuf> {
     let canonical = fs::canonicalize(path)?;
@@ -347,6 +381,8 @@ fn layout(root: &Path) -> Result<BTreeMap<String, NodeKind>> {
         if is_excluded(&name) { continue; }
         check_ancestors(entry.path())?;
         ensure!(!entry.file_type().is_symlink(), "Symlink rejected: {name}");
+        // Leftover temp files of an interrupted run; regular files only.
+        if entry.file_type().is_file() && entry.file_name().to_str().is_some_and(is_own_temp) { continue; }
         ensure!(seen.insert(name.to_lowercase()), "Case-colliding path: {name}");
         let kind = if entry.file_type().is_dir() { NodeKind::Directory } else {
             ensure!(entry.file_type().is_file(), "Special file rejected: {name}");
@@ -649,7 +685,10 @@ fn journals(state: &Path) -> Result<Vec<Journal>> {
     for entry in fs::read_dir(dir)? {
         let entry = entry?;
         check_ancestors(&entry.path())?;
-        ensure!(entry.file_type()?.is_dir(), "Invalid item in runs directory");
+        // Links are still rejected above; ignore foreign files (.DS_Store,
+        // Thumbs.db) and directories that cannot be a run this tool created.
+        let valid_name = entry.file_name().to_str().is_some_and(|name| run_name(name).is_ok());
+        if !entry.file_type()?.is_dir() || !valid_name { continue; }
         let path = entry.path().join("journal.json");
         // An interrupted stage before the write-ahead journal touches no payload.
         if path.exists() {

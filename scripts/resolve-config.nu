@@ -173,7 +173,7 @@ def main [--policy] {
         }
         "3" => {
             print "[sync] Publishing local managed configuration to private drive..."
-            run-script "sync-up.nu"
+            run-script "sync-up.nu" "--local-wins"
         }
         "4" => {
             print "[sync] Applying private configuration to this machine..."

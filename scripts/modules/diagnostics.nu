@@ -1,7 +1,9 @@
 const SUBPROCESS = path self ./subprocess.nu
 const INSTALL_UTILS = path self ./install-utils.nu
+const CONSOLE = path self ./console.nu
 use $SUBPROCESS [run-command command-failure-message]
 use $INSTALL_UTILS [probe-tool]
+use $CONSOLE [style print-text]
 
 # Shared diagnostic result format used by doctor/audit/preflight/verification.
 # Severity describes policy; status describes the observed result.
@@ -80,12 +82,12 @@ export def command-diagnostic [
 }
 
 export def print-diagnostic [row: record] {
-    let prefix = match $row.status {
-        "pass" => "[ok] "
-        "fail" => "[FAIL] "
-        _ => "[WARN] "
+    let presentation = match $row.status {
+        "pass" => {kind: "ok" prefix: "[ok] "}
+        "fail" => {kind: "error" prefix: "[FAIL] "}
+        _ => {kind: "warn" prefix: "[WARN] "}
     }
-    print ($prefix + $row.label)
+    print-text $presentation.kind ($presentation.prefix + $row.label)
     let detail = ($row.detail? | default "" | str trim)
     if not ($detail | is-empty) {
         for line in ($detail | lines) {
@@ -94,7 +96,7 @@ export def print-diagnostic [row: record] {
     }
     let remediation = ($row.remediation? | default "" | str trim)
     if not ($remediation | is-empty) {
-        print ("       fix: " + $remediation)
+        print ((style "warn" "       fix:") + " " + $remediation)
     }
 }
 

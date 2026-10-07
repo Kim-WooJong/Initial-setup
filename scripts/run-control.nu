@@ -4,10 +4,12 @@ const TOOLS_ROOT = path self ..
 const RUN_MODULE = path self ./modules/run-state.nu
 const CORE_MODULE = path self ./modules/core.nu
 const SUBPROCESS = path self ./modules/subprocess.nu
+const CONSOLE = path self ./modules/console.nu
 
 use $RUN_MODULE [list-runs load-run latest-resumable-run resolve-resume-run events-path finish-run]
 use $CORE_MODULE [nu-home error-message failure-envelope captured-failure]
 use $SUBPROCESS [run-command command-failure-message]
+use $CONSOLE [print-heading print-key-value print-status print-text]
 const SAFETY = path self ./modules/safety.nu
 use $SAFETY [operation-lease release-lease]
 
@@ -65,24 +67,25 @@ def matching-snapshot [run_id: string] {
 }
 
 def print-state [state: record] {
-    print ("Run ID   : " + $state.run_id)
-    print ("Version  : " + ($state.version? | default "unknown"))
-    print ("Status   : " + ($state.status? | default "unknown"))
-    print ("Profile  : " + ($state.profile? | default ""))
-    print ("Mode     : " + ($state.resolved_mode? | default ($state.requested_mode? | default "")))
-    print ("Policy   : " + ($state.resolved_policy? | default ($state.requested_policy? | default "")))
-    print ("Started  : " + ($state.started_at? | default ""))
-    print ("Updated  : " + ($state.updated_at? | default ""))
+    print-key-value "Run ID   : " $state.run_id
+    print-key-value "Version  : " ($state.version? | default "unknown")
+    print-key-value "Status   : " ($state.status? | default "unknown")
+    print-key-value "Profile  : " ($state.profile? | default "")
+    print-key-value "Mode     : " ($state.resolved_mode? | default ($state.requested_mode? | default ""))
+    print-key-value "Policy   : " ($state.resolved_policy? | default ($state.requested_policy? | default ""))
+    print-key-value "Started  : " ($state.started_at? | default "")
+    print-key-value "Updated  : " ($state.updated_at? | default "")
     print ""
-    print "Stages"
-    print "────────────────────────────────────────────────────────────"
+    print-heading "Stages"
+    print-text "heading" "────────────────────────────────────────────────────────────"
 
     let stages = ($state.stages? | default [])
     if ($stages | is-empty) {
-        print "  No checkpointed stages yet."
+        print-status "info" "info" "No checkpointed stages yet."
     } else {
         for stage in $stages {
-            print ("  [" + $stage.status + "] " + $stage.name)
+            let stage_kind = if $stage.status in ["ok" "done" "completed" "success"] { "ok" } else if $stage.status in ["failed" "error"] { "error" } else if $stage.status in ["skipped" "cancelled"] { "warn" } else { "info" }
+            print-status $stage_kind $stage.status $stage.name
             if not (($stage.detail? | default "") | is-empty) {
                 print ("      " + $stage.detail)
             }
@@ -101,7 +104,7 @@ def main [
     if $list {
         let rows = (list-runs)
         if ($rows | is-empty) {
-            print "No setup run history."
+            print-status "info" "info" "No setup run history."
         } else {
             print $rows
         }
@@ -128,7 +131,7 @@ def main [
 
             let snapshot = (matching-snapshot $selected)
             if $snapshot != null {
-                print ("Restoring private configuration snapshot for run " + $selected)
+                print-status "info" "restore" ("Private configuration snapshot for run " + $selected)
                 let private_restore = (run-command $nu.current-exe [
                     "--no-config-file"
                     ($TOOLS_ROOT | path join "scripts" "rollback.nu")
@@ -140,10 +143,10 @@ def main [
                     error make {msg: (command-failure-message "Private source rollback" $private_restore)}
                 }
             } else {
-                print "[info] No private snapshot existed for this run; restoring the local backup next."
+                print-status "info" "info" "No private snapshot existed for this run; restoring the local backup next."
             }
 
-            print ("Restoring the independent live-configuration backup for run " + $selected)
+            print-status "info" "restore" ("Independent live-configuration backup for run " + $selected)
             let live_restore = (run-command $nu.current-exe [
                 "--no-config-file"
                 ($TOOLS_ROOT | path join "scripts" "backup-local-config.nu")
@@ -179,7 +182,7 @@ def main [
     if $logs {
         let file = (events-path $selected)
         if not ($file | path exists) {
-            print "No event log exists for this run."
+            print-status "info" "info" "No event log exists for this run."
         } else {
             let content = (open --raw $file)
             print $content

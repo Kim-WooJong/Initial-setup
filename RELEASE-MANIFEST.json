@@ -1,14 +1,14 @@
 {
   "format": 1,
-  "version": "0.17.0",
+  "version": "0.25.0",
   "files": [
     {
       "path": ".gitignore",
-      "sha256": "0c640cccb0a25d61f9e0da38951fdeffc834abb9eb4aba4da377f8b24a8fb74e"
+      "sha256": "3b334bdc11bb3dd82a8939a23bb5d1faf26b257db9e82c1badb501363d3db55b"
     },
     {
       "path": "CHANGELOG.md",
-      "sha256": "b22009cbbb0e84aa995705ae80e6f2885ada729b8b7b8fe76c96987c97743960"
+      "sha256": "9775cb0f523582eeeb8fa1a7eac7480cf5e9413fca3cdfd9d6b6fd69f2c1316a"
     },
     {
       "path": "CLOUD_WINS.md",
@@ -20,11 +20,15 @@
     },
     {
       "path": "README.md",
-      "sha256": "280769f5799db525b3422d9ea79e46ace08ad4c891abbbbacb296ca28c1afafe"
+      "sha256": "2d7b8a67ab7901726103ebda6868fc99e84364dc6f8f641fc0b1db2ab1218731"
     },
     {
       "path": "ROADMAP.md",
       "sha256": "c1d653e8346cb715d894d712ae18d1dd96faaa8c5c419b3768ed65fab97c2e7e"
+    },
+    {
+      "path": "RPOOL-CONFIG-SYNC.md",
+      "sha256": "5a78d15d9b5fcffa633d09b69f2aaa9376eba98eb41afad11d87fe2eece3aeb0"
     },
     {
       "path": "SCHEMA_VERSION",
@@ -32,11 +36,15 @@
     },
     {
       "path": "START_HERE.md",
-      "sha256": "e4073851f8af6780b4dd158a117d2a8c2b86dd6363f7828227c81b8ede415f65"
+      "sha256": "f9d146616de3a268a7c74e153959f6c6fb0920e14cd4ad8edf840e87e7283bf0"
     },
     {
       "path": "VERSION",
-      "sha256": "02d38e98e88f4a8dc2ea40dbb769338601066fc94920b52882a14f21ad97f7ee"
+      "sha256": "4b67cac8ce2a6e82a4e11ba210c84b4adfc72db7f4629785f7d3d09d6147795d"
+    },
+    {
+      "path": "WIREGUARD-CONFIG-SYNC.md",
+      "sha256": "f50bdb65938fc7dc9fc8220cbc5151fc461d1f8c9e9e5eecdc22b809acae75e5"
     },
     {
       "path": "bootstrap.ps1",
@@ -44,7 +52,7 @@
     },
     {
       "path": "bootstrap.sh",
-      "sha256": "0453386d0a4451fdbbb38cc65c44c1157239a2c17ed44a8af70d0542ebdb7535"
+      "sha256": "9ee499501fe6b30d17ae8eb3fff33ccd2403b06611bd0e535fee0562216b9d04"
     },
     {
       "path": "defaults/conflict-policy.nuon",
@@ -72,23 +80,23 @@
     },
     {
       "path": "docs/wiki/Cloud-Wins.md",
-      "sha256": "e848a897e08ccfaa7f7894d940b38506e51d39a05711b7fbb742776e75753414"
+      "sha256": "41fedb24a9cd0d7b67deeceaf80267852bee9e5edc50745bf3498fa59d1695ee"
     },
     {
       "path": "docs/wiki/Code-Architecture.md",
-      "sha256": "e48de430a7a119154cb52b297507289bc1a6049cc196eeb3ca33f187f15c3cdc"
+      "sha256": "2501f8e7746819670f7aee2c0fb31b9ba28b6f8a668f069797a90d27d8ca6062"
     },
     {
       "path": "docs/wiki/Command-Reference.md",
-      "sha256": "bec664feef83a7896660c45260995d2fb6ec1f80689f3e546966df88de541fc3"
+      "sha256": "96acf44ef60f06d429875c479d4cc73160e882827981d147abd5d72bf379bd2a"
     },
     {
       "path": "docs/wiki/Development-and-Testing.md",
-      "sha256": "185d9787823eb7601bd08f7ecba34c267ab13401310f983bf8b36914f48ecaf7"
+      "sha256": "272e952ef9b529854c0056d58e711410eaff7dc0bce67e4742ecba4ab85f7f4c"
     },
     {
       "path": "docs/wiki/Features-and-Roles.md",
-      "sha256": "c7c4b013a49b10dc308cad98b05c82dd8bd57e51234ac4099ebfabf78c52a8ab"
+      "sha256": "7e3f60d5d0836df26fb2502e9399788701a0814ddf84bd844d3b2ef30ea8ea59"
     },
     {
       "path": "docs/wiki/First-Run.md",
@@ -112,15 +120,15 @@
     },
     {
       "path": "docs/wiki/Recovery-and-Safety.md",
-      "sha256": "95627bd5dedbb92aea1a3e7e5f287eb02830590f23e25047d5b5226bdc45b89b"
+      "sha256": "e0f5574cbbbe4375eebce4c5ffa6c698fc5c615c0bd6d1aeb06f9e22ee22e54e"
     },
     {
       "path": "docs/wiki/Synchronization.md",
-      "sha256": "273c5151f38a9328b93954644eb0628db0a0b7dfab2bb4a569665974581eea41"
+      "sha256": "31e7661023e4eea9c46b2f6d7af6aec4a30c4b75f6f84c51c3d82830b465393e"
     },
     {
       "path": "docs/wiki/Troubleshooting.md",
-      "sha256": "5226775e4c4d36781b87b4ba6b18ba4ad5ea8f44f56438ea7031cc0f158249ca"
+      "sha256": "9e3cced4437bc4f372af7f3a138be83be0f0a52de09800dc08d74edc45436781"
     },
     {
       "path": "docs/wiki/_Sidebar.md",
@@ -136,15 +144,15 @@
     },
     {
       "path": "packages/linux.txt",
-      "sha256": "cc57b265207bbcba8423b0159cfea8f74334ae82f02c42cf618c8e73615ada04"
+      "sha256": "c7467a733f5824a3dae2674a2fdd324b18ef711dc42b795acbfd54a909761c0b"
     },
     {
       "path": "packages/macos.txt",
-      "sha256": "bddf57902cbb8649eb30d1803feeebb4fdd3d3b9fd54fd87832b4816b34e60ed"
+      "sha256": "fad0959646623cd5bf662b2bd51b418b26b4261bde4b58e5fe7d05f85227497c"
     },
     {
       "path": "packages/windows.txt",
-      "sha256": "0bf50b420b494ad2d7c4bf8df762bba2860038ce8fa72977adf0c364cd0d796b"
+      "sha256": "79d25d0986d320cb50b883529f1f884d92a40e32c0207f0e208bd7851df5fa48"
     },
     {
       "path": "profiles/common.nuon",
@@ -188,19 +196,19 @@
     },
     {
       "path": "scripts/apply-vscode-config.nu",
-      "sha256": "802d97687c37672e90bee1508e33f1b09172220bf57a5fbb91f4fedcb9d59826"
+      "sha256": "644a2c35255c099faa1e361bbc9a4515e1ec383c63fd887c36fdd9b0f48b1e82"
     },
     {
       "path": "scripts/audit.nu",
-      "sha256": "b39a6065a77d4dcaf6a5e0bdabb91f6bb7796102e22e244bf7172896737451c0"
+      "sha256": "65cf47860235980982676e3788241bd0ce17982292a69e5038c6b4f7f61a3c00"
     },
     {
       "path": "scripts/auto-sync-main.nu",
-      "sha256": "969ecec0163277156e13b942460a6ed20acc270510b5a16c985bddef09711490"
+      "sha256": "f1ce11a9c63c76d32fe62d20121ea84ce5944d883d45fd10e25d4a54bdbfb124"
     },
     {
       "path": "scripts/auto-sync-worker.nu",
-      "sha256": "de9207e088fc56dbf075c4ebb80f3b2ab574dd8674008ee89159090f38a4c7aa"
+      "sha256": "885f8cb9cca0cd8b963c82be3a1d44c251adffe31a57b1aa7bd76e535215ef49"
     },
     {
       "path": "scripts/auto-sync.nu",
@@ -208,35 +216,39 @@
     },
     {
       "path": "scripts/backend-control.nu",
-      "sha256": "d3acd275c958554eef40bcaf0ada67150249ae58050551128174eddfaaa3d3ce"
+      "sha256": "529d2443230714da81b44f55644e7ff5bb81381ff528b88b92d5bd119f3f1759"
     },
     {
       "path": "scripts/backup-local-config.nu",
-      "sha256": "180ae74d6715371a09853c7a8969a639d86e3608ddf2be922efab649f4a9be15"
+      "sha256": "1185b0113feb2e55bda516ae136b575043779cf39b0dd7b5f318fb8771674fae"
     },
     {
       "path": "scripts/capture-julia-environments.nu",
-      "sha256": "75347484d69afc1e7d79707bb4e0167d1d0ec32e3b6a0be5a55374bf8323f9e5"
+      "sha256": "691b6e8802fc2408b2c149c7bf63f595a0e34b651b030ad2a3fcccb4d08162ee"
     },
     {
       "path": "scripts/capture-rclone-config.nu",
-      "sha256": "d8c27da23f6a79f920da12c7328303cb04f7deb6f5d68fe28f71b196c84f6c4c"
+      "sha256": "9abf7ebb967f3e2fd52dde0d35bd6e5f642fae0818ffda7a88415a3e791c99bb"
+    },
+    {
+      "path": "scripts/capture-rpool-config.nu",
+      "sha256": "fd11b3745ff3936c063d93d918156f76f8a3b81c8effec34759c07e7e99a8bce"
     },
     {
       "path": "scripts/capture-rust-state.nu",
-      "sha256": "ff0f36e94d6683f3c97e4e99a1a5d03b28f596157e79fa9169b3976750a582b2"
+      "sha256": "9aa36da6078b7fd7ab1489732f6113ac629d1567e1b3a42f9ee4316d84217ef6"
     },
     {
       "path": "scripts/capture-tool-state.nu",
-      "sha256": "0fdfc7474f8601e5187cb52f9e4626998db37533fc7c847aeca220ee51d8c023"
+      "sha256": "6151c8e6dd03ed43e87c06f5ad815537cc136e71b4085b942ede31f06302478a"
     },
     {
       "path": "scripts/capture-vscode-config.nu",
-      "sha256": "74a5d3fa6d2448d2989d5bb19370fad2a2c60df4c83d10591662fd889b51726e"
+      "sha256": "9bc8e373ea80d39735215b540e053944a6efcd9bfa9189561c1abd71b9f4cd53"
     },
     {
       "path": "scripts/capture-vscode-extensions.nu",
-      "sha256": "c1c3a38bd89ce8a79faf78f2ebab88f23500549bb1a302737a294c671c149f1b"
+      "sha256": "5c8f67d35625f24a9143861cd14d36bccdaf368ed7316d5c79492d52f1c8deac"
     },
     {
       "path": "scripts/capture-work-environment.nu",
@@ -247,8 +259,16 @@
       "sha256": "63c618074af30cd2b0eaad15b721424ecd2c0cfab5272fd7b74b5c5afbf9fed3"
     },
     {
+      "path": "scripts/checkout-private-test.nu",
+      "sha256": "47c0a24b47e1b20defe393fdb5431120e0e1db516449e43e068c3a277f0c85bf"
+    },
+    {
       "path": "scripts/cleanup-direnv.nu",
-      "sha256": "72222fc8d6b5425ff04c6f64aea17f166e25e98faf1201c917747fbdd6a80648"
+      "sha256": "02c70e6471710ce84dd2c426acd35809ae60cf84ff930e12f78f2283a2da4f0c"
+    },
+    {
+      "path": "scripts/cleanup-release-junk.nu",
+      "sha256": "8e0c6d34cb8fccb69a6ed33cecc5ac40891f27e849205800f7b0032704c43916"
     },
     {
       "path": "scripts/cloud-wins-build.nu",
@@ -256,7 +276,7 @@
     },
     {
       "path": "scripts/cloud-wins-main.nu",
-      "sha256": "158d9535446f45d5d9f96a92d9cf712b737c54b7d4bcef118a3257b8d4fa6d70"
+      "sha256": "aa1fa5bf2c2cda3a5baa3cbeceba8807d2598235a93c2d541238b4a6fec01923"
     },
     {
       "path": "scripts/cloud-wins-test.nu",
@@ -264,11 +284,11 @@
     },
     {
       "path": "scripts/cloud-wins.nu",
-      "sha256": "79760d5e54ae5e7f91bfe6d5853623002bf8099eecaa7cd60b6fc5afca036bc9"
+      "sha256": "3ddcbc468a2a41851aacf74bebac8e3b40005662cd552f80eed446563c9d7251"
     },
     {
-      "path": "scripts/command-completion-test.nu",
-      "sha256": "9f34451b871a7f74b11daa58e5a952c2135888968784487a4992b392c39a91cb"
+      "path": "scripts/command-shim-test.nu",
+      "sha256": "bee12dca14cacad942f47ed84b8c74e8decf56582e98723e6c5a57aa756b187b"
     },
     {
       "path": "scripts/create-snapshot.nu",
@@ -276,7 +296,7 @@
     },
     {
       "path": "scripts/diagnose-project.nu",
-      "sha256": "7314c59fb7f1da0ca294aad24e2985c88a23ce480bc9bf403c905a16e549f369"
+      "sha256": "03e369bba1e397b27255bd2d7c672e0f0c587757a5319936f221f1c3e9bddc41"
     },
     {
       "path": "scripts/diagnostics-policy-test.nu",
@@ -284,11 +304,23 @@
     },
     {
       "path": "scripts/doctor.nu",
-      "sha256": "60fec75e21d7017f91341c915e48996d9e4148d6c2e1db49e9a4e7cabf6cb205"
+      "sha256": "145bb0dfe043ed762a8c1e1cbbceab8c1f71515de28d4cb42857b43c27f87741"
+    },
+    {
+      "path": "scripts/dotcmd.nu",
+      "sha256": "d3dd46b1f199c1a5724471d17cf0e23c0192b1a8a68ce99d9a120c054a6eb823"
+    },
+    {
+      "path": "scripts/edit-identity-test.nu",
+      "sha256": "1d9714c3f168444b4e94f4fbcb881644fe5632f4f071f49a6b18d73d6aab7b3c"
+    },
+    {
+      "path": "scripts/edit-identity.nu",
+      "sha256": "8a1f029e15c4f362b86b2a92e72f000f76e3be0edf996979d9a3fce1b8f3fae4"
     },
     {
       "path": "scripts/edit-managed-test.nu",
-      "sha256": "8948e70827db60bbbbd1703364b51a77bfa256c0e7462901509c0dc0b649973d"
+      "sha256": "fbd641a4775d3d31e4d50cb1daa549c43f48a135890b65057cd81eb4b820110e"
     },
     {
       "path": "scripts/edit-managed.nu",
@@ -296,31 +328,31 @@
     },
     {
       "path": "scripts/enable-nushell-dotfiles.nu",
-      "sha256": "fdda0d9a58918a5caf48302537105905502523c75a053c7208a3469802de648b"
+      "sha256": "857c070eac8fbe5026bae935c8179c85bc904487d11a40ad66bc1a8f278d3db0"
     },
     {
       "path": "scripts/entrypoint-test.nu",
-      "sha256": "399e2ac03ec5010bc4eb5a53fbb701052db53d24f0d1c1a9db840fabb05bd39d"
+      "sha256": "f5aad08c942fd58f27fb747a19a39802a8355a1a6878d3970cf7c4b17f42d464"
     },
     {
       "path": "scripts/init-private-data.nu",
-      "sha256": "acc2b90e539848f570e9b30fe81532edeb4e2d2c456d1c2ad299d9769f033cfc"
+      "sha256": "df9574e3d98b60aafb4fa3e03cc62ca85d2eba7e019d5f388c45ef669f478138"
     },
     {
       "path": "scripts/install-auto-sync.nu",
-      "sha256": "87c79b2edb3396ca1b0fa48a284eed7177d2c47fc292068954d4dd073ef5a079"
+      "sha256": "f6e875419b3560e06ad97e35a29308ef3c675ff0542ea462011b7cdd0a45fa4b"
     },
     {
       "path": "scripts/install-cli-tools.nu",
-      "sha256": "31a6a358878d61a86010ebc982f060773adc2ec352492a938a2f4796d381ee2e"
+      "sha256": "b58de6fc3fb688e731404bc1188b05a720e4c0e67a3d7ed9d19748c1375ea026"
     },
     {
       "path": "scripts/install-fonts.nu",
-      "sha256": "2a62938b430027ab69556da87b41280df5f3b612c4c55070d8fd53421759dc1e"
+      "sha256": "e00a926cf053600b40e2002ac1f0156ff623da3ff0f5931d7be83ce1288f1dbd"
     },
     {
       "path": "scripts/install-language-tools.nu",
-      "sha256": "0dc07df3b098d2c7584fa378f78372627dda2978f4c9b491a72e3be888a12cf8"
+      "sha256": "fae4e005c207849585b8a6194c3e5bf04498e5170111e5ffe4c1f0e1547811e4"
     },
     {
       "path": "scripts/install-neovim.nu",
@@ -332,11 +364,11 @@
     },
     {
       "path": "scripts/install-starship.nu",
-      "sha256": "b539124eed75bf67e1d4ceca313c12390ed314cd337b20eeae2d335caa41db87"
+      "sha256": "48ed5ae4b7a09c55c976ec0a4c56904db53b13a604305d5af68cba5c74dde2a8"
     },
     {
       "path": "scripts/install-vscode-extensions.nu",
-      "sha256": "a974075ab54ba2d879f3b5b1e0e2d83f3f525304bc61d1141f02fade40b64d12"
+      "sha256": "010976cb00a03f6b80268e8db6cab405ac7cf8276c9e4410a6d54e92f4f541b8"
     },
     {
       "path": "scripts/install-vscode.nu",
@@ -348,11 +380,23 @@
     },
     {
       "path": "scripts/installer-health-test.nu",
-      "sha256": "08f6e3a041d3e717abbcd76a78670ff65d9f01974a1e59a6abdc7073ab8cd21e"
+      "sha256": "e2c694b15af64f5b54860a3ba743d4a3c62026e83b78911079a15369c43645af"
     },
     {
       "path": "scripts/interactive-tty-policy-test.nu",
-      "sha256": "708c9e5d3eb42ee84160c62dff3a0f402283b4c2c4d0bcc4085b316c2d47e598"
+      "sha256": "8c7967a4339923374fc02f9c46dc7b9131b90d9f2e8784ffb3ad3fc34ec9fe90"
+    },
+    {
+      "path": "scripts/linux/install-wireguard-helper.py",
+      "sha256": "eb68192bb0ab896f3635057e4575069d8a1e2eecd1fbf978d9fa80bd37c15607"
+    },
+    {
+      "path": "scripts/linux/test-wireguard-helper.py",
+      "sha256": "6f9542e31f2b2b574ed3dfeb4e36645a90bfcd16302f9b9ec8dda15737bd2064"
+    },
+    {
+      "path": "scripts/linux/wireguard-helper.py",
+      "sha256": "1a0878f7d5c267d0425161b66f771a5d417f49b50eb2e2a80e9093bfbe60793c"
     },
     {
       "path": "scripts/lock-status.nu",
@@ -364,7 +408,7 @@
     },
     {
       "path": "scripts/log-event.nu",
-      "sha256": "38f2ab2cf006355eda5ee2c0eb96fb6ad0dd1cf3b19fc47067a3057a473667fc"
+      "sha256": "9da9f4bc22e9f7ca950af9a77c58813baa565e472304c8f45f97cf64ec39fc7b"
     },
     {
       "path": "scripts/make-release-manifest.nu",
@@ -372,19 +416,31 @@
     },
     {
       "path": "scripts/migrate-config.nu",
-      "sha256": "b1d4c40768fbbdb8755d8e6b7c70a0929c691492bcd3e8928f9838cc9ef69e0a"
+      "sha256": "d5d8a7acbf11122d4c6860b24b9aedba86dcd4111966880653ca11375ef2fa1e"
     },
     {
       "path": "scripts/migrate-dotfiles.nu",
-      "sha256": "f9ee452f1c51364e751b48cacd034694cca2c012fc49a92849399337beb06b9e"
+      "sha256": "d46806a2c55982587c0b880c79caaf91b3cc115d3b60ee6220735966154b7cd0"
+    },
+    {
+      "path": "scripts/migrate-state-transaction.nu",
+      "sha256": "2c991c0b5cb6bf25995d9ce560e37eb1cc33201774f7433ec9298f29eac62dae"
+    },
+    {
+      "path": "scripts/migration-error-test.nu",
+      "sha256": "b5e07a3e16b53aa6c52e8b0552d87114717791bb26955cdff35ede1fa7e8b6bc"
     },
     {
       "path": "scripts/modules/cloud-wins-config.nu",
-      "sha256": "7ec3e77a16b3c998636880be831f3e4c1d81c3779759128a2c0a0ef39064d3ed"
+      "sha256": "bb0964b6a724735e336058a5bcf7d8826fdae2d50c53aa71c0e3e60a4f945f08"
     },
     {
       "path": "scripts/modules/cloud-wins-engine.nu",
       "sha256": "84462817ca2b09544fabe6934cdff72d152bc01fcbda4fb450a344bb6af5d224"
+    },
+    {
+      "path": "scripts/modules/command-runtime.nu",
+      "sha256": "94a635e00337ab9e2ec22c97c996412ec186ec8ab94b1d6cd329f82a33467404"
     },
     {
       "path": "scripts/modules/compat/case-legacy.nu",
@@ -396,39 +452,47 @@
     },
     {
       "path": "scripts/modules/conflicts.nu",
-      "sha256": "450d78f56ee325f6cde505d69b20256e60d0b0d043aae9dc3f40e1656f57abef"
+      "sha256": "98e2397f066bb33b3ac503087052c7610a7b515804efc37898df102c14517440"
     },
     {
       "path": "scripts/modules/console.nu",
-      "sha256": "6b7c7c4a64377826f6a765d82f581be0eac4a21d1288b38ec2adb74c155b1ace"
+      "sha256": "4ba4a8219a89ddd641d6672087e231970e4366b5ca2e7ec79ee5e6de4ba59363"
     },
     {
       "path": "scripts/modules/core.nu",
-      "sha256": "b7f0a79274216ae8cabf53eee4837c893ee7d3dbda14ac4c8553df626f98bd29"
+      "sha256": "e95c305af5eef21ea8694c45245ad060296d284c2e86f58b8890e823ac27a52f"
+    },
+    {
+      "path": "scripts/modules/data-root.nu",
+      "sha256": "f489d1fed1c0aa15451de2226216a207065ad83b27c377b279cba3db27b39c46"
     },
     {
       "path": "scripts/modules/diagnostics.nu",
-      "sha256": "5ade608d956a3bb556eaabca49f6a7c699898313178aedfede71b6c79a0e1539"
+      "sha256": "fcf6abbdf6537c0a06d50d9336e18b190bc88d16267497f6970cddbe9a0f03ba"
     },
     {
       "path": "scripts/modules/dotfiles.nu",
-      "sha256": "6b31981c9e0a9d6dec176b482608a93a2ede275455e7b57cdd09cf60dd0bab5e"
+      "sha256": "742d99b726b79db54d661e10f7bcbc3bdbfe163b995f5caad7dd2c447e02c292"
     },
     {
       "path": "scripts/modules/git-identities.nu",
-      "sha256": "dcae7d2fbebb8db7b31bf1cd27b31c347804100b6035cfa2c457be02dc865c81"
+      "sha256": "183ea1aa514f511f76427bc97e710eab1aac31c8014400ca1b5bddb9607b27a6"
     },
     {
       "path": "scripts/modules/install-utils.nu",
-      "sha256": "67830f647e14a31b349150d3f8bdf10daa9de34dec8695f1f38a6fdc6bf0416f"
+      "sha256": "58a93627acc317744670ce7cae7d29aa39a934096f3f227a6252325ec2a29f7d"
+    },
+    {
+      "path": "scripts/modules/machine-config.nu",
+      "sha256": "b492d341bd2e4c7fa135928ea7fd80ff6e5192269e90c400150c2939bd76ea50"
     },
     {
       "path": "scripts/modules/nu-runtime.nu",
-      "sha256": "02b43e85f75e19c36ca90053fcdf6e71000779596ed6d65a4988952d829c3ebb"
+      "sha256": "7475abbf48a2b38d1985f4aecbb9217bc65f2409a7335e9a98f75462c5acfa4c"
     },
     {
       "path": "scripts/modules/planner.nu",
-      "sha256": "5727613f3eafb3232d02b1a41fd2f94a4e21e0b0afc6b8d62afd115c51bd617f"
+      "sha256": "e9dccf2e5b8d56f0c1422d0ac21f6f19e275362c6daf9c2a1510ecfb403d8a24"
     },
     {
       "path": "scripts/modules/process-output.nu",
@@ -436,11 +500,35 @@
     },
     {
       "path": "scripts/modules/profiles.nu",
-      "sha256": "da7b9c13fc8510b5c9044792e6e1a2f32582e120f03838beccf9950bee473010"
+      "sha256": "45164148144712a7629b3eaaeda5455ce7bca9c758e5d004a2eed05c93148dba"
+    },
+    {
+      "path": "scripts/modules/provider-state.nu",
+      "sha256": "a3b4d1fc6a6c346da26b490d0c8b414065c7f5a2db30147c217f66f1736c4c09"
+    },
+    {
+      "path": "scripts/modules/rclone-compare.nu",
+      "sha256": "153f0311db6441094eeaaa10a17f6ff2d98b473971817cb3ca7ef9050e639648"
     },
     {
       "path": "scripts/modules/rclone-install.nu",
-      "sha256": "1c90084b502364c68f697c7f0f8d63e7b1cb5041ce73f4f6e56a1fb5f8a40ef9"
+      "sha256": "90094089c6ee7ae51ab64ef506d2d0634deb3bff6edbcc89236a37d2a1e08b21"
+    },
+    {
+      "path": "scripts/modules/rclone-readiness.nu",
+      "sha256": "29de4293291362e76d11c3622e9f988e466609f5e3e069f74c09a13968bf3641"
+    },
+    {
+      "path": "scripts/modules/rclone-secret-sync.nu",
+      "sha256": "2d1ea70a485e676e9d8ef9820565a53b4647890ca42f7907f885d83229583315"
+    },
+    {
+      "path": "scripts/modules/rpool-install.nu",
+      "sha256": "3eeae508aa4932e043c0675cc28ae949ea7625058d9cedca108a821d60773351"
+    },
+    {
+      "path": "scripts/modules/rpool-sync.nu",
+      "sha256": "af620b6fa1d273e5464ce47aacdddbf54cee812fdeda2519eae1828ccdbfaa8e"
     },
     {
       "path": "scripts/modules/run-state.nu",
@@ -452,31 +540,51 @@
     },
     {
       "path": "scripts/modules/setup-policy.nu",
-      "sha256": "a434aef58db9e15133f647329651be6cc572a4cdeb4b89eb28781d926c526422"
+      "sha256": "31d3bc3652003ade8b11019449ae4e115ea6040f20dfadf12079e51a9cc4e69a"
     },
     {
       "path": "scripts/modules/setup-reconcile.nu",
-      "sha256": "7077c8763086088bca6693481aaa6405fce7554a8930cfd787c6407e258ae7ac"
+      "sha256": "d429c71dd680d13440a03418e474c3a9b4ae312babf6b52895a75b815341b243"
+    },
+    {
+      "path": "scripts/modules/ssh-key-sync.nu",
+      "sha256": "792f806c873ed14901c923967166d0b531d7c8ea3177c3692c63cc44bd2206d8"
     },
     {
       "path": "scripts/modules/ssh-keys.nu",
-      "sha256": "d10756152970adbc22021395f77d1752dfa82a0b2fd2e88894f809ab063bd35f"
+      "sha256": "87692def79820b1e28c385bcdf923eb5b9a1e3dbbf79515542ddb84dde82d026"
     },
     {
       "path": "scripts/modules/starship.nu",
-      "sha256": "069417bc8283191adf1eb04a6e6bdc8b6104faf8a74d8ed0e651798e5ec8d8c6"
+      "sha256": "eec8bd38b5beb6f7eaf65635b4161be8063bc9c5d7cdb9f6cf13670409370cba"
+    },
+    {
+      "path": "scripts/modules/state-schema-health.nu",
+      "sha256": "807d255a5118105a19ec493aee30b782510077d14c4408e265ec628b49f1ef05"
+    },
+    {
+      "path": "scripts/modules/state-schema.nu",
+      "sha256": "0bc2755c82d48ad2754b1f2bc39f7bcfe8a0527f7cf8452cd48feccbe0c2829a"
     },
     {
       "path": "scripts/modules/subprocess.nu",
-      "sha256": "250959ad89a0d8df14d8dafab8a6ef1377a241562f68a7763806f798e73d0732"
+      "sha256": "0ca5539dcc5f40eabf865d579f800f2ca66834eaa2749f0c42cc2510270b4d13"
+    },
+    {
+      "path": "scripts/modules/sync-conflict.nu",
+      "sha256": "9dd3729ad7e661bd2567e72b0228ba612089e90b29b7d47ed96f2b3d7deefd96"
     },
     {
       "path": "scripts/modules/sync-local-guard.nu",
-      "sha256": "2db539b6ddda12f15d25df02abf2536fa977381dff09928c438891b1dce5c563"
+      "sha256": "1a0f5017f87a73f9a7fd265b2e348ab6b3c437c006b523f3c9e65c00a8d57956"
     },
     {
       "path": "scripts/modules/sync-provider.nu",
-      "sha256": "40ac944d1546693bbc569a88ac6ecfbd21b971fa5bc4f207d6f2c2293aaf57d2"
+      "sha256": "869d9ba3c594f7aa4c2002fbdc45c8693d2afa83bb185cd25335df6fb4b254ab"
+    },
+    {
+      "path": "scripts/modules/sync-state.nu",
+      "sha256": "2863d19c57af0293bb3b04bc70b9fd2cf75ca9f605c106f6e4c94f779d2e4127"
     },
     {
       "path": "scripts/modules/text-case.nu",
@@ -484,19 +592,19 @@
     },
     {
       "path": "scripts/modules/toolchains.nu",
-      "sha256": "73925cadb8457a0ceef6e850d7ecc1d498d401c29c652eda7097b393c1c6f986"
+      "sha256": "f18aabc0372a26db21e0fad065b4749316ecc4d355260e98356d7eaf4f0f0c1a"
     },
     {
       "path": "scripts/modules/upgrade.nu",
-      "sha256": "2b73e2d122c2625de38a87dcaf2c253d4009cd7e77f962743a9b5cddf49be96e"
-    },
-    {
-      "path": "scripts/modules/vault (# Edit conflict 2026-09-21 3j5tonC #).nu",
-      "sha256": "14f2ea467718ebba5461061cb13ea8fd1e5e9a92233530cdd870d54e376043cf"
+      "sha256": "591c09c24e4b35cccc053dbb85ed7caedef7997ee5ba6943719ebdefc73a0412"
     },
     {
       "path": "scripts/modules/vault.nu",
-      "sha256": "8de2d626e19a4a6714ecbe534025c8c97e4c505ea361a9cca41673f657178c81"
+      "sha256": "ccbce3d3de2aea7061d421e26720048191ed1cbe58abfda5a5c66d1e38b78dee"
+    },
+    {
+      "path": "scripts/modules/wireguard-sync.nu",
+      "sha256": "1f301c1a66036eb69993c154990cf0e05348057427adca01ce7862fd699d1a5c"
     },
     {
       "path": "scripts/new-project.nu",
@@ -508,7 +616,7 @@
     },
     {
       "path": "scripts/nushell-config-dir.nu",
-      "sha256": "ee63ca93c83138decb967ec05f6e300441599b8801e7554345bd80e284eff67b"
+      "sha256": "f1354774c205698af5b57930904ea8430affcd85cdbbad161ab9bc7f7f0bccc7"
     },
     {
       "path": "scripts/orchestration-policy-test.nu",
@@ -517,6 +625,10 @@
     {
       "path": "scripts/plan.nu",
       "sha256": "bf27bfded528f04350e13e14cc9ea41372823c80ade05fe392277181047c9a32"
+    },
+    {
+      "path": "scripts/platform-shim-test.nu",
+      "sha256": "7af51a32d4f6652b49059486983672e945df69e5753b471798830ccd1fe843ad"
     },
     {
       "path": "scripts/posix-bootstrap-test.nu",
@@ -529,10 +641,6 @@
     {
       "path": "scripts/posix/bootstrap-smoke-test.sh",
       "sha256": "aaf8c23775807d7d9c75e6fe310413f8561656fb3e6f8e3825347bafe866be5a"
-    },
-    {
-      "path": "scripts/posix/extract-nu-runtime.sh",
-      "sha256": "fd64d85da943f27610774479b3bba4a801475e14007aa1315069b99d5c1d0dcd"
     },
     {
       "path": "scripts/posix/nu-runtime-fake-rustup.sh",
@@ -552,11 +660,11 @@
     },
     {
       "path": "scripts/posix/prepare-nu-release.sh",
-      "sha256": "3385d868f1703859ca12f9384d46bcb42ea4c2689dc814a97113a8a8e8328e25"
+      "sha256": "c34452cbca0a02b9d4861fc00ed6d6e4b195a6b8df7b92169a1bb7350a193a13"
     },
     {
       "path": "scripts/post-setup-checklist.nu",
-      "sha256": "eae158d1eb3b9b82e44ebf5f7c541be510867c8497415035e87ef4ded32a1807"
+      "sha256": "7638bf4c51add723449dd3ebf544935b918148a742c3d0c1a6aa8f524be6889c"
     },
     {
       "path": "scripts/preflight.nu",
@@ -568,11 +676,19 @@
     },
     {
       "path": "scripts/production-subprocess-policy-test.nu",
-      "sha256": "55f03e7fc5f999949e39a45af9a62b3a992554d60596140915ff9257c84e97d0"
+      "sha256": "6a5460afaddfc759da9ea867a163442f880c7d9e5a982f7f965d216ae36ca626"
     },
     {
-      "path": "scripts/rclone-config-path.nu",
-      "sha256": "5e19a96f1d7581f4c1af1c5c4622712480a54bf451f5d08e3d154ac644e0c0a3"
+      "path": "scripts/prune-obsolete-test.nu",
+      "sha256": "1425b7ef9aa1cb1b628f839d6c1b972ce98b7a3dc2f87073b4636497748d96fc"
+    },
+    {
+      "path": "scripts/prune-obsolete.nu",
+      "sha256": "9df6db756fbbf48395b21b8e20da1b18ec806d9e8924d42bd4e5b867404ead80"
+    },
+    {
+      "path": "scripts/rclone-compare-test.nu",
+      "sha256": "f63eb134bb7e8803eb3e1e58ad12fe4d7f2f1a14761bcf9d73ebbbdb14ce5514"
     },
     {
       "path": "scripts/rclone-explicit-sync-policy-test.nu",
@@ -584,15 +700,15 @@
     },
     {
       "path": "scripts/rclone-sync.nu",
-      "sha256": "880bc3dc7bcf84730aa5264ef8055f8332e2a7f5add225bdb66da1247858e0d4"
+      "sha256": "463784ab99b341e74c208ed6ebd1262a8e6eea7fae35575753b011bf76c459d2"
     },
     {
       "path": "scripts/refresh-commands-main.nu",
-      "sha256": "f7bfc7c1952a83dc8e0fcf1e8f7b00b21f1e69d4ef38986dc20e2c559de6e16c"
+      "sha256": "dd52b243342a8c4d89ccdfa948bb9557c014593f0fe8a5a6c44ed0b8378524c7"
     },
     {
       "path": "scripts/refresh-commands-test.nu",
-      "sha256": "da020bbf4804e84e6f0fffa8687948ea2b88cc95107a35ddd2fa5718bb07060f"
+      "sha256": "5e0e0bd71b2a3e93596508aa942e32195a43394647ece5dc085c01da569aa96b"
     },
     {
       "path": "scripts/refresh-commands.nu",
@@ -604,7 +720,7 @@
     },
     {
       "path": "scripts/release.nu",
-      "sha256": "7d25bc7d48e5266e4ac9a171095843a350f559dcd6a4971a4cfcea9e4f737b23"
+      "sha256": "6ab38777800d41c7af893583159f9cf5907ef3db5c6ac627bb644a319da82c2f"
     },
     {
       "path": "scripts/repo-status.nu",
@@ -612,23 +728,27 @@
     },
     {
       "path": "scripts/report.nu",
-      "sha256": "cfbabc5f5914d47947ced3639f723b40da8100ecec4043663b52a25f9325791a"
+      "sha256": "7897cadddeb96a1ad0c6e265d0f7800d2624d00317cb76ddfe86242f00cf5076"
     },
     {
       "path": "scripts/resolve-config.nu",
-      "sha256": "35f540264c6180846d7293bc83517a810f2646c5e4c3bca2f84c25d861801e1a"
+      "sha256": "7696e8724e5cbb88bd8f22f6f5e795af8f62f9858ae6de70209741695e61e25a"
     },
     {
       "path": "scripts/restore-julia-environments.nu",
-      "sha256": "969ecd4903fff9f70d6ab8ad846448bbf815182e197013e1cc0f07dff46da003"
+      "sha256": "518f07c9d6341236e2f7b4883c728f8975ec3d9ab39fdec637c7414cdc20d88b"
     },
     {
       "path": "scripts/restore-rclone-config.nu",
-      "sha256": "74741432c5f1a1706126db44cb96158037c40bf918a994465ec83ade89c7a3a1"
+      "sha256": "c5af27711ac37c8da95d73b6c8b8be8f55e33fa33773ae66c1144b03fcd62ba5"
+    },
+    {
+      "path": "scripts/restore-rpool-config.nu",
+      "sha256": "98f599bdf2927dea0149d2b5000ef2fcc5a0312b1eb4b0c01eb3d6d64126d823"
     },
     {
       "path": "scripts/restore-rust-state.nu",
-      "sha256": "97dc02e9678e8100fb0ef1ec82ecb2c09039f9005ec009ce6d595598ecb985e0"
+      "sha256": "016a7cf223f500efeb45384951ebe3f4ddcf9f1b8518387c6bd81ad067fe4b5d"
     },
     {
       "path": "scripts/restore-work-environment.nu",
@@ -636,11 +756,39 @@
     },
     {
       "path": "scripts/rollback.nu",
-      "sha256": "a8a05dfa8e3a98ef9f255813e34e74fcbf6628fd621a3a34d6783eaa98a3935a"
+      "sha256": "212e5b50b8fab75009758ee894a7972fda42c6eeb897b047b1e8a8f78f0b4470"
+    },
+    {
+      "path": "scripts/rpool-config-sync.nu",
+      "sha256": "cb7ac61b65b2958ac1d2ef6348b589679925f8d7af79ff43a52b0f9c664529a0"
+    },
+    {
+      "path": "scripts/rpool-hidden-test.nu",
+      "sha256": "0cc7dcfd6db79e3bd97751953363bcced439ba1c85a6aa28a955e65368cba8f7"
+    },
+    {
+      "path": "scripts/rpool-install-test.nu",
+      "sha256": "d08630f9e25a9ee582665a0934b83e01be9e9d4c4a7beb2b7b7ffb0b9ad63af6"
+    },
+    {
+      "path": "scripts/rpool-install.nu",
+      "sha256": "90a256f2207843d49afda232105234cb9f1856ea8bf58b410ba5e7d4c2f64783"
+    },
+    {
+      "path": "scripts/rpool-resolver-test.nu",
+      "sha256": "09bbc9c4f783812efcaac2f62196a3ac20e9903efd296b0d8895c7272a62551f"
+    },
+    {
+      "path": "scripts/rpool-sync-test.nu",
+      "sha256": "72d6befe6c82cfffe0be095752d9aa0be7e51aef8dc27c49330c76291f4bbda1"
+    },
+    {
+      "path": "scripts/rpool-two-machine-test.nu",
+      "sha256": "d63fa5d4aa6ec268ba762b91b53ceaa1f29a508ac54f8923a5489ca0ea5d783c"
     },
     {
       "path": "scripts/run-control.nu",
-      "sha256": "5e5daa7d195a5078d645c46ca2387c45036417ded2b3505a10c8fdaa84566bed"
+      "sha256": "664f83cd74c68fae821befea9555c84e327d4c4e3e6da9eea82e3d8d4adcc121"
     },
     {
       "path": "scripts/run-state-test.nu",
@@ -652,19 +800,19 @@
     },
     {
       "path": "scripts/safe-upgrade.nu",
-      "sha256": "a5ed43d1cbb03a27b6edb4dc53eadbe78bac1d3e7fd24438815f01a01c5c264d"
+      "sha256": "93773c0375df8b318fc983bb762ee1e0fe01f53f55ea5149598bc28a07561b25"
     },
     {
       "path": "scripts/secret-vault.nu",
-      "sha256": "5de737de0f0acf317a279107e98f0d53b73e106e0d9802f99e92321500223f7e"
+      "sha256": "69cde22e86afb26a4d338a739ea06670689f1457ab24b9e98816222970b39d2a"
     },
     {
       "path": "scripts/security-self-test.nu",
-      "sha256": "cd6d021d2f751cb4c315fe05f128dc91ccf1573e53b820b62e72ab5ed4a2f015"
+      "sha256": "f1e76ae08f31fef3662b8518a462990a7088542fec1161d43f9bd2b8838cd6f7"
     },
     {
       "path": "scripts/self-test.nu",
-      "sha256": "ed2582b52e9e77be3ada487e7ce349e2f5810a261b94ac1354943b7843f2fc0a"
+      "sha256": "d38f6894ed48720b85302bb7f84f59067ae6a33f1cfc134fa97047515ae9526e"
     },
     {
       "path": "scripts/setup-entry.nu",
@@ -676,11 +824,11 @@
     },
     {
       "path": "scripts/setup-local-overrides.nu",
-      "sha256": "e483d99b522315daf7522d6a8dc7f6907022c8bf245103cc3b5bbdc07d054f67"
+      "sha256": "54b3b8d78ad7ea502e11f86f6627c992dc2420fc6c5f853b0718f5ea9cc1a3ae"
     },
     {
       "path": "scripts/setup-machine-local.nu",
-      "sha256": "39836a2b7583d832e1542cfba0419568709dbb51f3443b75eee2b48ebbdabd19"
+      "sha256": "ad35ce142ddbeb818c840ac7cdbf780fe02a01d66227e4c7a88a5af34c4407ef"
     },
     {
       "path": "scripts/setup-merge-tool.nu",
@@ -688,11 +836,11 @@
     },
     {
       "path": "scripts/setup-onedrive-ignore-upload.nu",
-      "sha256": "eb59ed5a6408643806f968e91ba2925a076d1ae77e47930e73c4cf4be05d4cf6"
+      "sha256": "2ed84d5d9fdd46f72d76259c318edeb6bc715375a6499ebb5439caffac7d17d0"
     },
     {
       "path": "scripts/setup-platform-shims.nu",
-      "sha256": "fe2f875f07042a4c09ddc858d63d44495913700428bf60e720d59e6733a26f12"
+      "sha256": "49197733ca86ff30387c90f2ee2317bff5c0e059c339e7935edf210c8a107311"
     },
     {
       "path": "scripts/setup-reconcile-test.nu",
@@ -700,7 +848,7 @@
     },
     {
       "path": "scripts/setup-secrets.nu",
-      "sha256": "6e71fcd83086937271997e4b72b6e969e9cea49ffd1a24000d352a3dd240932d"
+      "sha256": "0e060f9b7bad1c889b56f3a2752ed34fc077afe117433c6867af98393d4a5c5f"
     },
     {
       "path": "scripts/setup-ssh-keys.nu",
@@ -709,6 +857,10 @@
     {
       "path": "scripts/setup-starship.nu",
       "sha256": "841b3345ad67df2ed3444a30aba1a704538b6fffb40f5c4b3afebcc656a386b6"
+    },
+    {
+      "path": "scripts/ssh-key-sync-test.nu",
+      "sha256": "c65ec26aa2d39271f4ece47c2b81d566783928059097fd2795c44fc6dbc6260d"
     },
     {
       "path": "scripts/subprocess-chain-test.nu",
@@ -724,35 +876,35 @@
     },
     {
       "path": "scripts/sync-down-local.nu",
-      "sha256": "5969b2cd934bf28c12b8fb2c87aa3520ba1a8b26b781c7bebc016cd9e6abcc5a"
+      "sha256": "da8f1eec200920b2c5a251cff5530bd8a64d18ab796b5d3386d3609383e1c7a5"
     },
     {
       "path": "scripts/sync-down.nu",
-      "sha256": "9ea947a9c3499e28e2c51e834e76d97eea2daf197ddcecc62eb815c497d26c49"
+      "sha256": "b80e3dd7fec2b40a5a7df570571d334300734e098154d0f233e6ac81fe0102fb"
     },
     {
       "path": "scripts/sync-fingerprint.nu",
-      "sha256": "9a31d1a00ae576573d5825e87cda851c5824715f4ef4cc09ab50d6ee1f174c27"
+      "sha256": "0e06f9d3ba2133a22363fb072e85999bafbbdce8d0c87d0656a0cd9865253fc9"
     },
     {
       "path": "scripts/sync-recovery-policy-test.nu",
-      "sha256": "6e7e59e333a94adfa6ed2d4b5eddf4d536d633be9c24a571deeff80e81670058"
+      "sha256": "2116b9866ef30f7ba4412264273e9446a6bed7047a5160b9d707b0b86dbb0c82"
     },
     {
       "path": "scripts/sync-transport-main.nu",
-      "sha256": "f55822ac1d9ce013a01069c42e6b65ffeca6c45f0c308e212616e6546d384d73"
+      "sha256": "c26110cdcb50a62f6c024243afda4d4dfa5c4cfe25faa65a252c9b4659b3f7ee"
     },
     {
       "path": "scripts/sync-transport.nu",
-      "sha256": "f6d3a6d9ab54b2db655ee8dd6fc307d0c29f5aeebcb006fde13e9115bd4225e4"
+      "sha256": "8922c9358758d5d253e5a204983d9063bda9059aa13b06fac3c85fb1d4c42107"
     },
     {
       "path": "scripts/sync-up-local.nu",
-      "sha256": "7325c812af409275c9e4bf6fc7937afc076622490637c29af1e850469827dcf7"
+      "sha256": "5f29fcdd29e02b3cfe2967b2f6a6c4cdeb99ff7248b8c09fda9e8f61a3db7b97"
     },
     {
       "path": "scripts/sync-up.nu",
-      "sha256": "b95817da6105f4230f8131cbc73ed8546967c23eeecde66ce434e90a1bd763a5"
+      "sha256": "e03e11450f1a9d9d881759281ed719db89388469b4bbd41643c5a0946d4bd642"
     },
     {
       "path": "scripts/syntax-check-file.nu",
@@ -772,39 +924,39 @@
     },
     {
       "path": "scripts/update-sync-state.nu",
-      "sha256": "7fdef6dfefb3cadcab1df1846827a474af18525ef2ae2ca95b81997e7e02d926"
+      "sha256": "0b6c213455079af961e34a0f848186f0cc0b1a220c226fe872a10a57649a2886"
     },
     {
       "path": "scripts/update.nu",
-      "sha256": "3e55678295ca228d691f663b5b7a82031c997dd30232aa49063a03a8b78e21d7"
+      "sha256": "c0edb9f17bc3241792d97fbb5f6cbd0d683f2781b2ac03f519d8f96c4e97c8c5"
     },
     {
       "path": "scripts/validate-project.nu",
-      "sha256": "4fa16252e01f1431fa620fba0c0bfc248777c4e470e28ab0b81d5beb4873190d"
+      "sha256": "0c2225d908bec2313fa13e4e42e6c3422bfeeac166d34ef95102e348ae9ed366"
     },
     {
       "path": "scripts/validate-syntax.nu",
-      "sha256": "13adbe1ec2d31c09aca8b5d92bc84d290ce6f7a0c0de57699abf0718a4c24fb0"
+      "sha256": "cb4ff53cfc122c5e6ab1bc108252d436ebdea9340e791bec44bfc50dc0c78931"
     },
     {
       "path": "scripts/vault-init-test.nu",
       "sha256": "0f957ffd0c49f4efcd7205d17af4ec860349cd9cf4f9c5108a756ed958251954"
     },
     {
-      "path": "scripts/verify-0.13.2.nu",
-      "sha256": "ff35c9ba282f0ac50bcd33197416c751fe3c0251f16254ecc1752733997dc891"
-    },
-    {
       "path": "scripts/verify-all.nu",
-      "sha256": "f5b7470c8c525cd042685f43a9fb3365dbed2b57430b07bde72ca73f51e00d8a"
+      "sha256": "b19b18fcad7db8f83f0892f88bad9af908aa75e6b5f311a52756b58d3b962f10"
     },
     {
       "path": "scripts/verify-plan.nu",
       "sha256": "989ecd308c60af0842cfbca0218a9814b9b730aec632aa12a6d168b937a167fb"
     },
     {
+      "path": "scripts/verify-sync.nu",
+      "sha256": "1f19de932e14415512f34b80ce3272cfe83c049a9037b115ca1b36e724506ef6"
+    },
+    {
       "path": "scripts/version-info.nu",
-      "sha256": "0eae65e8fde2823e9009fc0e794ab72f50e3e91ff941871dd2f4d90302958677"
+      "sha256": "4adb6b7c0cf931d862fa8e7c979bca2b5b32f43af9aa1f5d8a1f8cc592129cc0"
     },
     {
       "path": "scripts/wiki-docs-test.nu",
@@ -819,8 +971,8 @@
       "sha256": "0d806cc1bfbfb78b78cb68e2f6f7143c4ad32ed0c74dad5f4b0eeed0c53d26e5"
     },
     {
-      "path": "scripts/windows/extract-nu-runtime.ps1",
-      "sha256": "cc117c4c73d74b1a5bb493660cada5ea5aa9a724c167fdbe638cbd5484096633"
+      "path": "scripts/windows/install-wireguard-sync-helper.ps1",
+      "sha256": "c2fcf4fde39b1a18a07deb1d224396ea3a9f17e2be60baa1b00850a143175812"
     },
     {
       "path": "scripts/windows/prepare-nu-cargo.ps1",
@@ -843,16 +995,24 @@
       "sha256": "d42dc12b75f0a25a219d3902703118e93b6d6a852658a8aa41c1ed911111ebb1"
     },
     {
+      "path": "scripts/wireguard-config-sync.nu",
+      "sha256": "997fff87762e8703d6cdc168a9389ae0f9672b14858112a331a491c1c0084a9e"
+    },
+    {
+      "path": "scripts/wireguard-policy-test.nu",
+      "sha256": "938e3a26b312b217085311197e002bee6aee39becfde7c3a01bc47a0ca7d42ce"
+    },
+    {
       "path": "scripts/write-sync-meta.nu",
-      "sha256": "b74e46279a3d95a1e00d78cd60ba48d2169759b79a8654aa70a9dff65c1cc970"
+      "sha256": "3c59bb10abfa680ed601b534100744ec53c19c8b7325616e75654f5c6dc3b7ce"
     },
     {
       "path": "setup-main.nu",
-      "sha256": "258d9e3c987072516b415450c957940bf6bc043cfe950dfd0d093c44d0a338a5"
+      "sha256": "874ae8f7a7f826407198c5ded9286112c04acdc0982328543569931a08d3ade1"
     },
     {
       "path": "setup.nu",
-      "sha256": "3991be563bd305018a0b47731c02fb064b27ecdc6dea4ae20b73f8ea72c5388d"
+      "sha256": "6c5b2e396bd4507378c92beeb9cd339c563135a51fbef5fa2448a661edfe4a08"
     },
     {
       "path": "templates/conflict-policy.nuon.example",
@@ -871,12 +1031,20 @@
       "sha256": "797ca6c0a2baf19d00efaa8f10666e431683b0a1755f45771b7db0e5f5422c3f"
     },
     {
+      "path": "templates/sync-tools.nu.example",
+      "sha256": "48eb9bc5b436093ad20a7338c612f2d1cdfb220d1835b595334069fc72ca7538"
+    },
+    {
       "path": "templates/toolchains.lock.nuon.example",
       "sha256": "409d6ca23a06408eb4e22dd5b35f71ef493e719e2b993700e4d9f9b327590f47"
     },
     {
       "path": "templates/vault.nuon.example",
       "sha256": "82a427dab94074ca6806cad890048cd3e146a52fbc4d3c6a00c218289f8cc44a"
+    },
+    {
+      "path": "templates/wireguard.nuon.example",
+      "sha256": "5b7ac16c448b8f0157fc64000a8a7c1deda3e8402be0bdfe6f629d47deafef12"
     },
     {
       "path": "toolchains/lock.nuon",
@@ -888,15 +1056,27 @@
     },
     {
       "path": "tools/cloudwins/Cargo.toml",
-      "sha256": "3b4d2b150185e054cc150f2347a16cf44747a3e7ddec068052283683dbc3af30"
+      "sha256": "166b633cdeb834a56899c28bdbb7266e781d6d9e6af0ec5842785f8f705f3ada"
     },
     {
       "path": "tools/cloudwins/src/main.rs",
-      "sha256": "b30fedd3c648c664168717731cf11dafe012d52e5c2d49478439e7846fe5ddd7"
+      "sha256": "07e63948db23a2007c433dae7c71d771e72b9b199a160bde5fe1f75fce415dce"
     },
     {
       "path": "tools/cloudwins/src/tests.rs",
-      "sha256": "a80c4ea4519a6a633e8a5d87e917ebffbd2063c7e470c375172a9a7fde86c788"
+      "sha256": "56f38e237c9ca161ef52cc465be154dc37e95668878d533e8aaaa539b8399c04"
+    },
+    {
+      "path": "tools/wireguard-helper/README.md",
+      "sha256": "5e125497f0293c5f21ee72e7b5940373a34d70f0c38e4c04dc8762835a09d5b8"
+    },
+    {
+      "path": "tools/wireguard-helper/Test-WireGuardSync.ps1",
+      "sha256": "71049a51096e87cd0996959d46c37b6c0619a48e27c3df962aa09d7e3070605c"
+    },
+    {
+      "path": "tools/wireguard-helper/WireGuardSync.cs",
+      "sha256": "f4ad153cffe1fc59232b1023be12c9ffad099f3014d32f571a2a5c016e779486"
     },
     {
       "path": "verify.nu",

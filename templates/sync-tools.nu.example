@@ -1,0 +1,11 @@
+# Paste into `dotctl config local` (or config.nu), then restart Nushell.
+# Set ONE directory containing both rpool and rclone.
+# Windows: rpool.exe + rclone.exe; macOS/Linux: rpool + rclone.
+# Replace this example with the actual directory on this machine.
+let sync_tools = ('C:\Tools\rpool' | path expand)
+if not ($sync_tools | path exists) or ($sync_tools | path type) != 'dir' {
+    error make {msg: $"Sync executable directory does not exist: ($sync_tools)"}
+}
+$env.PATH = ($env.PATH | prepend $sync_tools | uniq)
+# Opt into PATH discovery instead of a previous per-executable override.
+hide-env -i RPOOL_BIN

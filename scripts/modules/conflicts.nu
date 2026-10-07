@@ -1,7 +1,7 @@
 const SUBPROCESS = path self ./subprocess.nu
 const CONSOLE = path self ./console.nu
 use $SUBPROCESS [run-command]
-use $CONSOLE [print-ok print-warn style]
+use $CONSOLE [print-ok print-heading print-text print-status]
 # Protected-file and three-way conflict helpers.
 
 const CORE_MODULE = path self ./core.nu
@@ -107,12 +107,12 @@ export def print-protected-conflicts [conflicts: list] {
         return
     }
 
-    print (style "warn" "Protected-file conflicts")
-    print "────────────────────────────────────────────────────────────"
+    print-heading "Protected-file conflicts"
+    print-heading "────────────────────────────────────────────────────────────"
     for item in $conflicts {
-        print ((style "warn" "  [protected]") + " " + $item.target)
+        print-status "warn" "protected" $item.target
         if not (($item.error? | default "") | is-empty) {
-            print ("              " + $item.error)
+            print-text "warn" ("              " + $item.error)
         }
     }
 }

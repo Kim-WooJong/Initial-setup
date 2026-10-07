@@ -1,5 +1,6 @@
 #!/usr/bin/env nu
-
+const CORE = path self ./modules/core.nu
+use $CORE [nu-home]
 const TOOLS_ROOT = path self ..
 const INSTALL_UTILS = path self ./modules/install-utils.nu
 use $INSTALL_UTILS [run-installer probe-tool winget-package-state linux-is-root privileged-command]
@@ -16,14 +17,6 @@ use modules/starship.nu [probe-starship-candidates resolve-starship]
 #
 # A failed Starship installation does not stop setup.
 # ============================================================
-
-def nu-home [] {
-    let home_path = ($nu | get --optional home-path)
-    if $home_path != null { return $home_path }
-    let home_dir = ($nu | get --optional home-dir)
-    if $home_dir != null { return $home_dir }
-    error make {msg: "Unable to determine the Nushell home directory."}
-}
 
 def install-with-winget [repair: bool = false] {
     if (which winget | is-empty) {

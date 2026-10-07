@@ -1,28 +1,12 @@
 #!/usr/bin/env nu
-
+const CORE = path self ./modules/core.nu
+use $CORE [nu-home machine-context useful-lines]
 const TOOLS_ROOT = path self ..
 const INSTALL_UTILS = path self ./modules/install-utils.nu
 use $INSTALL_UTILS [run-installer probe-tool winget-package-state privileged-command]
 
 # Common CLI packages are optional individually. Each command is considered
 # ready only after a real version probe succeeds.
-
-def nu-home [] {
-    let test_mode = ($env.INITIAL_SETUP_TEST_MODE? | default "" | str trim)
-    let override = ($env.INITIAL_SETUP_HOME_OVERRIDE? | default "" | str trim)
-    if $test_mode == "1" and not ($override | is-empty) { return ($override | path expand) }
-    let home_path = ($nu | get --optional home-path)
-    if $home_path != null { return $home_path }
-    let home_dir = ($nu | get --optional home-dir)
-    if $home_dir != null { return $home_dir }
-    error make {msg: "Unable to determine the Nushell home directory."}
-}
-
-def machine-context [] { open ((nu-home) | path join ".config" "dotfiles" "config.nuon") }
-
-def useful-lines [file: path] {
-    open --raw $file | lines | each {|line| $line | str trim } | where {|line| not ($line | is-empty) and not ($line | str starts-with "#") }
-}
 
 def mappings [file: path] { useful-lines $file | each {|line| $line | split row "|" } }
 def common-packages [] { useful-lines ($TOOLS_ROOT | path join "packages" "common.txt") }
@@ -35,6 +19,25 @@ def version-probe [command: string] {
 
 def logical-probe [name: string command: string] {
     let primary = (version-probe $command)
+
+    if $name == "age" {
+        let keygen = (version-probe "age-keygen")
+        if $primary.healthy and $keygen.healthy { return $primary }
+        if $primary.found {
+            return {
+                found: true
+                healthy: false
+                path: $primary.path
+                version: ""
+                result: (if $keygen.result != null { $keygen.result } else { $primary.result })
+            }
+        }
+        if $keygen.found {
+            return {found: true healthy: false path: $keygen.path version: "" result: $keygen.result}
+        }
+        return $primary
+    }
+
     if $primary.healthy { return $primary }
     if $nu.os-info.name == "linux" and $name == "fd" { return (version-probe "fdfind") }
     if $nu.os-info.name == "linux" and $name == "bat" { return (version-probe "batcat") }
@@ -133,14 +136,52 @@ def install-linux [names: list] {
     }
 }
 
-def main [] {
-    let context = (machine-context)
-    if not ($context.features.cli_tools? | default true) { print "[skip] CLI tool installation disabled"; return }
-    let names = (common-packages)
+def main [--required: string = ""] {
+    let required_name = ($required | str trim)
+    let mapping_file = (match $nu.os-info.name {
+        "windows" => { $TOOLS_ROOT | path join "packages" "windows.txt" }
+        "macos" => { $TOOLS_ROOT | path join "packages" "macos.txt" }
+        "linux" => { $TOOLS_ROOT | path join "packages" "linux.txt" }
+        _ => { null }
+    })
+
+    let required_command = if not ($required_name | is-empty) {
+        if $mapping_file == null {
+            error make {msg: ("Required package '" + $required_name + "' is not supported on this OS.")}
+        }
+        let row = (find-row (mappings $mapping_file) $required_name)
+        if $row == null {
+            error make {msg: ("Required package mapping is missing: " + $required_name)}
+        }
+        $row | get 1
+    } else {
+        ""
+    }
+
+    let names = if not ($required_name | is-empty) {
+        [$required_name]
+    } else {
+        let context = (machine-context)
+        if not ($context.features.cli_tools? | default true) { print "[skip] CLI tool installation disabled"; return }
+        common-packages
+    }
+
     match $nu.os-info.name {
         "windows" => { install-windows $names }
         "macos" => { install-macos $names }
         "linux" => { install-linux $names }
         _ => { print "[warn] Unsupported OS for common CLI package installation." }
+    }
+
+    if not ($required_name | is-empty) {
+        let final = (logical-probe $required_name $required_command)
+        if not $final.healthy {
+            error make {
+                msg: (
+                    "Required package '" + $required_name + "' is not usable after installation. " +
+                    "Repair the package manager/PATH and rerun setup."
+                )
+            }
+        }
     }
 }

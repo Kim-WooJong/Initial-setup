@@ -30,6 +30,24 @@ The main path is `verify.nu` -> `scripts/verify-all.nu`. It combines repository 
 
 Important regression areas include entry-point routing, partial archive rejection, runtime selection, process diagnostics, lock behavior, provider-head concurrency, verified staging, backup/rollback recovery, Cloud-wins plan/apply/rollback, and command-reference coverage.
 
+## Release hygiene
+
+Before regenerating `RELEASE-MANIFEST.json`, inspect known generated/editor artifacts:
+
+```nu
+nu scripts/cleanup-release-junk.nu --check
+```
+
+If candidates are present, remove only those known-safe artifacts with:
+
+```nu
+nu scripts/cleanup-release-junk.nu
+```
+
+The cleanup list is version-specific. It is also intended for manual patch overlays so files retired by the new version do not survive simply because ZIP extraction cannot delete old paths. If the list is empty for a release, the command exits successfully without removing anything.
+
+The cleanup script skips `.git`, removes only explicit build/cache/editor patterns, and exits successfully without changes when no junk is present.
+
 ## Documentation maintenance
 
 - Keep all Markdown documentation in English.

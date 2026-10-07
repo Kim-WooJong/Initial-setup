@@ -6,7 +6,7 @@ use $SUBPROCESS [run-command]
 const CORE_MODULE = path self ./core.nu
 const CONFLICTS_MODULE = path self ./conflicts.nu
 const TOOLCHAINS_MODULE = path self ./toolchains.nu
-use $CORE_MODULE [nu-home machine-context]
+use $CORE_MODULE [nu-home machine-context useful-lines]
 const PROVIDER_MODULE = path self ./sync-provider.nu
 use $PROVIDER_MODULE [load-provider provider-head provider-id load-provider-state]
 const VAULT_MODULE = path self ./vault.nu
@@ -14,12 +14,8 @@ use $VAULT_MODULE [vault-configured]
 use $CONFLICTS_MODULE [protected-conflicts]
 use $TOOLCHAINS_MODULE [toolchain-status]
 
-export def plans-root [] {
+def plans-root [] {
     (nu-home) | path join ".config" "dotfiles" "plans"
-}
-
-def useful-lines [file: path] {
-    open --raw $file | lines | each { |line| $line | str trim } | where { |line| not ($line | is-empty) and not ($line | str starts-with "#") }
 }
 
 def platform-map [] {
@@ -38,7 +34,7 @@ def command-present [name: string command: string] {
     false
 }
 
-export def package-status [] {
+def package-status [] {
     let wanted = (useful-lines ($TOOLS_ROOT | path join "packages" "common.txt"))
     let mapping = (platform-map)
     $wanted | each { |name|
@@ -53,7 +49,7 @@ export def package-status [] {
     }
 }
 
-export def config-status [data_root: path] {
+def config-status [data_root: path] {
     if (which chezmoi | is-empty) or not ($data_root | path exists) {
         return { available: false lines: [] count: 0 diff_count: 0 verify_ok: false }
     }

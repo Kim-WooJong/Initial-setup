@@ -58,7 +58,7 @@ def command-output [program: string args: list] {
     $result.stdout
 }
 
-export def current-toolchain-versions [] {
+def current-toolchain-versions [] {
     {
         rust: (parse-tool-version "rustc" (command-output "rustc" ["--version"]))
         rust_channel: (parse-rust-channel (command-output "rustup" ["show" "active-toolchain"]))

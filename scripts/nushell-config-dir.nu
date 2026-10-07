@@ -1,5 +1,7 @@
 const SUBPROCESS = path self ./modules/subprocess.nu
 use $SUBPROCESS [run-command]
+const TEXT_CASE = path self ./modules/text-case.nu
+use $TEXT_CASE [text-lower]
 
 def nu-home-dir [] {
     let modern = ($nu | get -o home-dir)
@@ -15,7 +17,7 @@ def normalize-path [value: path] {
     let expanded = ($value | path expand | into string)
 
     if $nu.os-info.name == 'windows' {
-        $expanded | str lowercase
+        $expanded | text-lower
     } else {
         $expanded
     }

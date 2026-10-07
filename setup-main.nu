@@ -7,6 +7,8 @@ use $PROVIDER_MODULE [load-provider load-provider-state assert-expected-head sta
 
 const CLOUD_CONFIG = path self ./scripts/modules/cloud-wins-config.nu
 use $CLOUD_CONFIG [cloud-mode-active]
+const TEXT_CASE_MODULE = path self ./scripts/modules/text-case.nu
+use $TEXT_CASE_MODULE [text-lower]
 const CORE_MODULE = path self ./scripts/modules/core.nu
 const PROFILES_MODULE = path self ./scripts/modules/profiles.nu
 const SETUP_POLICY_MODULE = path self ./scripts/modules/setup-policy.nu
@@ -14,14 +16,18 @@ const RUN_STATE_MODULE = path self ./scripts/modules/run-state.nu
 const CONFLICTS_MODULE = path self ./scripts/modules/conflicts.nu
 const RCLONE_INSTALL_MODULE = path self ./scripts/modules/rclone-install.nu
 const SUBPROCESS_MODULE = path self ./scripts/modules/subprocess.nu
+const CONSOLE_MODULE = path self ./scripts/modules/console.nu
+const MACHINE_CONFIG_MODULE = path self ./scripts/modules/machine-config.nu
 
-use $CORE_MODULE [nu-home machine-config-path detect-machine-name error-message failure-envelope captured-failure]
+use $CORE_MODULE [nu-home machine-config-path detect-machine-name error-message failure-envelope captured-failure project-version project-schema-version]
 use $PROFILES_MODULE [profile-defaults profile-layers profile-forced-features]
 use $SETUP_POLICY_MODULE [config-policy-names normalize-config-policy choose-config-policy choose-reviewed-policy local-config-exists private-config-exists]
 use $RUN_STATE_MODULE [create-run load-run update-run-context stage-status mark-stage finish-run resolve-resume-run]
 use $CONFLICTS_MODULE [protected-conflicts print-protected-conflicts]
 use $RCLONE_INSTALL_MODULE [refresh-rclone-path ensure-rclone]
 use $SUBPROCESS_MODULE [run-command command-failure-message]
+use $CONSOLE_MODULE [print-status print-heading print-text print-key-value print-choice print-list-item print-command print-output-text print-diff-text]
+use $MACHINE_CONFIG_MODULE [write-machine-config]
 # ============================================================
 # Initial-setup
 #
@@ -33,13 +39,13 @@ const SETUP_RECONCILE = path self ./scripts/modules/setup-reconcile.nu
 use $SETUP_RECONCILE [setup-head-changed choose-changed-source preserve-reviewed-source]
 
 const TOOLS_ROOT = path self .
-const DEFAULT_DATA_ROOT = path self ..
+const DEFAULT_DATA_ROOT = path self ./private
 
 def section [title: string] {
     print ""
-    print "============================================================"
-    print (" " + $title)
-    print "============================================================"
+    print-heading "============================================================"
+    print-heading (" " + $title)
+    print-heading "============================================================"
     print ""
 }
 
@@ -78,16 +84,6 @@ def feature-value [
     } else {
         $old_value
     }
-}
-
-def app-version [] {
-    let version_file = ($TOOLS_ROOT | path join "VERSION")
-    open $version_file --raw | into string | str trim
-}
-
-def schema-version [] {
-    let schema_file = ($TOOLS_ROOT | path join "SCHEMA_VERSION")
-    open $schema_file --raw | into string | str trim | into int
 }
 
 def build-machine-config [
@@ -135,8 +131,8 @@ def build-machine-config [
         }
     )
     {
-        app_version: (app-version)
-        schema_version: (schema-version)
+        app_version: (project-version $TOOLS_ROOT)
+        schema_version: (project-schema-version $TOOLS_ROOT)
         data_root: ($data_root | path expand | into string)
         tools_root: ($TOOLS_ROOT | path expand | into string)
 
@@ -187,48 +183,37 @@ def build-machine-config [
 }
 
 def save-machine-config [context: record] {
-    let config_file = (machine-config-path)
-
-    mkdir ($config_file | path dirname)
-
-    $context
-    | to nuon
-    | save --force $config_file
-
-    print (
-        "[save] Machine config -> " + ($config_file | into string)
-    )
+    let config_file = (write-machine-config $context)
+    print-status "ok" "save" ("Machine config -> " + ($config_file | into string))
 }
 
-def load-saved-data-root [] {
-    let config_file = (machine-config-path)
+def test-mode [] { ($env.INITIAL_SETUP_TEST_MODE? | default "" | str trim) == "1" }
 
-    if not ($config_file | path exists) {
-        return null
-    }
-
-    let config = (open $config_file)
-    let data_root = ($config.data_root? | default "")
-
-    if ($data_root | is-empty) {
-        return null
-    }
-
-    $data_root | path expand
+# Windows paths compare case-insensitively and with either separator.
+def comparable-path [value: path] {
+    let text = ($value | path expand | into string | str replace --all '\' '/' | str trim --right --char '/')
+    if $nu.os-info.name == "windows" { $text | text-lower } else { $text }
 }
 
+# The private data location is fixed to <checkout>/private. A data_root saved
+# by an older version is ignored (see core.nu fixed-private-context); only
+# isolated tests may pass an explicit --data-dir.
 def resolve-data-root [requested: string] {
-    if not ($requested | is-empty) {
-        return ($requested | path expand)
+    if (test-mode) and not ($requested | is-empty) { return ($requested | path expand) }
+    if not ($requested | is-empty) and (comparable-path $requested) != (comparable-path $DEFAULT_DATA_ROOT) {
+        error make {msg: ("The private data location is fixed to " + ($DEFAULT_DATA_ROOT | path expand | into string) + "; --data-dir is accepted only by isolated tests.")}
     }
-
-    let saved = (load-saved-data-root)
-
-    if $saved != null {
-        return $saved
-    }
-
     $DEFAULT_DATA_ROOT | path expand
+}
+
+# Raw data_root saved by an older version, when it is not the fixed location.
+def ignored-saved-data-root [] {
+    if (test-mode) { return null }
+    let file = (machine-config-path)
+    if not ($file | path exists) { return null }
+    let saved = (try { open $file | get data_root | into string } catch { "" })
+    if ($saved | is-empty) or (comparable-path $saved) == (comparable-path $DEFAULT_DATA_ROOT) { return null }
+    $saved
 }
 
 def resolve-mode [
@@ -354,7 +339,7 @@ def diagnostic-text [err: any] {
 }
 
 def is-user-interruption [err: any] {
-    let text = (diagnostic-text $err | str lowercase)
+    let text = (diagnostic-text $err | text-lower)
 
     (
         ($text | str contains "user_interrupted") or ($text | str contains "nu::shell::io::interrupted") or ($text | str contains "operation interrupted") or ($text | str contains "operation was interrupted")
@@ -374,11 +359,11 @@ def run-stage [
     if not ($run_id | is-empty) and (resume-enabled) {
         let previous = (stage-status $run_id $title)
         if $previous == "success" and not $always_run {
-            print ("[skip] Checkpoint already completed in run " + $run_id)
+            print-status "warn" "skip" ("Checkpoint already completed in run " + $run_id)
             return true
         }
         if $previous == "warning" {
-            print "[retry] Previous optional attempt ended with a warning; retrying this stage."
+            print-status "warn" "retry" "Previous optional attempt ended with a warning; retrying this stage."
         }
     }
 
@@ -413,21 +398,21 @@ def run-stage [
     print ""
 
     if $optional {
-        print --stderr ("[warn] Optional stage failed: " + $title)
-        print --stderr $detail
+        print-status "warn" "warn" ("Optional stage failed: " + $title) --stderr
+        print-text "warn" $detail --stderr
         if not ($run_id | is-empty) {
             mark-stage $run_id $title "warning" $detail
         }
-        print "[continue] This feature is optional; setup will continue."
+        print-status "info" "continue" "This feature is optional; setup will continue."
         return false
     }
 
-    print --stderr ("[error] Stage failed: " + $title)
-    print --stderr $detail
+    print-status "error" "error" ("Stage failed: " + $title) --stderr
+    print-text "error" $detail --stderr
     if not ($run_id | is-empty) {
         mark-stage $run_id $title "failed" $detail
         print ""
-        print ("[resume] nu setup.nu --resume --run-id " + $run_id)
+        print-status "info" "resume" ("nu setup.nu --resume --run-id " + $run_id)
     }
 
     error make { msg: $stage_message }
@@ -448,7 +433,7 @@ def run-script [
     }
 
     run-stage $title {||
-        print ("[run] " + ($script | into string))
+        print-status "info" "run" ($script | into string)
         let child_args = (["--no-config-file" ($script | into string)] | append $args)
         let result = (run-command ($nu.current-exe | into string) $child_args --live)
         if not $result.ok {
@@ -464,17 +449,17 @@ def protected-apply-choices [
     mut keep_local = []
 
     print ""
-    print "Protected-file review"
-    print "────────────────────────────────────────────────────────────"
-    print "Each protected file differs from the private source."
-    print "The diff is shown before you choose what to do."
+    print-heading "Protected-file review"
+    print-heading "────────────────────────────────────────────────────────────"
+    print-text "info" "Each protected file differs from the private source."
+    print-text "info" "The diff is shown before you choose what to do."
     print ""
 
     for conflict in $conflicts {
         let target = ($conflict.target | path expand)
 
-        print ("Protected target: " + ($target | into string))
-        print "────────────────────────────────────────────────────────────"
+        print-key-value "Protected target: " ($target | into string)
+        print-heading "────────────────────────────────────────────────────────────"
 
         if not (($conflict.error? | default "") | is-empty) {
             error make {
@@ -499,42 +484,42 @@ def protected-apply-choices [
 
         let diff_text = ($diff_result.stdout? | default "")
         if ($diff_text | is-empty) {
-            print "(No textual diff was returned.)"
+            print-text "warn" "(No textual diff was returned.)"
         } else {
-            print $diff_text
+            print-diff-text $diff_text
         }
 
         print ""
-        print "  [K] Keep the current local file (default)"
-        print "  [O] Overwrite it with the private-source version"
-        print "  [C] Cancel setup without changing this protected file"
+        print-choice "K" "Keep the current local file (default)"
+        print-choice "O" "Overwrite it with the private-source version"
+        print-choice "C" "Cancel setup without changing this protected file"
 
         mut decision = ""
         while ($decision | is-empty) {
-            print "Choose [K] (press Enter to keep the local file):"
-            let answer = (input | str trim | str lowercase)
+            print-text "prompt" "Choose [K] (press Enter to keep the local file):"
+            let answer = (input | str trim | text-lower)
             let choice = if ($answer | is-empty) { "k" } else { $answer }
 
             if $choice in ["k" "keep"] {
                 let kind = (try { $target | path type } catch { "" })
                 if $kind != "file" {
-                    print "[warn] Automatic keep-local restore supports regular files only."
-                    print "       Choose overwrite or cancel for this target."
+                    print-status "warn" "warn" "Automatic keep-local restore supports regular files only."
+                    print-text "warn" "       Choose overwrite or cancel for this target."
                     continue
                 }
 
                 $keep_local = ($keep_local | append ($target | into string))
                 $decision = "keep"
-                print "[keep] Current local protected file will be restored after private apply."
+                print-status "info" "keep" "Current local protected file will be restored after private apply."
             } else if $choice in ["o" "overwrite"] {
                 $decision = "overwrite"
-                print "[overwrite] Private-source version will replace the local protected file."
+                print-status "warn" "overwrite" "Private-source version will replace the local protected file."
             } else if $choice in ["c" "cancel" "q" "quit"] {
                 error make {
                     msg: "Protected-file review was cancelled. No private-authoritative apply was performed."
                 }
             } else {
-                print "Choose K, O, or C."
+                print-text "warn" "Choose K, O, or C."
             }
         }
 
@@ -575,7 +560,7 @@ def restore-protected-local [backup: record] {
         let saved = ($item.backup | path expand)
         mkdir ($target | path dirname)
         cp --force $saved $target
-        print ("[restored] Local protected file: " + ($target | into string))
+        print-status "ok" "restored" ("Local protected file: " + ($target | into string))
     }
 
     let dir = ($backup.dir? | default null)
@@ -621,10 +606,10 @@ def apply-private-source [
     restore-protected-local $protected_backup
 
     if not (($apply_result.stdout? | default "") | is-empty) {
-        print $apply_result.stdout
+        print-output-text $apply_result.stdout
     }
     if not (($apply_result.stderr? | default "") | is-empty) {
-        print $apply_result.stderr
+        print-output-text $apply_result.stderr --stderr
     }
 
     if not $apply_result.ok {
@@ -638,33 +623,41 @@ def preview-private-source [data_root: path] {
     section "Private configuration preview"
 
     if not (private-config-exists $data_root) {
-        print "No existing private configuration was detected."
-        print "This machine would become the initial configuration source."
+        print-text "warn" "No existing private configuration was detected."
+        print-text "info" "This machine would become the initial configuration source."
         return
     }
 
     if (which chezmoi | is-empty) {
-        print "[warn] chezmoi is not installed; a detailed diff cannot be shown."
+        print-status "warn" "warn" "chezmoi is not installed; a detailed diff cannot be shown."
         return
     }
 
-    print "chezmoi status:"
+    print-heading "chezmoi status:"
     let status_args = [
         "--source"
         ($data_root | into string)
         "status"
     ]
-    let status = (run-command "chezmoi" $status_args --live)
+    let status = (run-command "chezmoi" $status_args)
+    if not ($status.stdout | str trim | is-empty) { print-output-text ($status.stdout | str trim --right) }
+    if not ($status.stderr | str trim | is-empty) { print-output-text ($status.stderr | str trim --right) --stderr }
     if not $status.ok { error make {msg: (command-failure-message "chezmoi status" $status)} }
 
     print ""
-    print "chezmoi diff:"
+    print-heading "chezmoi diff:"
     let diff_args = [
         "--source"
         ($data_root | into string)
         "--no-pager" "--use-builtin-diff" "diff"
     ]
-    let diff = (run-command "chezmoi" $diff_args --live)
+    let diff = (run-command "chezmoi" $diff_args)
+    if not ($diff.stdout | str trim | is-empty) {
+        print-diff-text ($diff.stdout | str trim --right)
+    } else if $diff.ok {
+        print-text "ok" "(No differences.)"
+    }
+    if not ($diff.stderr | str trim | is-empty) { print-output-text ($diff.stderr | str trim --right) --stderr }
     if not $diff.ok { error make {msg: (command-failure-message "chezmoi diff" $diff)} }
 }
 
@@ -675,39 +668,42 @@ def print-dry-run [
 ] {
     section "Dry run"
 
-    print "No files, packages, or scheduler entries will be changed."
+    print-text "info" "No files, packages, or scheduler entries will be changed."
     print ""
-    print "Resolved configuration:"
+    print-heading "Resolved configuration:"
     print $context
     print ""
-    print ("Mode          : " + $mode)
-    print ("Config policy : " + $policy)
-    print ("Profile       : " + $context.machine.profile)
-    print ("Private data  : " + $context.data_root)
-    print ("Auto sync     : " + ($context.sync.enabled | into string))
-    print ("Sync interval : " + ($context.sync.interval_minutes | into string) + " minute(s)")
-    print ("Prune extras  : " + ($context.sync.prune_extras | into string))
+    print-key-value "Mode          : " $mode
+    print-key-value "Config policy : " $policy
+    print-key-value "Profile       : " $context.machine.profile
+    print-key-value "Private data  : " $context.data_root
+    print-key-value "Auto sync     : " ($context.sync.enabled | into string)
+    print-key-value "Sync interval : " (($context.sync.interval_minutes | into string) + " minute(s)")
+    print-key-value "Prune extras  : " ($context.sync.prune_extras | into string)
     print ""
-    print "Planned stages:"
-    print "  - optional full project validation only when --validate is requested"
-    print "  - create transaction Run ID/checkpoints and configuration backups"
-    print "  - protect SSH/Git targets from unreviewed private overwrite"
-    print "  - ensure rclone is installed and usable (existing package manager; no auto-upgrade)"
-    print "  - initialize private source"
-    print "  - install Neovim and D2Coding when enabled"
-    print "  - install enabled toolchains / CLI tools"
-    print "  - validate/migrate machine config schema"
-    print "  - import or apply configuration"
-    print "  - configure platform shims"
-    print "  - configure local Git / SSH overrides"
-    print "  - apply folder-specific Git identities and recover SSH public keys"
-    print "  - configure local secrets autoload"
-    print "  - capture/restore Rust, Julia, and rclone configuration state"
-    print "  - configure Starship / WezTerm when enabled"
-    print "  - initialize sync baseline"
-    print "  - install automatic sync scheduler when enabled"
-    print "  - capture tool-version state"
-    print "  - run environment doctor and audit"
+    print-heading "Planned stages:"
+    print-list-item "optional full project validation only when --validate is requested"
+    print-list-item "create transaction Run ID/checkpoints and configuration backups"
+    print-list-item "protect SSH/Git targets from unreviewed private overwrite"
+    print-list-item "ensure rclone is installed and usable (existing package manager; no auto-upgrade)"
+    if ($context.features.rclone_config? | default false) {
+        print-list-item "ensure age and age-keygen are installed and usable for encrypted rclone config"
+    }
+    print-list-item "initialize private source"
+    print-list-item "install Neovim and D2Coding when enabled"
+    print-list-item "install enabled toolchains / CLI tools"
+    print-list-item "validate/migrate machine config schema"
+    print-list-item "import or apply configuration"
+    print-list-item "configure platform shims"
+    print-list-item "configure local Git / SSH overrides"
+    print-list-item "apply folder-specific Git identities and recover SSH public keys"
+    print-list-item "configure local secrets autoload"
+    print-list-item "capture/restore Rust, Julia, rclone, and portable rpool configuration state"
+    print-list-item "configure Starship / WezTerm when enabled"
+    print-list-item "initialize sync baseline"
+    print-list-item "install automatic sync scheduler when enabled"
+    print-list-item "capture tool-version state"
+    print-list-item "run environment doctor and audit"
 }
 
 def --env setup-impl [
@@ -738,32 +734,32 @@ def --env setup-impl [
             $active_run_id = (resolve-resume-run $run_id)
             $resume_state = (load-run $active_run_id)
             let run_version = ($resume_state.version? | default "")
-            if $run_version != (app-version) {
+            if $run_version != (project-version $TOOLS_ROOT) {
                 error make { msg: ("Run " + $active_run_id + " was created by Initial-setup " + $run_version + "; resume it with the same version or rollback/start a new run.") }
             }
             $env.INITIAL_SETUP_RUN_ID = $active_run_id
             $env.INITIAL_SETUP_RESUME = "1"
 
             section "Resuming setup transaction"
-            print ("Run ID : " + $active_run_id)
-            print ("Status : " + ($resume_state.status? | default "unknown"))
+            print-key-value "Run ID : " $active_run_id
+            print-key-value "Status : " ($resume_state.status? | default "unknown")
         } else {
             let preliminary_data_root = (resolve-data-root $data_dir)
-            $active_run_id = (create-run (app-version) $mode $config_policy $profile ($preliminary_data_root | into string) $no_auto_sync)
+            $active_run_id = (create-run (project-version $TOOLS_ROOT) $mode $config_policy $profile ($preliminary_data_root | into string) $no_auto_sync)
             $env.INITIAL_SETUP_RUN_ID = $active_run_id
             $env.INITIAL_SETUP_RESUME = "0"
-            print ("Run ID       : " + $active_run_id)
+            print-key-value "Run ID       : " $active_run_id
         }
     }
 
     let first_run = (not ((machine-config-path) | path exists))
 
     if not $dry_run {
-        run-script "Migrating machine config schema" ($scripts | path join "migrate-config.nu")
+        run-script "Migrating stored state schemas" ($scripts | path join "migrate-state-transaction.nu")
     }
 
     let saved_data_root = ($resume_state.data_root? | default "")
-    let effective_data_dir = (if $resume and not ($saved_data_root | is-empty) { $saved_data_root } else { $data_dir })
+    let effective_data_dir = (if $resume and (test-mode) and not ($saved_data_root | is-empty) { $saved_data_root } else { $data_dir })
     let saved_profile = ($resume_state.profile? | default "")
     let effective_profile = (if $resume and not ($saved_profile | is-empty) { $saved_profile } else { $profile })
     let effective_no_auto_sync = (if $resume { $resume_state.no_auto_sync? | default $no_auto_sync } else { $no_auto_sync })
@@ -791,7 +787,7 @@ def --env setup-impl [
 
     if $config_policy == "cancel" {
         section "Setup cancelled"
-        print "No setup changes were applied."
+        print-text "warn" "No setup changes were applied."
         if not ($active_run_id | is-empty) { finish-run $active_run_id "cancelled" }
         return
     }
@@ -818,7 +814,7 @@ def --env setup-impl [
 
         if $config_policy == "cancel" {
             section "Setup cancelled"
-            print "No setup changes were applied."
+            print-text "warn" "No setup changes were applied."
             if not ($active_run_id | is-empty) { finish-run $active_run_id "cancelled" }
             return
         }
@@ -835,10 +831,10 @@ def --env setup-impl [
     }
 
     section "Configuration policy"
-    print ("Policy        : " + $config_policy)
-    print ("Resolved mode : " + $resolved_mode)
-    print ("Local config  : " + (if (local-config-exists) { "detected" } else { "not detected" }))
-    print ("Private config: " + (if (private-config-exists $data_root) { "detected" } else { "not detected" }))
+    print-key-value "Policy        : " $config_policy
+    print-key-value "Resolved mode : " $resolved_mode
+    print-key-value "Local config  : " (if (local-config-exists) { "detected" } else { "not detected" })
+    print-key-value "Private config: " (if (private-config-exists $data_root) { "detected" } else { "not detected" })
 
     if not ($active_run_id | is-empty) {
         run-script "Creating transaction configuration backup" ($scripts | path join "backup-local-config.nu") "--label" ("setup-" + $active_run_id) "--quiet"
@@ -866,20 +862,27 @@ def --env setup-impl [
     refresh-rclone-path
     ensure-rclone --check | ignore
 
+    # Encrypted rclone configuration has its own required crypto dependency.
+    # This must not depend on the optional cli_tools feature. The shared package
+    # installer validates both age and age-keygen for the age package.
+    if ($features.rclone_config? | default false) {
+        run-script "Ensuring age encryption is available" ($scripts | path join "install-cli-tools.nu") --always-run "--required" "age"
+    }
+
     if not ($active_run_id | is-empty) {
         run-script "Creating transaction private snapshot" ($scripts | path join "create-snapshot.nu") "--label" ("setup-" + $active_run_id) "--quiet"
     }
 
-    print ("Tools root   : " + ($TOOLS_ROOT | into string))
-    print ("Private data : " + ($data_root | into string))
-    print ("Machine      : " + $context.machine.name)
-    print ("Profile      : " + $context.machine.profile)
-    print ("OS           : " + $nu.os-info.name)
-    print ("Home         : " + (nu-home | into string))
-    print ("Nushell      : " + $env.NU_VERSION)
-    print ("App version  : " + $context.app_version)
-    print ("Config schema: " + ($context.schema_version | into string))
-    print ("Prune extras : " + ($context.sync.prune_extras | into string))
+    print-key-value "Tools root   : " ($TOOLS_ROOT | into string)
+    print-key-value "Private data : " ($data_root | into string)
+    print-key-value "Machine      : " $context.machine.name
+    print-key-value "Profile      : " $context.machine.profile
+    print-key-value "OS           : " $nu.os-info.name
+    print-key-value "Home         : " (nu-home | into string)
+    print-key-value "Nushell      : " $env.NU_VERSION
+    print-key-value "App version  : " $context.app_version
+    print-key-value "Config schema: " ($context.schema_version | into string)
+    print-key-value "Prune extras : " ($context.sync.prune_extras | into string)
 
     run-script "Initializing private data structure" ($scripts | path join "init-private-data.nu")
     run-script "Configuring local secrets autoload" ($scripts | path join "setup-secrets.nu")
@@ -947,6 +950,8 @@ def --env setup-impl [
             run-script "Capturing rclone config" ($scripts | path join "capture-rclone-config.nu") --optional
         }
 
+        run-script "Capturing portable rpool config" ($scripts | path join "capture-rpool-config.nu") --optional
+
         run-script "Recording initial sync writer" ($scripts | path join "write-sync-meta.nu") "--action" "initial"
     } else {
         if $config_policy == "backup-private" {
@@ -962,6 +967,8 @@ def --env setup-impl [
         if ($features.rclone_config? | default false) {
             run-script "Restoring rclone config" ($scripts | path join "restore-rclone-config.nu") --optional
         }
+
+        run-script "Restoring portable rpool config" ($scripts | path join "restore-rpool-config.nu") --optional
 
         run-script "Configuring platform-specific paths" ($scripts | path join "setup-platform-shims.nu")
         run-script "Enabling Nushell dotfiles commands" ($scripts | path join "enable-nushell-dotfiles.nu")
@@ -996,7 +1003,7 @@ def --env setup-impl [
         run-script "Installing automatic synchronization" ($scripts | path join "install-auto-sync.nu") --optional --always-run
     } else {
         section "Automatic synchronization"
-        print "[skip] sync.enabled is false"
+        print-status "warn" "skip" "sync.enabled is false"
     }
 
     run-script "Final environment check" ($scripts | path join "doctor.nu") --optional --always-run
@@ -1010,42 +1017,42 @@ def --env setup-impl [
         if not ($warnings | is-empty) {
             section "Optional stage warnings"
             for warning in $warnings {
-                print ("[warn] " + $warning.name)
+                print-status "warn" "warn" $warning.name
                 let detail = ($warning.detail? | default "" | str trim)
-                if not ($detail | is-empty) { print ("       " + ($detail | lines | first)) }
+                if not ($detail | is-empty) { print-text "warn" ("       " + ($detail | lines | first)) }
             }
             print ""
-            print "Core setup completed. Review the warnings above and rerun setup later to retry optional features."
+            print-text "warn" "Core setup completed. Review the warnings above and rerun setup later to retry optional features."
         }
     }
 
     $env.INITIAL_SETUP_SETUP_COMPLETED = "1"
     section "Core setup stages complete"
 
-    print ("Public tools : " + ($TOOLS_ROOT | into string))
-    print ("Private data : " + ($data_root | into string))
+    print-key-value "Public tools : " ($TOOLS_ROOT | into string)
+    print-key-value "Private data : " ($data_root | into string)
     print ""
-    print "Restart Nushell once:"
-    print "  exec nu"
+    print-heading "Restart Nushell once:"
+    print-command "exec nu"
     print ""
-    print "Useful commands:"
-    print "  dotstatus / dotsync / dotpush / dotpull"
-    print "  dotsnapshot / dotrollback"
-    print "  dotdoctor / dotupdate / dotreport / dotlog"
-    print "  dotversion / dotrepo / dotrelease / dotaudit / dotstate"
-    print "  dotmigrate / dotcleanup / dotlocal / dotchecklist"
+    print-heading "Useful commands:"
+    print-command "dotstatus / dotsync / dotpush / dotpull"
+    print-command "dotsnapshot / dotrollback"
+    print-command "dotdoctor / dotupdate / dotreport / dotlog"
+    print-command "dotversion / dotrepo / dotrelease / dotaudit / dotstate"
+    print-command "dotmigrate / dotcleanup / dotlocal / dotchecklist"
     print ""
-    print "  dotcapture / dotrestoreenv"
-    print "  dotconfig / dotsecrets"
-    print "  dotgitids / dotsshkeys / dotgitlocal / dotsshlocal"
-    print "  dotpreflight / dotlocalbackup / dotlocalrestore"
-    print "  dotvalidate / dottest --sandbox"
-    print "  dotrun --status / dotrun --list / dotrun --resume / dotrun --rollback"
-    print "  dotresolve (3-way merge + protected-file handling)"
-    print "  dotplan / dotapply / dotverify"
-    print "  dottoolchain / dotmergecfg"
-    print "  dotvault / dotbackend / dotupgrade / dotsecuritytest"
-    print "  newproj"
+    print-command "dotcapture / dotrestoreenv"
+    print-command "dotconfig / dotsecrets"
+    print-command "dotgitids / dotsshkeys / dotgitlocal / dotsshlocal"
+    print-command "dotpreflight / dotlocalbackup / dotlocalrestore"
+    print-command "dotvalidate / dottest --sandbox"
+    print-command "dotrun --status / dotrun --list / dotrun --resume / dotrun --rollback"
+    print-command "dotresolve (3-way merge + protected-file handling)"
+    print-command "dotplan / dotapply / dotverify"
+    print-command "dottoolchain / dotmergecfg"
+    print-command "dotvault / dotbackend / dotupgrade / dotsecuritytest"
+    print-command "newproj"
 }
 
 
@@ -1063,15 +1070,15 @@ def main [
     --run-id: string = ""
     --validate
 ] {
-    section ("Initial-setup " + (app-version))
-    print "[setup] Interactive terminal is attached directly to setup-main.nu."
+    section ("Initial-setup " + (project-version $TOOLS_ROOT))
+    print-status "info" "setup" "Interactive terminal is attached directly to setup-main.nu."
 
     if $validate {
         section "Explicit project validation"
         let validator = ($TOOLS_ROOT | path join "scripts" "validate-project.nu")
         let validation = (run-command ($nu.current-exe | into string) ["--no-config-file" ($validator | into string)])
-        if not ($validation.stdout | str trim | is-empty) { print ($validation.stdout | str trim --right) }
-        if not ($validation.stderr | str trim | is-empty) { print --stderr ($validation.stderr | str trim --right) }
+        if not ($validation.stdout | str trim | is-empty) { print-output-text ($validation.stdout | str trim --right) }
+        if not ($validation.stderr | str trim | is-empty) { print-output-text ($validation.stderr | str trim --right) --stderr }
         if not $validation.ok {
             error make {msg: (command-failure-message "Project validation" $validation)}
         }
@@ -1081,9 +1088,14 @@ def main [
         setup-impl --mode $mode --data-dir $data_dir --profile $profile --config-policy $config_policy --no-auto-sync=$no_auto_sync --dry-run --resume=$resume --run-id $run_id
         return
     }
-    print "[setup] Acquiring local operation lock..."
+    let ignored = (ignored-saved-data-root)
+    if $ignored != null {
+        print-status "warn" "data" ("Ignoring the previous private data location: " + $ignored)
+        print-status "info" "data" ("Private data is fixed to " + ($DEFAULT_DATA_ROOT | path expand | into string) + ". Old files there are not read, changed or deleted.")
+    }
+    print-status "info" "setup" "Acquiring local operation lock..."
     let lock = (operation-lock)
-    print "[setup] Local operation lock acquired."
+    print-status "ok" "setup" "Local operation lock acquired."
     mut shared_lock = null
     let operation_result = (try {
         $env.INITIAL_SETUP_OPERATION_TOKEN = $lock.token
@@ -1096,9 +1108,9 @@ def main [
             error make { msg: "Changing data_root requires an explicit provider reconfiguration; refusing to reset an existing baseline." }
         }
         mkdir $root
-        print ("[provider] Checking " + $provider.kind + " provider state...")
+        print-status "info" "provider" ("Checking " + $provider.kind + " provider state...")
         $shared_lock = (remote-lock $provider)
-        print "[provider] Provider lock acquired. Building current provider fingerprint..."
+        print-status "ok" "provider" "Provider lock acquired. Building current provider fingerprint..."
         let before = (stable-provider-head $provider)
         let state = (load-provider-state $provider)
         let changed = (setup-head-changed $state $before)
@@ -1115,13 +1127,13 @@ def main [
         }
         $env.INITIAL_SETUP_SETUP_COMPLETED = "0"
         if $reconcile and $selected_policy == "cancel" {
-            print "[cancelled] No setup changes were applied; the previous baseline is unchanged."
+            print-status "warn" "cancelled" "No setup changes were applied; the previous baseline is unchanged."
         } else {
             assert-same-head $provider $before
             if $reconcile and $resume {
-                print "[setup] Source changed: starting a new transaction with your choice. Previous run checkpoints are retained."
+                print-status "info" "setup" "Source changed: starting a new transaction with your choice. Previous run checkpoints are retained."
             }
-            print "[provider] Provider state reviewed and verified."
+            print-status "ok" "provider" "Provider state reviewed and verified."
             let effective_resume = ($resume and not $reconcile)
             let reviewed_head = (if $reconcile { $before } else { {} })
             setup-impl --mode $mode --data-dir $data_dir --profile $profile --config-policy $selected_policy --no-auto-sync=$no_auto_sync --resume=$effective_resume --run-id $run_id --reviewed-head $reviewed_head --reviewed-provider $provider
@@ -1132,7 +1144,7 @@ def main [
                 $before
             }
             if $provider.kind == "directory" { record-provider-state $provider $after }
-            if $provider.kind != "directory" { print "[info] Setup changed only this workspace. Run dotpush to publish reviewed source changes." }
+            if $provider.kind != "directory" { print-status "info" "info" "Setup changed only this workspace. Run dotpush to publish reviewed source changes." }
             let completed_run = (active-run-id)
             if not ($completed_run | is-empty) { finish-run $completed_run "success" }
             section "Setup transaction complete"
@@ -1145,8 +1157,8 @@ def main [
         if not ($failed_run | is-empty) {
             let final_status = (if $interrupted { "interrupted" } else { "failed" })
             try { finish-run $failed_run $final_status $detail } catch {|state_err|
-                print --stderr "[warn] Failed to persist setup run state:"
-                print --stderr (diagnostic-text $state_err)
+                print-status "warn" "warn" "Failed to persist setup run state:" --stderr
+                print-text "warn" (diagnostic-text $state_err) --stderr
             }
         }
         failure-envelope $err
@@ -1165,18 +1177,18 @@ def main [
     let local_cleanup_error = (captured-failure $local_cleanup_result)
     if $operation_failure != null {
         if (is-user-interruption $operation_failure) {
-            print --stderr "[cancelled] Setup was interrupted by the user."
+            print-status "warn" "cancelled" "Setup was interrupted by the user." --stderr
             let interrupted_run = (active-run-id)
             if not ($interrupted_run | is-empty) {
-                print --stderr ("[resume] nu setup.nu --resume --run-id " + $interrupted_run)
+                print-status "info" "resume" ("nu setup.nu --resume --run-id " + $interrupted_run) --stderr
             }
             if $remote_cleanup_error != null {
-                print --stderr "[warn] Remote-lock cleanup also failed:"
-                print --stderr (diagnostic-text $remote_cleanup_error)
+                print-status "warn" "warn" "Remote-lock cleanup also failed:" --stderr
+                print-text "warn" (diagnostic-text $remote_cleanup_error) --stderr
             }
             if $local_cleanup_error != null {
-                print --stderr "[warn] Local-lock cleanup also failed:"
-                print --stderr (diagnostic-text $local_cleanup_error)
+                print-status "warn" "warn" "Local-lock cleanup also failed:" --stderr
+                print-text "warn" (diagnostic-text $local_cleanup_error) --stderr
             }
             exit 130
         }

@@ -4,9 +4,13 @@ const ROOT = path self ..
 const CORE = path self ./modules/core.nu
 const SAFETY = path self ./modules/safety.nu
 const CLOUD = path self ./modules/cloud-wins-config.nu
+const MACHINE_CONFIG = path self ./modules/machine-config.nu
+const COMMAND_RUNTIME = path self ./modules/command-runtime.nu
 use $CORE [nu-home machine-config-path error-message failure-envelope captured-failure]
-use $SAFETY [state-root operation-lock lock-release atomic-record private-directory]
-use $CLOUD [load-cloud-config cloud-config-path]
+use $SAFETY [state-root operation-lock lock-release private-directory]
+use $CLOUD [load-cloud-config cloud-config-path write-cloud-config]
+use $MACHINE_CONFIG [write-machine-config]
+use $COMMAND_RUNTIME [generate-command-shim]
 
 # A checkout move is allowed, including retry after an interrupted refresh.
 # Any context edit OTHER than tools_root still requires explicit recovery.
@@ -25,29 +29,23 @@ def refreshed-control [context: record] {
     | upsert activated_context ($config.activated_context | upsert tools_root ($ROOT | into string))
 }
 
-def command-runtime-modules [] {
-    ["dotfiles.nu" "subprocess.nu" "process-output.nu" "console.nu"]
-}
-
 def main [--dry-run] {
-    let source_dir = ($ROOT | path join "scripts" "modules")
     let target_dir = ((nu-home) | path join ".config" "nushell" "modules")
     let config_file = (machine-config-path)
     let control_file = (cloud-config-path)
 
+    # Only the generated shim is installed (generation fails on a broken
+    # checkout). Previously copied runtime modules are left in place unused.
+    let shim = (generate-command-shim $ROOT)
     mut modules = []
-    for name in (command-runtime-modules) {
-        let source = ($source_dir | path join $name)
+    for name in ["dotfiles.nu"] {
         let target = ($target_dir | path join $name)
-        if not ($source | path exists) or ($source | path type) != "file" {
-            error make {msg: ("This checkout is missing required command runtime module: " + ($source | into string))}
-        }
         if ($target | path exists) and ($target | path type) != "file" {
             error make {msg: ("Installed command-module path is not a regular file: " + ($target | into string))}
         }
         $modules = ($modules | append {
             name: $name
-            source: $source
+            content: $shim
             target: $target
             temp: (($target | into string) + ".refresh-" + (random uuid))
             had_target: ($target | path exists)
@@ -81,7 +79,11 @@ def main [--dry-run] {
         private-directory $backup
         cp $config_file ($backup | path join "config.nuon")
         for item in $modules {
-            if $item.had_target { cp $item.target ($backup | path join $item.name) }
+            if $item.had_target {
+                let saved = ($backup | path join $item.name)
+                mkdir ($saved | path dirname)
+                cp $item.target $saved
+            }
         }
         if $had_control { cp $control_file ($backup | path join "cloud-wins.nuon") }
         null
@@ -99,29 +101,34 @@ def main [--dry-run] {
 
         # Prepare and verify every dependency before replacing any installed file.
         for item in $modules {
-            cp $item.source $item.temp
-            if (open --raw $item.temp | hash sha256) != (open --raw $item.source | hash sha256) {
+            mkdir ($item.temp | path dirname)
+            $item.content | save --raw $item.temp
+            if (open --raw $item.temp | hash sha256) != ($item.content | hash sha256) {
                 error make {msg: ("Command module copy verification failed: " + $item.name)}
             }
         }
 
         # Keep active=true throughout. Snapshot-first permits a safe retry after
         # interruption; deactivate remains fail-closed until refresh completes.
-        if $updated != null { atomic-record $control_file $updated }
-        atomic-record $config_file ($context | upsert tools_root ($ROOT | into string))
+        if $updated != null { write-cloud-config $updated | ignore }
+        write-machine-config ($context | upsert tools_root ($ROOT | into string)) | ignore
 
-        for item in $modules { mv --force $item.temp $item.target }
+        for item in $modules {
+            mkdir ($item.target | path dirname)
+            mv --force $item.temp $item.target
+        }
         null
     } catch {|err| failure-envelope $err })
     let failure = (captured-failure $result)
 
     if $failure != null {
         try {
-            atomic-record $config_file (open --raw ($backup | path join "config.nuon") | from nuon)
-            if $had_control { atomic-record $control_file (open --raw ($backup | path join "cloud-wins.nuon") | from nuon) }
+            write-machine-config (open --raw ($backup | path join "config.nuon") | from nuon) | ignore
+            if $had_control { write-cloud-config (open --raw ($backup | path join "cloud-wins.nuon") | from nuon) | ignore }
             for item in $modules {
                 let saved = ($backup | path join $item.name)
                 if $item.had_target {
+                    mkdir ($item.target | path dirname)
                     cp --force $saved $item.target
                 } else if ($item.target | path exists) {
                     rm $item.target
@@ -139,7 +146,8 @@ def main [--dry-run] {
     let cleanup_failure = (captured-failure $cleanup)
     if $cleanup_failure != null { error make {msg: (error-message $cleanup_failure "Commands refreshed but operation.lock cleanup failed.")} }
 
-    print ("[ok] Installed local command modules from: " + ($ROOT | into string))
+    print ("[ok] Installed the command shim for checkout: " + ($ROOT | into string))
+    print "Commands now run from this checkout; later updates apply without refresh unless a command/flag list changes."
     print ("[backup] " + $backup)
     print "Restart Nushell/VS Code terminals. No private source or synchronization baseline was changed."
 }

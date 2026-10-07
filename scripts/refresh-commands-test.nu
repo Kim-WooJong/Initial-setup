@@ -5,9 +5,11 @@ const CONTROL = path self ./cloud-wins-main.nu
 const CORE = path self ./modules/core.nu
 const CLOUD = path self ./modules/cloud-wins-config.nu
 const SAFETY = path self ./modules/safety.nu
+const COMMAND_RUNTIME = path self ./modules/command-runtime.nu
 use $CORE [machine-config-path]
 use $CLOUD [cloud-config-path]
 use $SAFETY [atomic-record]
+use $COMMAND_RUNTIME [generate-command-shim]
 def check [ok: bool message: string] {
     if not $ok { error make {msg: ("[refresh-test] " + $message)} }
     print ("[pass] " + $message)
@@ -25,7 +27,7 @@ def tests [base: path] {
     let source = ($base | path join "cloud")
     let target = ($base | path join "local")
     mkdir $source $target
-    let previous = {data_root: $source tools_root: ($base | path join "old checkout") sync: {enabled: true auto_push: true auto_pull: true prune_extras: false}}
+    let previous = {schema_version: 5 data_root: $source tools_root: ($base | path join "old checkout") sync: {enabled: true auto_push: true auto_pull: true prune_extras: false}}
     let active = ($previous | upsert data_root $target | upsert sync.enabled false | upsert sync.auto_push false | upsert sync.auto_pull false)
     let config = {version: 1 source: $source target: $target active: true previous_context: $previous activated_context: $active}
     atomic-record (machine-config-path) $active
@@ -38,12 +40,9 @@ def tests [base: path] {
     check ($next.active and $next.previous_context.tools_root == ($ROOT | into string) and $next.activated_context.tools_root == ($ROOT | into string)) "Active recovery snapshots follow the new checkout"
     let refreshed = (open --raw (machine-config-path) | from nuon)
     check ($refreshed == ($active | upsert tools_root ($ROOT | into string))) "Refresh only changes tools_root"
-    let installed_modules = ((($base | path join ".config" "nushell" "modules")))
-    for name in ["dotfiles.nu" "subprocess.nu" "process-output.nu" "console.nu"] {
-        let installed = ($installed_modules | path join $name)
-        check ($installed | path exists) ("Refresh installs command runtime dependency: " + $name)
-        check ((open --raw $installed | hash sha256) == (open --raw ($ROOT | path join "scripts" "modules" $name) | hash sha256)) ("Installed command runtime module matches checkout: " + $name)
-    }
+    let installed = ($base | path join ".config" "nushell" "modules" "dotfiles.nu")
+    check ($installed | path exists) "Refresh installs the command shim"
+    check ((open --raw $installed) == (generate-command-shim $ROOT)) "Installed shim matches this checkout's signatures"
     # Simulate interruption after cloud snapshots changed but before machine write.
     atomic-record (machine-config-path) $active
     child $IMPL []

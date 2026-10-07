@@ -9,11 +9,11 @@ export def git-identities-manifest-path [] {
     (nu-home) | path join ".config" "dotfiles" "git-identities.nuon"
 }
 
-export def git-identities-generated-path [] {
+def git-identities-generated-path [] {
     (nu-home) | path join ".config" "git" "initial-setup-identities.gitconfig"
 }
 
-export def git-identities-dir [] {
+def git-identities-dir [] {
     (nu-home) | path join ".config" "git" "identities"
 }
 
@@ -38,7 +38,7 @@ export def ensure-git-identities-manifest [] {
     true
 }
 
-export def load-git-identities-manifest [] {
+def load-git-identities-manifest [] {
     let file = (git-identities-manifest-path)
 
     if not ($file | path exists) {

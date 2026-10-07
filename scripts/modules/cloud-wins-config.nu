@@ -4,13 +4,10 @@ use $TEXT_CASE [text-lower]
 const CORE = path self ./core.nu
 const SAFETY = path self ./safety.nu
 use $CORE [machine-context]
-use $SAFETY [state-root disjoint-paths]
+use $SAFETY [state-root disjoint-paths atomic-record]
 
 export def cloud-config-path [] { (state-root) | path join "cloud-wins.nuon" }
-export def load-cloud-config [] {
-    let file = (cloud-config-path)
-    if not ($file | path exists) { return null }
-    let config = (open --raw $file | from nuon)
+def validate-cloud-config [config: record] {
     if ($config.version? | default 0) != 1 or ($config.active? | describe) != "bool" {
         error make {msg: "Invalid cloud-wins control state. Refusing to assume bidirectional mode."}
     }
@@ -19,6 +16,24 @@ export def load-cloud-config [] {
         if ($value | describe) != "string" or ($value | is-empty) { error make {msg: "Invalid cloud-wins root."} }
     }
     $config
+}
+
+export def load-cloud-config [] {
+    let file = (cloud-config-path)
+    if not ($file | path exists) { return null }
+    let config = (open --raw $file | from nuon)
+    validate-cloud-config $config
+}
+
+export def write-cloud-config [config: record] {
+    validate-cloud-config $config | ignore
+    let file = (cloud-config-path)
+    atomic-record $file $config
+    let saved = (load-cloud-config)
+    if $saved != $config {
+        error make {msg: "Cloud-wins control-state verification failed after atomic write."}
+    }
+    $file
 }
 export def cloud-mode-active [] {
     let config = (load-cloud-config)

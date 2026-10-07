@@ -1,5 +1,7 @@
 # This repository contains public setup tooling only.
-# Private dotfiles are created in the parent directory by default.
+# Private dotfiles are created in ./private (git-ignored) by default.
+/private/
+/.project/
 home/
 vscode/
 dotfiles-data/
@@ -30,3 +32,15 @@ secrets/
 .env.*
 transfers/
 upgrades/
+
+# Generated build/editor artifacts cleaned before release.
+*.orig
+*.rej
+*~
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+node_modules/
+tools/cloudwins/target/
+*# Edit conflict*

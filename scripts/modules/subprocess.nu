@@ -1,5 +1,7 @@
 const PROCESS_OUTPUT = path self ./process-output.nu
 use $PROCESS_OUTPUT [output-text]
+const CONSOLE = path self ./console.nu
+use $CONSOLE [print-status print-output-text]
 
 # Shared external-command execution contract.
 # Every caller receives launch state, exit code, stdout and stderr together.
@@ -73,28 +75,14 @@ export def checked-command [label: string program: string args: list = [] --sens
     $result
 }
 
-export def probe-command [program: string args: list = ["--version"]] {
-    let result = (run-command $program $args)
-    {
-        program: $program
-        args: $args
-        healthy: $result.ok
-        launched: $result.launched
-        exit_code: $result.exit_code
-        stdout: $result.stdout
-        stderr: $result.stderr
-        diagnostic: $result.diagnostic
-    }
-}
-
 export def print-result [label: string result: record] {
     if not ($result.stdout? | default "" | str trim | is-empty) {
-        print ($result.stdout | str trim --right)
+        print-output-text ($result.stdout | str trim --right)
     }
     if not ($result.stderr? | default "" | str trim | is-empty) {
-        print --stderr ($result.stderr | str trim --right)
+        print-output-text ($result.stderr | str trim --right) --stderr
     }
     if not $result.ok {
-        print --stderr ("[warn] " + (command-failure-message $label $result))
+        print-status "warn" "warn" (command-failure-message $label $result) --stderr
     }
 }

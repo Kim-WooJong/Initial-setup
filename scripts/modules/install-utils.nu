@@ -3,7 +3,7 @@ use $SUBPROCESS [run-command print-result]
 const CORE = path self ./core.nu
 use $CORE [nu-home]
 
-export def tool-candidates [name: string extra: list = []] {
+def tool-candidates [name: string extra: list = []] {
     mut out = []
     let rows = (which ("^" + $name))
     for row in $rows {

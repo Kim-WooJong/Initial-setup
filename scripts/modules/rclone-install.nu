@@ -1,7 +1,9 @@
 const PROCESS_OUTPUT = path self ./process-output.nu
 use $PROCESS_OUTPUT [output-text]
 const SUBPROCESS = path self ./subprocess.nu
+const CONSOLE = path self ./console.nu
 use $SUBPROCESS [run-command]
+use $CONSOLE [print-status print-output-text]
 # rclone is a setup dependency, separate from optional configuration capture.
 # Install only through an existing package manager. Never fetch/run shell scripts,
 # change remote credentials, install mount drivers, or upgrade a working binary.
@@ -99,7 +101,7 @@ export def --env refresh-rclone-path [] {
     $env.PATH = (merge-rclone-path $current $extra)
 }
 
-export def rclone-probe [] {
+def rclone-probe [] {
     let matches = (which "^rclone" | where type == external)
     if ($matches | is-empty) { return {found: false ready: false path: "" version: ""} }
     let exe = ($matches | first | get path)
@@ -154,7 +156,7 @@ def execute-install-step [step: record] {
     if ($env.INITIAL_SETUP_TEST_MODE? | default "") == "1" {
         error make {msg: "Package installation is disabled in INITIAL_SETUP_TEST_MODE. Use --dry-run or the mocked rclone-install-test.nu."}
     }
-    print ("[run] " + $step.label)
+    print-status "info" "run" $step.label
     if $step.kind == "winget-state" {
         let result = (run-command "winget" ["list" "--id" "Rclone.Rclone" "--exact" "--source" "winget" "--accept-source-agreements" "--disable-interactivity"])
         check-rclone-winget-state $result.exit_code (($result.stdout | output-text) + ($result.stderr | output-text)) | ignore
@@ -165,8 +167,8 @@ def execute-install-step [step: record] {
     # Capture the native exit code explicitly. In a terminal sudo can still use
     # its controlling TTY; package output is shown when the command completes.
     let result = (run-command $program $args)
-    if not ($result.stdout | is-empty) { print ($result.stdout | output-text) }
-    if not ($result.stderr | is-empty) { print --stderr ($result.stderr | output-text) }
+    if not ($result.stdout | is-empty) { print-output-text ($result.stdout | output-text) }
+    if not ($result.stderr | is-empty) { print-output-text ($result.stderr | output-text) --stderr }
     {exit_code: $result.exit_code stderr: "See the package manager output above. No other manager or unverified download was tried."}
 }
 

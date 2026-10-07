@@ -8,12 +8,14 @@ const WORKER = path self ./syntax-check-file.nu
 
 # Literal directory traversal avoids treating [brackets] in a checkout path as
 # glob syntax. Do not follow symlinks or recurse into Git's internal directory.
-def source-files [directory: path] {
+def source-files [directory: path skip: path] {
     mut files = []
     for item in (ls --all $directory) {
         if ($item.name | path basename) == ".git" { continue }
+        # User settings in <checkout>/private (CHECKOUT_PRIVATE_DIR) are not project source.
+        if ($item.name | path expand) == $skip { continue }
         if $item.type == "dir" {
-            $files = ($files | append (source-files $item.name))
+            $files = ($files | append (source-files $item.name $skip))
         } else if $item.type == "file" and ($item.name | str ends-with ".nu") {
             $files = ($files | append $item.name)
         }
@@ -59,7 +61,7 @@ def main [--parse-only --deny-warnings --report: path --root: path] {
     if not ($source_root | path exists) or ($source_root | path type) != "dir" {
         error make {msg: "Syntax-check root must be an existing directory."}
     }
-    let sources = (source-files $source_root | sort)
+    let sources = (source-files $source_root ($source_root | path expand | path join "private") | sort)
     if ($sources | is-empty) { error make {msg: "No Nushell source files found."} }
     let nu_parts = ((version).version | split row ".")
     let modern_case = (($nu_parts.0 | into int) > 0 or ($nu_parts.1 | into int) >= 114)

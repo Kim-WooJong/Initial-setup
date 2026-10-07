@@ -3,10 +3,12 @@ const VAULT = path self ./modules/vault.nu
 const CORE = path self ./modules/core.nu
 const SAFETY = path self ./modules/safety.nu
 use $VAULT *
-use $CORE [error-message failure-envelope captured-failure]
+use $CORE [error-message failure-envelope captured-failure machine-context]
 use $SAFETY [operation-lock lock-release]
 const PROVIDER = path self ./modules/sync-provider.nu
 use $PROVIDER [load-provider assert-expected-head provider-head record-provider-state remote-lock release-remote-lock]
+const SSH_KEYS = path self ./modules/ssh-key-sync.nu
+use $SSH_KEYS [ssh-key-add ssh-key-add-all ssh-key-remove ssh-key-list]
 
 # Never print an entire error record: raw/debug/details can be verbose or contain
 # unrelated values. Prefer the original rendered location, with a text fallback.
@@ -18,10 +20,13 @@ def show-vault-failure [err: any context: string] {
     } else { print --stderr (error-message $err "Vault operation failed.") }
 }
 
-def main [action: string = "status" name: string = "" --force --remove-legacy --recipient: string = "" --check] {
-    if not ($action in ["status" "init" "capture" "restore" "migrate-rclone"]) {
-        error make {msg: "Use: status, init [--check], capture NAME, restore NAME, migrate-rclone."}
+def main [action: string = "status" name: string = "" --force --remove-legacy --recipient: string = "" --check --execute] {
+    if not ($action in ["status" "init" "capture" "restore" "migrate-rclone" "rekey" "ssh-key-add" "ssh-key-add-all" "ssh-key-remove" "ssh-key-list"]) {
+        error make {msg: "Use: status, init [--check], capture NAME, restore NAME, migrate-rclone, rekey [--execute], ssh-key-add NAME, ssh-key-add-all, ssh-key-remove NAME, ssh-key-list."}
     }
+    if $execute and $action != "rekey" { error make {msg: "--execute is supported only by dotvault rekey."} }
+    # Rekey preview is read-only and takes no lock.
+    if $action == "rekey" and not $execute { rekey-vault-to-identity; return }
     if $check and $action != "init" { error make {msg: "--check is supported only by dotvault init."} }
     if $action == "status" {
         if not (vault-configured) { print "Vault: not configured (no plaintext capture permitted)."; return }
@@ -29,17 +34,21 @@ def main [action: string = "status" name: string = "" --force --remove-legacy --
         print ($config.entries | each {|entry|
             {name: $entry.name encrypted_copy: ((ciphertext-path $entry.name) | path exists) auto_capture: ($entry.auto_capture? | default false) auto_restore: ($entry.auto_restore? | default false)}
         })
+        print "rclone entries are captured by dotpush and restored by dotpull automatically."
         print "No secret values are displayed."
         return
     }
     # Read-only init preflight does not acquire any lock or load the provider.
     if $action == "init" and $check { initialize-vault $recipient --check; return }
+    if $action == "ssh-key-list" { print (ssh-key-list ((machine-context).data_root | path expand)); return }
 
     let lock = (operation-lock)
     mut store_lock = null
     let operation_result = (try {
         if $action == "init" {
             initialize-vault $recipient
+        } else if $action == "rekey" {
+            rekey-vault-to-identity --execute
         } else if $action == "restore" {
             restore-secret $name $force
         } else {
@@ -48,7 +57,8 @@ def main [action: string = "status" name: string = "" --force --remove-legacy --
             let provider = (load-provider)
             $store_lock = (remote-lock $provider)
             if $provider.kind == "directory" { assert-expected-head $provider | ignore }
-            if $action == "capture" { capture-secret $name } else { migrate-rclone-secret $remove_legacy }
+            let data_root = ((machine-context).data_root | path expand)
+            if $action == "capture" { capture-secret $name } else if $action == "ssh-key-add" { ssh-key-add $data_root $name } else if $action == "ssh-key-add-all" { ssh-key-add-all $data_root } else if $action == "ssh-key-remove" { ssh-key-remove $data_root $name } else { migrate-rclone-secret $remove_legacy }
             if $provider.kind == "directory" { record-provider-state $provider (provider-head $provider) }
         }
         null

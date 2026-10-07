@@ -7,9 +7,11 @@ const ROOT = path self ..
 const CORE = path self ./modules/core.nu
 const UPGRADE = path self ./modules/upgrade.nu
 const SAFETY = path self ./modules/safety.nu
+const CONSOLE = path self ./modules/console.nu
 use $UPGRADE *
 use $CORE [error-message failure-envelope captured-failure]
 use $SAFETY [state-root checked atomic-record operation-lock lock-release private-directory disjoint-paths]
+use $CONSOLE [print-command print-status]
 
 def git [args: list label: string] { checked "git" (["-C" ($ROOT | into string)] | append $args) $label | str trim }
 
@@ -24,7 +26,7 @@ def main [
 ] {
     let upgrades = ((state-root) | path join "upgrades")
     if $list {
-        if not ($upgrades | path exists) { print "No upgrade history."; return }
+        if not ($upgrades | path exists) { print-status "info" "info" "No upgrade history."; return }
         print (ls $upgrades | where type == dir | each {|row|
             let file = ($row.name | path join "upgrade.nuon")
             if ($file | path exists) { open --raw $file | from nuon | select id status from_version to_version } else { {id: ($row.name | path basename) status: "incomplete" from_version: "" to_version: ""} }
@@ -32,9 +34,9 @@ def main [
         return
     }
     if ($from | is-empty) and ($ref | is-empty) and ($rollback | is-empty) {
-        print "Artifact: dotupgrade --from <extracted-project> --manifest-sha256 <trusted-digest> [--yes]"
-        print "Git:      dotupgrade --ref <remote-tag-or-branch> --commit <trusted-full-commit> [--yes]"
-        print "History:  dotupgrade --list / dotupgrade --rollback <ID> [--yes]"
+        print-command "dotupgrade --from <extracted-project> --manifest-sha256 <trusted-digest> [--yes]"
+        print-command "dotupgrade --ref <remote-tag-or-branch> --commit <trusted-full-commit> [--yes]"
+        print-command "dotupgrade --list / dotupgrade --rollback <ID> [--yes]"
         return
     }
     let lock = (operation-lock)
@@ -55,7 +57,7 @@ def main [
             } else { rollback-files $ROOT ($dir | path join "previous") ($dir | path join "candidate") }
             atomic-record ($dir | path join "upgrade.nuon") ($saved | upsert status "rolled-back")
             lock-release $lock
-            print "[ok] Previous tools restored. Machine/private configuration was not changed."
+            print-status "ok" "ok" "Previous tools restored. Machine/private configuration was not changed."
             return
         }
         if not ($from | is-empty) and not ($ref | is-empty) { error make { msg: "Choose --from or --ref, not both." } }
@@ -103,10 +105,10 @@ def main [
         atomic-record $record_file $record
         validate-candidate $candidate $dir
         verify-release $candidate (if $is_git {""} else {$manifest_sha256}) | ignore
-        print ("[validated] " + $old.version + " -> " + $new.version)
+        print-status "ok" "validated" ($old.version + " -> " + $new.version)
         if not $yes {
             atomic-record $record_file ($record | upsert status "validated-not-applied")
-            print "[preview] Installed files are unchanged. Repeat with --yes to promote."
+            print-status "info" "preview" "Installed files are unchanged. Repeat with --yes to promote."
             lock-release $lock
             return
         }
@@ -125,7 +127,7 @@ def main [
         atomic-record $record_file ($record | upsert status "applied")
         $promoting = false
         lock-release $lock
-        print ("[ok] Installed " + $new.version + ". Rollback ID: " + $id)
+        print-status "ok" "ok" ("Installed " + $new.version + ". Rollback ID: " + $id)
         null
     } catch {|err| failure-envelope $err })
     let upgrade_failure = (captured-failure $upgrade_result)
@@ -145,7 +147,7 @@ def main [
                 atomic-record $recovery_file ($recovery_record | upsert status "rolled-back-after-failure")
             } catch {
                 atomic-record $recovery_file ($recovery_record | upsert status "rollback-needed")
-                print ("[recovery] Previous tools remain in: " + ($dir | into string))
+                print-status "warn" "recovery" ("Previous tools remain in: " + ($dir | into string))
             }
         } else if not ($recovery_file | is-empty) {
             atomic-record $recovery_file ($recovery_record | upsert status "rejected")
@@ -156,10 +158,10 @@ def main [
         let cleanup_result = (try { lock-release $lock; null } catch {|cleanup_err| failure-envelope $cleanup_err })
         let cleanup_failure = (captured-failure $cleanup_result)
         if $recovery_failure != null {
-            print ("[recovery] Fallback/status recording also failed: " + (error-message $recovery_failure "unknown recovery failure"))
+            print-status "error" "recovery" ("Fallback/status recording also failed: " + (error-message $recovery_failure "unknown recovery failure")) --stderr
         }
         if $cleanup_failure != null {
-            print ("[recovery] Lock cleanup also failed: " + (error-message $cleanup_failure "unknown lock cleanup failure"))
+            print-status "error" "recovery" ("Lock cleanup also failed: " + (error-message $cleanup_failure "unknown lock cleanup failure")) --stderr
         }
         error make { msg: (error-message $err "Upgrade failed.") }
     }

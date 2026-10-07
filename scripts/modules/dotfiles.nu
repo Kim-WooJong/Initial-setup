@@ -1,48 +1,17 @@
+const CORE = path self ./core.nu
+use $CORE [nu-home machine-context]
 # ============================================================
 # Initial-setup Nushell convenience commands.
 # ============================================================
 
 const SUBPROCESS = path self ./subprocess.nu
 const CONSOLE = path self ./console.nu
+const RCLONE_READINESS = path self ./rclone-readiness.nu
+const SYNC_STATE = path self ./sync-state.nu
 use $SUBPROCESS [run-command command-failure-message]
-use $CONSOLE [style print-heading print-info print-diff-text]
-
-def nu-home [] {
-    let test_mode = ($env.INITIAL_SETUP_TEST_MODE? | default "" | str trim)
-    let override = ($env.INITIAL_SETUP_HOME_OVERRIDE? | default "" | str trim)
-
-    if $test_mode == "1" and not ($override | is-empty) {
-        return ($override | path expand)
-    }
-
-    let home_path = ($nu | get --optional home-path)
-
-    if $home_path != null {
-        return $home_path
-    }
-
-    let home_dir = ($nu | get --optional home-dir)
-
-    if $home_dir != null {
-        return $home_dir
-    }
-
-    error make {
-        msg: "Unable to determine the Nushell home directory."
-    }
-}
-
-def machine-context [] {
-    let config_file = ((nu-home) | path join ".config" "dotfiles" "config.nuon")
-
-    if not ($config_file | path exists) {
-        error make {
-            msg: ("Dotfiles machine config not found: " + ($config_file | into string))
-        }
-    }
-
-    open $config_file
-}
+use $CONSOLE [style print-heading print-info print-diff-text print-command print-text print-key-value print-status print-output-text]
+use $RCLONE_READINESS [print-rclone-readiness]
+use $SYNC_STATE [read-sync-state]
 
 def data-root [] {
     let config = (machine-context)
@@ -176,6 +145,11 @@ def complete-upgrade-ids [] {
         ls $root
         | where type == dir
         | where {|row| ($row.name | path join "upgrade.nuon") | path exists }
+        | where {|row|
+            let record = (try { open --raw ($row.name | path join "upgrade.nuon") | from nuon } catch { {} })
+            let status = ($record.status? | default "unknown" | into string)
+            $status in ["applied" "rollback-needed"]
+        }
         | sort-by name
         | reverse
         | each {|row| let record = (try { open --raw ($row.name | path join "upgrade.nuon") | from nuon } catch { {} })
@@ -195,7 +169,7 @@ def cloud-invoke [action: string args: list<string>] {
         return
     }
     let result = (run-command $exe (["--no-config-file" $script $action] | append $args))
-    if not ($result.stderr | str trim | is-empty) { print --stderr ($result.stderr | str trim --right) }
+    if not ($result.stderr | str trim | is-empty) { print-output-text ($result.stderr | str trim --right) --stderr }
     if not $result.ok { error make {msg: ((command-failure-message ("dotcloud " + $action) $result) + (char nl) + "No success is assumed.")} }
     let output = ($result.stdout | str trim)
     if ($output | is-empty) { return null }
@@ -247,52 +221,52 @@ def edit-managed-target [target: path --push --path] {
 }
 
 # Show synchronization state, fingerprints, conflicts, and chezmoi status.
-export def dotstatus [] {
+def cmd-status [] {
     let context = (machine-context)
     let state_file = ((nu-home) | path join ".config" "dotfiles" "sync-state.nuon")
     let conflict_file = ((nu-home) | path join ".config" "dotfiles" "SYNC-CONFLICT.txt")
 
     print-heading "Automatic Sync"
-    print "────────────────────────────────"
-    print ("Machine       : " + $context.machine.name)
-    print ("Profile       : " + $context.machine.profile)
-    print ("Enabled       : " + ($context.sync.enabled | into string))
-    print ("Interval      : " + ($context.sync.interval_minutes | into string) + " minute(s)")
-    print ("Auto push     : " + ($context.sync.auto_push | into string))
-    print ("Auto pull     : " + ($context.sync.auto_pull | into string))
-    print ("Conflict mode : " + $context.sync.conflict_policy)
+    print-text "heading" "────────────────────────────────"
+    print-key-value "Machine       : " $context.machine.name
+    print-key-value "Profile       : " $context.machine.profile
+    print-key-value "Enabled       : " ($context.sync.enabled | into string)
+    print-key-value "Interval      : " (($context.sync.interval_minutes | into string) + " minute(s)")
+    print-key-value "Auto push     : " ($context.sync.auto_push | into string)
+    print-key-value "Auto pull     : " ($context.sync.auto_pull | into string)
+    print-key-value "Conflict mode : " $context.sync.conflict_policy
 
     if ($state_file | path exists) {
-        let state = (open $state_file)
+        let state = (read-sync-state $state_file)
         let local_now = (fingerprint "local")
         let cloud_now = (fingerprint "cloud")
         let local_status = (if $local_now == $state.local_hash { style "ok" "clean" } else { style "warn" "changed" })
         let cloud_status = (if $cloud_now == $state.cloud_hash { style "ok" "clean" } else { style "warn" "changed" })
 
-        print ("Last sync     : " + ($state.last_sync? | default "unknown"))
-        print ("Last writer   : " + ($state.last_writer? | default "unknown"))
-        print ("Writer time   : " + ($state.last_write_time? | default "unknown"))
-        print ("Last action   : " + ($state.last_action? | default "unknown"))
-        print ("Local         : " + $local_status)
-        print ("Cloud         : " + $cloud_status)
+        print-key-value "Last sync     : " ($state.last_sync? | default "unknown")
+        print-key-value "Last writer   : " ($state.last_writer? | default "unknown")
+        print-key-value "Writer time   : " ($state.last_write_time? | default "unknown")
+        print-key-value "Last action   : " ($state.last_action? | default "unknown")
+        print-key-value "Local         : " $local_status
+        print-key-value "Cloud         : " $cloud_status
     } else {
-        print "Last sync     : not initialized"
-        print "Last writer   : unknown"
-        print "Local         : unknown"
-        print "Cloud         : unknown"
+        print-key-value "Last sync     : " "not initialized"
+        print-key-value "Last writer   : " "unknown"
+        print-key-value "Local         : " "unknown"
+        print-key-value "Cloud         : " "unknown"
     }
 
     if ($conflict_file | path exists) {
-        print ("Conflict      : " + (style "error" "YES"))
-        print ("Details       : " + ($conflict_file | into string))
+        print-key-value "Conflict      : " (style "error" "YES")
+        print-key-value "Details       : " ($conflict_file | into string)
     } else {
-        print ("Conflict      : " + (style "ok" "none"))
+        print-key-value "Conflict      : " (style "ok" "none")
     }
 
     print ""
-    print ("Private data  : " + (data-root | into string))
+    print-key-value "Private data  : " (data-root | into string)
     print ""
-    print "chezmoi status:"
+    print-heading "chezmoi status"
 
     let args = [
         "--source"
@@ -303,8 +277,11 @@ export def dotstatus [] {
     ^chezmoi ...$args
 }
 
+# Compatibility wrapper. Prefer `dotctl status` for new interactive use.
+export def dotstatus [] { cmd-status }
+
 # Show managed-file differences without opening an external pager.
-export def dotdiff [] {
+def cmd-diff [] {
     let root = (data-root)
     let args = [
         "--source"
@@ -325,21 +302,27 @@ export def dotdiff [] {
     }
 }
 
+# Compatibility wrapper. Prefer `dotctl diff`.
+export def dotdiff [] { cmd-diff }
+
 # Publish the current private source through the configured synchronization path.
-export def dotpush [] {
+def cmd-push [] {
     let exe = $nu.current-exe
-    ^$exe --no-config-file (tool-script "sync-up.nu")
+    ^$exe --no-config-file (tool-script "sync-up.nu") --manual
 }
 
+# Compatibility wrapper. Prefer `dotctl push`.
+export def dotpush [] { cmd-push }
+
 # Pull private/provider state to this machine with explicit conflict and backup controls.
-export def dotpull [
+def cmd-pull [
     --prune # Remove managed targets that no longer exist in the source.
     --force # Allow the pull to apply without the normal conservative stop.
     --backup # Create a named local backup before pulling; also enables the required force path.
     --source-only # Refresh the private source without applying it to local targets.
     --discard-source # Explicitly discard conflicting source-side changes when supported.
     --discard-local # Explicitly discard conflicting local changes when supported.
-    --reload # Restart Nushell after preparing the pull command.
+    --reload # Restart Nushell only after a successful pull.
 ] {
     let script = (tool-script "sync-down.nu")
 
@@ -350,7 +333,7 @@ export def dotpull [
         }
     }
 
-    mut args = [$script]
+    mut args = [$script "--manual"]
 
     if $prune {
         $args = ($args | append "--prune")
@@ -363,13 +346,26 @@ export def dotpull [
         $args = ($args | append "--force")
     }
     if $reload {
-        print "[reload] Reloading Nushell session..."
-        exec $nu.current-exe
+        $args = ($args | append "--reload")
+        exec $nu.current-exe --no-config-file ...$args
     }
 
     ^$nu.current-exe --no-config-file ...$args
 }
 
+
+# Compatibility wrapper. Prefer `dotctl pull`; --backup remains legacy-only.
+export def dotpull [
+    --prune # Remove managed targets that no longer exist in the source.
+    --force # Allow the pull to apply without the normal conservative stop.
+    --backup # Compatibility-only extra named backup; also enables the force path.
+    --source-only # Refresh the private source without applying it to local targets.
+    --discard-source # Explicitly discard conflicting source-side changes when supported.
+    --discard-local # Explicitly discard conflicting local changes when supported.
+    --reload # Restart Nushell only after a successful pull.
+] {
+    cmd-pull --prune=$prune --force=$force --backup=$backup --source-only=$source_only --discard-source=$discard_source --discard-local=$discard_local --reload=$reload
+}
 
 # Publish only the current private source snapshot to an rclone revision store.
 # This does not replace/capture the normal provider source.
@@ -426,12 +422,15 @@ export def dotresolve [
 }
 
 # Run one automatic synchronization cycle using the configured sync policy.
-export def dotsync [] {
+def cmd-sync [] {
     ^$nu.current-exe --no-config-file (tool-script "auto-sync.nu")
 }
 
+# Compatibility wrapper. Prefer `dotctl sync`.
+export def dotsync [] { cmd-sync }
+
 # Create a completed private-source snapshot for later rollback.
-export def dotsnapshot [
+def cmd-backup [
     --label: string = "manual" # Human-readable snapshot label.
 ] {
     let args = [
@@ -443,8 +442,15 @@ export def dotsnapshot [
     ^$nu.current-exe --no-config-file ...$args
 }
 
+# Compatibility wrapper. Prefer `dotctl backup`.
+export def dotsnapshot [
+    --label: string = "manual" # Human-readable snapshot label.
+] {
+    cmd-backup --label $label
+}
+
 # List snapshots or roll the private source back to a selected completed snapshot.
-export def dotrollback [
+def cmd-restore [
     --list # List available completed snapshots without changing state.
     --snapshot: string@complete-snapshots = "" # Snapshot ID to restore; Tab lists completed snapshots.
 ] {
@@ -460,6 +466,14 @@ export def dotrollback [
     } else {
         ^$nu.current-exe --no-config-file $script --snapshot $snapshot
     }
+}
+
+# Compatibility wrapper. Prefer `dotctl restore`.
+export def dotrollback [
+    --list # List available completed snapshots without changing state.
+    --snapshot: string@complete-snapshots = "" # Snapshot ID to restore; Tab lists completed snapshots.
+] {
+    cmd-restore --list=$list --snapshot $snapshot
 }
 
 # Show the installed Initial-setup version and schema information.
@@ -520,16 +534,16 @@ export def dotstate [] {
     ^$nu.current-exe --no-config-file (tool-script "capture-tool-state.nu")
 }
 
-# Migrate managed configuration to the current project layout/schema.
+# Migrate machine configuration and state schemas as one recoverable transaction.
+# --check is read-only and prints the exact transaction plan without changing files.
 export def dotmigrate [
-    --check # Inspect required migration work without applying it.
+    --check # Inspect the complete migration plan without creating backups or changing state.
 ] {
-    let script = (tool-script "migrate-config.nu")
-
-    if $check {
-        ^$nu.current-exe --no-config-file $script --check
-    } else {
-        ^$nu.current-exe --no-config-file $script
+    let script = (tool-script "migrate-state-transaction.nu")
+    let args = if $check { ["--no-config-file" $script "--check"] } else { ["--no-config-file" $script] }
+    let result = (run-command $nu.current-exe $args --live)
+    if not $result.ok {
+        error make {msg: (command-failure-message "Schema migration transaction" $result)}
     }
 }
 
@@ -556,7 +570,7 @@ export def dotrestoreenv [] {
 }
 
 # Diagnose Initial-setup health and optionally repair supported local issues.
-export def dotdoctor [
+def cmd-doctor [
     --fix # Apply supported local repairs after diagnosis.
 ] {
     let script = (tool-script "doctor.nu")
@@ -568,8 +582,12 @@ export def dotdoctor [
     }
 }
 
+# Compatibility wrapper. Prefer `dotctl doctor`.
+export def dotdoctor [--fix # Apply supported local repairs after diagnosis.
+] { cmd-doctor --fix=$fix }
+
 # Run safe maintenance for tools and managed configuration; project upgrades remain explicit.
-export def dotupdate [
+def cmd-update [
     --repo # Show the safe project-upgrade path instead of performing a blind Git pull.
     --tools # Update supported system/CLI tools for the current platform.
     --config # Re-apply supported managed configuration maintenance.
@@ -597,6 +615,16 @@ export def dotupdate [
     ^$nu.current-exe --no-config-file ...$args
 }
 
+# Compatibility wrapper. Prefer `dotctl update`.
+export def dotupdate [
+    --repo # Show the safe project-upgrade path instead of performing a blind Git pull.
+    --tools # Update supported system/CLI tools for the current platform.
+    --config # Re-apply supported managed configuration maintenance.
+    --all # Run all maintenance categories.
+] {
+    cmd-update --repo=$repo --tools=$tools --config=$config --all=$all
+}
+
 # Generate an Initial-setup environment and synchronization report.
 export def dotreport [
     --save # Save the report to the project-defined report location.
@@ -622,12 +650,12 @@ export def dotlog [
             "" | save --force $file
         }
 
-        print "[ok] Sync log cleared"
+        print-status "ok" "ok" "Sync log cleared"
         return
     }
 
     if not ($file | path exists) {
-        print "No sync log."
+        print-status "info" "info" "No sync log."
         return
     }
 
@@ -642,12 +670,15 @@ export def dotlog [
 }
 
 # Edit the machine configuration file used by Initial-setup.
-export def dotconfig [] {
+def cmd-config [] {
     edit-file ((nu-home) | path join ".config" "dotfiles" "config.nuon")
 
     print ""
-    print "[info] Run `nu setup.nu` after changing profile, scheduler interval, or feature switches."
+    print-status "info" "info" "Run `nu setup.nu` after changing profile, scheduler interval, or feature switches."
 }
+
+# Compatibility wrapper. Prefer `dotctl config`.
+export def dotconfig [] { cmd-config }
 
 # Check or apply the supported OneDrive ignore-upload policy.
 export def dotonedrive [
@@ -663,7 +694,7 @@ export def dotonedrive [
 }
 
 # Inspect rclone integration or capture/restore its config through the encrypted vault.
-export def dotrclone [
+def cmd-config-rclone [
     --capture # Encrypt and capture the active rclone config as the rclone vault entry.
     --restore # Restore the encrypted rclone vault entry to the active local config path.
 ] {
@@ -672,33 +703,33 @@ export def dotrclone [
     }
 
     if $capture {
-        ^$nu.current-exe --no-config-file (tool-script "secret-vault.nu") capture rclone
+        ^$nu.current-exe --no-config-file (tool-script "capture-rclone-config.nu") --manual
         return
     }
 
     if $restore {
-        ^$nu.current-exe --no-config-file (tool-script "secret-vault.nu") restore rclone
+        ^$nu.current-exe --no-config-file (tool-script "restore-rclone-config.nu") --manual
         return
     }
 
-    if (which rclone | is-empty) {
-        print "rclone: not installed"
-        return
-    }
-
-    print "Local rclone config:"
-    ^rclone config file
-    print ""
-    print ("Encrypted copy: " + ((data-root) | path join "secrets" "rclone.age" | into string))
+    print-rclone-readiness --heading | ignore
     let sync_config = ((nu-home) | path join ".config" "dotfiles" "rclone-sync.nuon")
     if ($sync_config | path exists) {
         let saved = (open --raw $sync_config | from nuon)
-        print ("rclone-only sync remote: " + ($saved.remote? | default "<invalid>"))
+        print-key-value "rclone-only sync remote: " ($saved.remote? | default "<invalid>")
     }
 }
 
+# Compatibility wrapper. Prefer `dotctl config rclone`.
+export def dotrclone [
+    --capture # Encrypt and capture the active rclone config.
+    --restore # Restore the encrypted rclone config.
+] {
+    cmd-config-rclone --capture=$capture --restore=$restore
+}
+
 # Edit machine-local Nushell overrides stored outside synchronized configuration.
-export def dotlocal [] {
+def cmd-config-local [] {
     let file = ((nu-home) | path join ".config" "dotfiles" "local.nu")
 
     if not ($file | path exists) {
@@ -708,10 +739,27 @@ export def dotlocal [] {
     edit-file $file
 }
 
+# Compatibility wrapper. Prefer `dotctl config local`.
+export def dotlocal [] { cmd-config-local }
+
 # Edit the machine-local autoload file for shell secrets.
-export def dotsecrets [] {
-    edit-file ($nu.data-dir | path join "vendor" "autoload" "dotfiles-secrets.nu")
+def cmd-config-secrets [] {
+    let target = ($nu.data-dir | path join "vendor" "autoload" "dotfiles-secrets.nu")
+    mkdir ($target | path dirname)
+    if not ($target | path exists) { "" | save $target }
+    # Holds API tokens; never leave it at the default umask (often 0644).
+    # Windows keeps this under the per-user profile ACL.
+    if $nu.os-info.name != "windows" {
+        let result = (run-command "chmod" ["600" $target])
+        if $result.exit_code != 0 {
+            print-status "warn" "secrets" "Could not restrict dotfiles-secrets.nu to owner-only permissions."
+        }
+    }
+    edit-file $target
 }
+
+# Compatibility wrapper. Prefer `dotctl config secrets`.
+export def dotsecrets [] { cmd-config-secrets }
 
 # Check, edit, or apply machine-local Git identity dispatch configuration.
 export def dotgitids [
@@ -851,7 +899,7 @@ export def dottest [
 }
 
 # Run preflight checks before applying setup or synchronization changes.
-export def dotpreflight [
+def cmd-preflight [
     --diff # Include managed configuration differences in the preflight report.
 ] {
     let script = (tool-script "preflight.nu")
@@ -862,6 +910,10 @@ export def dotpreflight [
         ^$nu.current-exe --no-config-file $script
     }
 }
+
+# Compatibility wrapper. Prefer `dotctl preflight`.
+export def dotpreflight [--diff # Include managed configuration differences in the preflight report.
+] { cmd-preflight --diff=$diff }
 
 # Back up machine-local configuration that is intentionally excluded from sync.
 export def dotlocalbackup [
@@ -980,22 +1032,190 @@ export def dotmergecfg [
     if $check { ^$nu.current-exe --no-config-file $script --check } else if $force { ^$nu.current-exe --no-config-file $script --force } else { ^$nu.current-exe --no-config-file $script }
 }
 
-# Vault status. Native subcommands below provide Nushell-owned Tab completion.
-export def dotvault [] {
+# Canonical implementations shared by the primary `dotctl` surface and
+# compatibility command names. These functions are intentionally private so
+# legacy wrappers cannot become implementation dependencies again.
+def cmd-vault-status [] {
     ^$nu.current-exe --no-config-file (tool-script "secret-vault.nu") status
 }
 
-# Show encrypted-vault status and registered entries.
-export def "dotvault status" [] {
-    ^$nu.current-exe --no-config-file (tool-script "secret-vault.nu") status
-}
-
-# Initialize the local age-backed vault policy.
-export def "dotvault init" [--recipient: string = "" --check] {
+def cmd-vault-init [--recipient: string = "" --check] {
     mut args = ["init"]
     if not ($recipient | str trim | is-empty) { $args = ($args | append ["--recipient" $recipient]) }
     if $check { $args = ($args | append "--check") }
     ^$nu.current-exe --no-config-file (tool-script "secret-vault.nu") ...$args
+}
+
+def cmd-backend-status [] {
+    ^$nu.current-exe --no-config-file (tool-script "backend-control.nu") status
+}
+
+def cmd-cloud-help [] {
+    cloud-invoke "help" []
+}
+
+# ------------------------------------------------------------
+# Primary dotctl command family
+# ------------------------------------------------------------
+# The legacy dot* commands remain supported for compatibility. New interactive
+# use should prefer this smaller `dotctl ...` surface.
+export def dotctl [] {
+    print-heading "Initial-setup"
+    print-text "info" "Routine commands"
+    print-command "dotctl status                  # sync/provider summary"
+    print-command "dotctl diff                    # managed-file diff"
+    print-command "dotctl push                    # local -> private source"
+    print-command "dotctl pull                    # private source -> local; verified backup is automatic"
+    print-command "dotctl sync                    # run one configured sync cycle"
+    print-command "dotctl config                  # edit machine configuration"
+    print-command "dotctl doctor                  # diagnose local health"
+    print-command "dotctl verify                  # check rclone/rpool match the private source (read-only)"
+    print-command "dotctl update                  # guarded maintenance"
+    print ""
+    print-text "info" "Recovery / configuration"
+    print-command "dotctl backup                  # create a private-source snapshot"
+    print-command "dotctl restore --list          # list/restore snapshots"
+    print-command "dotctl preflight --diff        # review before changing state"
+    print-command "dotctl config rclone           # encrypted rclone readiness/capture/restore"
+    print-command "dotctl config rpool            # portable rpool configuration"
+    print-command "dotctl config wireguard        # encrypted native WireGuard synchronization"
+    print-command "dotctl config vault            # encrypted-vault status"
+    print ""
+    print-text "warn" "Legacy dot* commands remain supported for advanced/compatibility workflows."
+    print-text "muted" "See docs/wiki/Command-Reference.md for the complete command inventory."
+}
+
+# Show synchronization and chezmoi state.
+export def "dotctl status" [] { cmd-status }
+
+# Show the managed-file diff.
+export def "dotctl diff" [] { cmd-diff }
+
+# Publish local configuration, including an encrypted rclone.conf when enabled.
+export def "dotctl push" [] { cmd-push }
+
+# Pull private configuration, including authenticated rclone.conf restore.
+# A verified local backup is created automatically by the pull transport before
+# any live configuration is changed. The legacy `dotpull --backup` option stays
+# available only as a compatibility path for workflows that want an extra named
+# backup in addition to the built-in verified backup.
+export def "dotctl pull" [
+    --prune # Remove managed extras when the configured pull policy allows it.
+    --force # Advanced chezmoi apply override; local/protected-file guards still apply.
+    --source-only # Refresh the private source without applying it to live configuration.
+    --discard-source # Explicitly permit backed-up replacement of conflicting source-side changes.
+    --discard-local # Explicitly permit replacement of conflicting local changes.
+    --reload # Restart Nushell only after a successful pull.
+] {
+    cmd-pull --prune=$prune --force=$force --source-only=$source_only --discard-source=$discard_source --discard-local=$discard_local --reload=$reload
+}
+
+# Run one synchronization cycle according to the configured policy.
+export def "dotctl sync" [] { cmd-sync }
+
+# Create a private-source snapshot.
+export def "dotctl backup" [--label: string = "manual"] { cmd-backup --label $label }
+
+# List or restore private-source snapshots.
+export def "dotctl restore" [--list --snapshot: string@complete-snapshots = ""] {
+    cmd-restore --list=$list --snapshot $snapshot
+}
+
+# Edit the machine configuration.
+export def "dotctl config" [] { cmd-config }
+
+# Edit machine-local Nushell overrides.
+export def "dotctl config local" [] { cmd-config-local }
+
+# Edit machine-local shell secrets.
+export def "dotctl config secrets" [] { cmd-config-secrets }
+
+# Inspect or manually synchronize the encrypted rclone configuration.
+export def "dotctl config rclone" [
+    --capture # Encrypt/capture the active rclone config using the same path as dotpush.
+    --restore # Authenticate/restore the encrypted rclone config using the same path as dotpull.
+] {
+    if $capture and $restore {
+        error make { msg: "Use either --capture or --restore, not both." }
+    }
+    cmd-config-rclone --capture=$capture --restore=$restore
+}
+
+# Inspect or manually synchronize rpool's portable configuration and age-encrypted crypt passwords.
+export def "dotctl config rpool" [
+    --capture # Export the current portable rpool configuration into the private source.
+    --restore # Import the synchronized portable rpool configuration on this machine.
+    --dry-run # Validate/show the import without changing rpool configuration.
+] {
+    let script = (tool-script "rpool-config-sync.nu")
+    mut args = [$script]
+    if $capture { $args = ($args | append "--capture") }
+    if $restore { $args = ($args | append "--restore") }
+    if $dry_run { $args = ($args | append "--dry-run") }
+    ^$nu.current-exe --no-config-file ...$args
+}
+
+# Show encrypted-vault status.
+export def "dotctl config vault" [] { cmd-vault-status }
+
+# Explicit device enrollment is required before native WireGuard access.
+export def "dotctl config wireguard" [--capture --restore --check] {
+    mut args = ["--no-config-file" (tool-script "wireguard-config-sync.nu")]
+    if $capture { $args = ($args | append "--capture") }
+    if $restore { $args = ($args | append "--restore") }
+    if $check { $args = ($args | append "--check") }
+    ^$nu.current-exe ...$args
+}
+
+# Initialize the encrypted vault used by automatic rclone sync.
+export def "dotctl config vault init" [--recipient: string = "" --check] {
+    cmd-vault-init --recipient $recipient --check=$check
+}
+
+# Run preflight checks before synchronization/setup changes.
+export def "dotctl preflight" [--diff] { cmd-preflight --diff=$diff }
+
+# Diagnose Initial-setup health.
+export def "dotctl doctor" [--fix] { cmd-doctor --fix=$fix }
+
+# Check that this machine's rclone.conf and rpool settings match the private
+# source (read-only; decrypts in memory, prints no secret values).
+export def "dotctl verify" [--json] {
+    let args = if $json { ["--json"] } else { [] }
+    ^$nu.current-exe --no-config-file (tool-script "verify-sync.nu") ...$args
+}
+
+# Run safe maintenance.
+export def "dotctl update" [--repo --tools --config --all] {
+    cmd-update --repo=$repo --tools=$tools --config=$config --all=$all
+}
+
+# Vault status. Native subcommands below provide Nushell-owned Tab completion.
+export def dotvault [] { cmd-vault-status }
+
+# Show encrypted-vault status and registered entries.
+export def "dotvault status" [] { cmd-vault-status }
+
+# Initialize the local age-backed vault policy.
+export def "dotvault init" [--recipient: string = "" --check] {
+    cmd-vault-init --recipient $recipient --check=$check
+}
+
+# Make this machine's age identity the only vault recipient after a key
+# mismatch (preview unless --execute); then dotpush re-encrypts the copies.
+export def "dotvault rekey" [--execute] {
+    let args = if $execute { ["rekey" "--execute"] } else { ["rekey"] }
+    ^$nu.current-exe --no-config-file (tool-script "secret-vault.nu") ...$args
+}
+
+# Open the age vault identity in an editor to set it to another machine's
+# shared private key. Local only; owner-only permissions; no secret is printed.
+export def "dotvault edit-identity" [--editor: string = "nvim" --editor-argument: string = ""] {
+    let script = (tool-script "edit-identity.nu")
+    mut args = ["--no-config-file" $script "--editor" $editor]
+    if not ($editor_argument | str trim | is-empty) { $args = ($args | append ["--editor-argument" $editor_argument]) }
+    let result = (run-command $nu.current-exe $args --live)
+    if not $result.ok { error make {msg: ((command-failure-message "Vault identity editor" $result) + (char nl) + "Any saved identity edit is preserved.")} }
 }
 
 # Encrypt a registered local secret into the private source.
@@ -1010,6 +1230,31 @@ export def "dotvault restore" [name: string@complete-vault-entries --force] {
     ^$nu.current-exe --no-config-file (tool-script "secret-vault.nu") ...$args
 }
 
+# Install or update the RPool binary from its public GitHub releases.
+export def "rpool-install" [--version: string = "" --check] {
+    mut args = []
+    if not ($version | str trim | is-empty) { $args = ($args | append ["--version" $version]) }
+    if $check { $args = ($args | append "--check") }
+    ^$nu.current-exe --no-config-file (tool-script "rpool-install.nu") ...$args
+}
+
+# Enroll / unenroll / list SSH private keys that are age-encrypted and synced.
+export def "dotvault ssh-key add" [name: string] {
+    ^$nu.current-exe --no-config-file (tool-script "secret-vault.nu") ssh-key-add $name
+}
+
+export def "dotvault ssh-key add-all" [] {
+    ^$nu.current-exe --no-config-file (tool-script "secret-vault.nu") ssh-key-add-all
+}
+
+export def "dotvault ssh-key remove" [name: string] {
+    ^$nu.current-exe --no-config-file (tool-script "secret-vault.nu") ssh-key-remove $name
+}
+
+export def "dotvault ssh-key list" [] {
+    ^$nu.current-exe --no-config-file (tool-script "secret-vault.nu") ssh-key-list
+}
+
 # Migrate the legacy plaintext rclone config into the encrypted vault.
 export def "dotvault migrate-rclone" [--remove-legacy] {
     mut args = ["migrate-rclone"]
@@ -1018,14 +1263,10 @@ export def "dotvault migrate-rclone" [--remove-legacy] {
 }
 
 # Show the active synchronization backend status.
-export def dotbackend [] {
-    ^$nu.current-exe --no-config-file (tool-script "backend-control.nu") status
-}
+export def dotbackend [] { cmd-backend-status }
 
 # Show provider revision, baseline, lock, and export status.
-export def "dotbackend status" [] {
-    ^$nu.current-exe --no-config-file (tool-script "backend-control.nu") status
-}
+export def "dotbackend status" [] { cmd-backend-status }
 
 # Configure the synchronization provider without moving data.
 export def "dotbackend configure" [--kind: string@complete-backend-kinds = "directory" --remote: string = "" --force] {
@@ -1092,14 +1333,10 @@ export def dotnuupdate [--check --shell] {
 }
 
 # Show Cloud-wins usage. Native subcommands provide Nushell-owned Tab completion.
-export def dotcloud [] {
-    cloud-invoke "help" []
-}
+export def dotcloud [] { cmd-cloud-help }
 
 # Show Cloud-wins command usage.
-export def "dotcloud help" [] {
-    cloud-invoke "help" []
-}
+export def "dotcloud help" [] { cmd-cloud-help }
 
 # Configure a read-only mirror source and local workspace target.
 export def "dotcloud configure" [--source: string = "" --target: string = "" --execute] {

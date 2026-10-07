@@ -48,7 +48,7 @@ def main [] {
         let relative = (rel $file)
         let text = (open --raw $file)
 
-        if ($text | str contains '$env.LAST_EXIT_CODE') and $relative not-in ["scripts/edit-managed.nu" "scripts/resolve-config.nu"] {
+        if ($text | str contains '$env.LAST_EXIT_CODE') and $relative not-in ["scripts/edit-managed.nu" "scripts/resolve-config.nu" "scripts/edit-identity.nu"] {
             $last_exit_offenders = ($last_exit_offenders | append $relative)
         }
 
@@ -63,6 +63,8 @@ def main [] {
 
     let editor = (open --raw ($ROOT | path join "scripts" "edit-managed.nu"))
     expect (($editor | find '$env.LAST_EXIT_CODE' | length) == 1) "managed editor has exactly one TTY exit-code exception"
+    let id_editor = (open --raw ($ROOT | path join "scripts" "edit-identity.nu"))
+    expect (($id_editor | lines | where {|line| $line | str contains '$env.LAST_EXIT_CODE' } | length) == 1) "identity editor has exactly one TTY exit-code exception"
     expect ($editor | str contains "Interactive editors need the real terminal") "managed editor documents the TTY exception"
 
     let resolver = (open --raw ($ROOT | path join "scripts" "resolve-config.nu"))

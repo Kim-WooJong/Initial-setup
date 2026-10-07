@@ -82,7 +82,12 @@ case "$os" in
             *) echo "NU_RELEASE_UNSUPPORTED_ARCH: Linux $arch" >&2; exit 3 ;;
         esac
         libc="gnu"
-        if (ldd --version 2>&1 || true) | grep -qi musl || compgen -G '/lib/ld-musl-*.so.1' >/dev/null 2>&1; then
+        # Capture first: `ldd | grep -q` under pipefail can report SIGPIPE (141).
+        ldd_out="$(ldd --version 2>&1 || true)"
+        case "$ldd_out" in
+            *[Mm][Uu][Ss][Ll]*) libc="musl" ;;
+        esac
+        if [ "$libc" = "gnu" ] && compgen -G '/lib/ld-musl-*.so.1' >/dev/null 2>&1; then
             libc="musl"
         fi
         if [ "$cpu" = "armv7" ]; then
@@ -146,7 +151,11 @@ fi
 asset="nu-$version-$target.tar.gz"
 url="https://github.com/nushell/nushell/releases/download/$version/$asset"
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/initial-setup-nu.XXXXXX")"
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
+# Signal traps must exit after cleanup; otherwise bash resumes the script.
+trap 'rm -rf "$tmp"' EXIT
+trap 'rm -rf "$tmp"; exit 129' HUP
+trap 'rm -rf "$tmp"; exit 130' INT
+trap 'rm -rf "$tmp"; exit 143' TERM
 archive="$tmp/$asset"
 extract="$tmp/extract"
 mkdir -p "$extract"
@@ -166,7 +175,7 @@ fi
 # Refuse absolute paths, parent traversal, backslashes and option-like members.
 while IFS= read -r member; do
     case "$member" in
-        ''|/*|../*|*/../*|*/..|-*|*'\\'*)
+        ''|/*|../*|*/../*|*/..|-*|*'\'*)
             echo "NU_RELEASE_UNSAFE_ARCHIVE_MEMBER: $member" >&2
             exit 1
             ;;

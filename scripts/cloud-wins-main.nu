@@ -5,10 +5,12 @@ const ENGINE = path self ./modules/cloud-wins-engine.nu
 const SAFETY = path self ./modules/safety.nu
 const CORE = path self ./modules/core.nu
 const PROVIDER = path self ./modules/sync-provider.nu
-use $CONFIG [cloud-config-path load-cloud-config cloud-mode-active cloud-roots cloud-state-dir assert-cloud-workspace]
+const MACHINE_CONFIG = path self ./modules/machine-config.nu
+use $CONFIG [cloud-config-path load-cloud-config write-cloud-config cloud-mode-active cloud-roots cloud-state-dir assert-cloud-workspace]
 use $ENGINE [cloud-engine engine-json]
-use $SAFETY [operation-lease release-lease state-root atomic-record private-directory disjoint-paths]
+use $SAFETY [operation-lease release-lease state-root private-directory disjoint-paths]
 use $CORE [machine-context machine-config-path error-message failure-envelope captured-failure]
+use $MACHINE_CONFIG [write-machine-config]
 use $PROVIDER [load-provider audit-export]
 
 def print-help [] {
@@ -50,7 +52,7 @@ def configure [source: string target: string execute: bool] {
         private-directory ($backup | path dirname)
         cp $file $backup
     }
-    atomic-record $file {version: 1 source: $r.source target: $r.target active: false}
+    write-cloud-config {version: 1 source: $r.source target: $r.target active: false} | ignore
     {configured: true active: false state_dir: $r.state_dir next: "dotcloud plan"}
 }
 def activate [execute: bool confirm: string settle_ms: int] {
@@ -79,8 +81,8 @@ def activate [execute: bool confirm: string settle_ms: int] {
     cp (machine-config-path) $backup
     # Fail closed: save the active blocker FIRST. A crash between these writes
     # blocks push/setup and is recoverable with deactivate, not an implicit push.
-    atomic-record (cloud-config-path) ($config | upsert active true | upsert previous_context $context | upsert activated_context $updated | upsert machine_backup ($backup | into string))
-    atomic-record (machine-config-path) $updated
+    write-cloud-config ($config | upsert active true | upsert previous_context $context | upsert activated_context $updated | upsert machine_backup ($backup | into string)) | ignore
+    write-machine-config $updated | ignore
     {active: true data_root: $r.target source_read_only: $r.source auto_sync: false next: "dotpull (review protected conflicts; no implicit force)"}
 }
 def deactivate [execute: bool confirm: string] {
@@ -94,8 +96,8 @@ def deactivate [execute: bool confirm: string] {
     if $confirm != "restore-previous-mode" { error make {msg: "Use --execute --confirm restore-previous-mode. This restores the previous bidirectional/automatic policy."} }
     # Restore machine state FIRST; until the second write succeeds, the active
     # blocker still prevents automatic/push writes into the mirror.
-    atomic-record (machine-config-path) $config.previous_context
-    atomic-record (cloud-config-path) {version: 1 source: $config.source target: $config.target active: false}
+    write-machine-config $config.previous_context | ignore
+    write-cloud-config {version: 1 source: $config.source target: $config.target active: false} | ignore
     {active: false restored_data_root: $config.previous_context.data_root note: "Previous sync policy restored. Review dotbackend status before publishing."}
 }
 def perform [options: record] {

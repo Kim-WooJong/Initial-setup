@@ -1,41 +1,12 @@
 #!/usr/bin/env nu
-
+const CORE = path self ./modules/core.nu
+use $CORE [nu-home machine-context vscode-user-dir]
 const SUBPROCESS = path self ./modules/subprocess.nu
+const RPOOL_MODULE = path self ./modules/rpool-sync.nu
+const WIREGUARD_MODULE = path self ./modules/wireguard-sync.nu
 use $SUBPROCESS [run-command]
-
-def nu-home [] {
-    let test_mode = ($env.INITIAL_SETUP_TEST_MODE? | default "" | str trim)
-    let override = ($env.INITIAL_SETUP_HOME_OVERRIDE? | default "" | str trim)
-
-    if $test_mode == "1" and not ($override | is-empty) {
-        return ($override | path expand)
-    }
-
-    let home_path = ($nu | get --optional home-path)
-
-    if $home_path != null {
-        return $home_path
-    }
-
-    let home_dir = ($nu | get --optional home-dir)
-
-    if $home_dir != null {
-        return $home_dir
-    }
-
-    error make {
-        msg: "Unable to determine the Nushell home directory."
-    }
-}
-
-def machine-context [] {
-    let file = (
-        (nu-home)
-        | path join ".config" "dotfiles" "config.nuon"
-    )
-
-    open $file
-}
+use $RPOOL_MODULE [rpool-sync-status rpool-local-hash]
+use $WIREGUARD_MODULE [wireguard-local-hash]
 
 def normalize-path [value: path] {
     $value
@@ -62,6 +33,10 @@ def file-entry [
     )
 
     ($label + "|" + $relative + "|" + $content_hash)
+}
+
+def is-shell-history [file: path] {
+    ($file | path basename) =~ '^history\.(txt|sqlite3)(-wal|-shm|-journal)?$'
 }
 
 def target-entries [
@@ -128,8 +103,11 @@ def target-entries [
 
         let pattern = ($root_text + "/**/*" | into glob)
 
+        # Nushell rewrites its command history on every prompt. History is
+        # not managed configuration, so it must not register as a local edit.
         let files = (
             glob -D $pattern
+            | where {|file| not ($label == "nushell" and (is-shell-history $file)) }
             | sort
         )
 
@@ -162,38 +140,6 @@ def rclone-config-path [] {
     let rows = ($result.stdout | lines | each {|line| $line | str trim } | where {|line| not ($line | is-empty) })
     if ($rows | is-empty) { return null }
     $rows | last
-}
-
-def vscode-user-dir [] {
-    match $nu.os-info.name {
-        "windows" => {
-            let appdata = (
-                $env.APPDATA?
-                | default ""
-            )
-
-            if ($appdata | is-empty) {
-                return null
-            }
-
-            $appdata
-            | path join "Code" "User"
-        }
-
-        "macos" => {
-            (nu-home)
-            | path join "Library" "Application Support" "Code" "User"
-        }
-
-        "linux" => {
-            (nu-home)
-            | path join ".config" "Code" "User"
-        }
-
-        _ => {
-            null
-        }
-    }
 }
 
 def append-target [
@@ -278,6 +224,16 @@ def local-entries [] {
         } else {
             $entries = (append-target $entries "rclone-config" $rclone_path)
         }
+    }
+
+    let rpool_status = (rpool-sync-status ($context.data_root | path expand))
+    if $rpool_status.installed or $rpool_status.bundle_exists {
+        $entries = ($entries | append ("rpool-config|" + (rpool-local-hash)))
+    }
+
+    let wireguard_hash = (wireguard-local-hash)
+    if $wireguard_hash != "DISABLED" {
+        $entries = ($entries | append ("wireguard-config|" + $wireguard_hash))
     }
 
     if $features.vscode {

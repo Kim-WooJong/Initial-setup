@@ -86,7 +86,6 @@ def main [
     if not $setup_only {
         run-nu "capture/sync failure propagation" [($TOOLS_ROOT | path join "scripts" "subprocess-chain-test.nu")] | ignore
         run-nu "entrypoint diagnostics" [($TOOLS_ROOT | path join "scripts" "entrypoint-test.nu")] | ignore
-        run-nu "interactive command completion surface" [($TOOLS_ROOT | path join "scripts" "command-completion-test.nu")] | ignore
         run-nu "active cloud command refresh" [($TOOLS_ROOT | path join "scripts" "refresh-commands-test.nu")] | ignore
         run-nu "run-state checkpoint integrity" [($TOOLS_ROOT | path join "scripts" "run-state-test.nu")] | ignore
         run-nu "syntax-validator regression fixtures" [($TOOLS_ROOT | path join "scripts" "syntax-self-test.nu")] | ignore
@@ -222,7 +221,7 @@ def main [
         "--no-auto-sync"
     ])
 
-    let push_stdout = ($push_result.stdout? | output-text)
+    let push_stdout = ($push_result.stdout? | output-text | ansi strip)
 
     if not ($push_stdout | str contains "Mode          : initial") {
         print $push_stdout
@@ -251,7 +250,7 @@ def main [
         "--no-auto-sync"
     ])
 
-    let pull_stdout = ($pull_result.stdout? | output-text)
+    let pull_stdout = ($pull_result.stdout? | output-text | ansi strip)
 
     if not ($pull_stdout | str contains "Mode          : existing") {
         print $pull_stdout

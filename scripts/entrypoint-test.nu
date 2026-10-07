@@ -9,6 +9,21 @@ def child [path: path args: list] {
     let exe = $nu.current-exe
     do { ^$exe --no-config-file $path ...$args } | complete
 }
+# Files reachable through `const X = path self ./file.nu` + `use`/`source`.
+def parse-closure [entry: path] {
+    mut seen = []
+    mut queue = [($entry | path expand)]
+    while not ($queue | is-empty) {
+        let file = ($queue | first)
+        $queue = ($queue | skip 1)
+        if $file in $seen { continue }
+        $seen = ($seen | append $file)
+        let deps = (open --raw $file | parse --regex 'path self\s+(?<dep>\S+\.nu)' | get dep | each {|d| $file | path dirname | path join $d | path expand })
+        $queue = ($queue | append ($deps | where {|d| $d | path exists }))
+    }
+    $seen | where {|f| $f != ($entry | path expand) }
+}
+
 def tests [base: path] {
     let result = (do {
         cd $base
@@ -27,11 +42,13 @@ def tests [base: path] {
     mkdir ($broken | path join "scripts")
     cp ($ROOT | path join "setup.nu") ($broken | path join "setup.nu")
     cp ($ROOT | path join "scripts" "diagnose-project.nu") ($broken | path join "scripts" "diagnose-project.nu")
-    # Keep the minimal entrypoint's own capture boundary; omit implementation
-    # files so preflight can diagnose the incomplete release before setup imports.
-    mkdir ($broken | path join "scripts" "modules")
-    for module in ["subprocess.nu" "process-output.nu"] {
-        cp ($ROOT | path join "scripts" "modules" $module) ($broken | path join "scripts" "modules" $module)
+    # Keep the entrypoint's own parse-time closure (computed, so new imports in
+    # setup.nu's helpers stay covered); omit implementation files so preflight
+    # can diagnose the incomplete release before setup imports.
+    for file in (parse-closure ($ROOT | path join "setup.nu")) {
+        let relative = ($file | path relative-to $ROOT)
+        mkdir ($broken | path join $relative | path dirname)
+        cp $file ($broken | path join $relative)
     }
     let failure = (child ($broken | path join "setup.nu") ["--diagnose"])
     check ($failure.exit_code != 0) "Partial extraction is rejected"

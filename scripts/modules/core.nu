@@ -32,6 +32,19 @@ export def machine-config-path [] {
     (nu-home) | path join ".config" "dotfiles" "config.nuon"
 }
 
+# Private synchronized settings always live in <tools_root>/private. A
+# data_root saved by an older version (the checkout's parent folder, ../home,
+# or any other path) is ignored, never read or written. Isolated tests keep an
+# explicit data_root unless INITIAL_SETUP_ENFORCE_PRIVATE=1 asks for the rule.
+export def fixed-private-context [config: record] {
+    let test_mode = ($env.INITIAL_SETUP_TEST_MODE? | default "" | str trim) == "1"
+    let enforce = ($env.INITIAL_SETUP_ENFORCE_PRIVATE? | default "" | str trim) == "1"
+    if $test_mode and not $enforce { return $config }
+    let tools = ($config.tools_root? | default "" | into string)
+    if ($tools | is-empty) { return $config }
+    $config | upsert data_root ($tools | path expand | path join "private" | into string)
+}
+
 export def machine-context [] {
     let file = (machine-config-path)
 
@@ -41,7 +54,83 @@ export def machine-context [] {
         }
     }
 
-    open $file
+    fixed-private-context (open $file)
+}
+
+export def try-machine-context [] {
+    let file = (machine-config-path)
+    if not ($file | path exists) { return null }
+    try { fixed-private-context (open $file) } catch { null }
+}
+
+export def vscode-user-dir [] {
+    match $nu.os-info.name {
+        "windows" => {
+            let appdata = ($env.APPDATA? | default "")
+            if ($appdata | is-empty) { null } else { $appdata | path join "Code" "User" }
+        }
+        "macos" => { (nu-home) | path join "Library" "Application Support" "Code" "User" }
+        "linux" => { (nu-home) | path join ".config" "Code" "User" }
+        _ => { null }
+    }
+}
+
+export def project-version [tools_root: path] {
+    open --raw ($tools_root | path join "VERSION")
+    | into string
+    | str trim
+}
+
+export def project-schema-version [tools_root: path] {
+    open --raw ($tools_root | path join "SCHEMA_VERSION")
+    | into string
+    | str trim
+    | into int
+}
+
+export def useful-lines [file: path] {
+    open --raw $file
+    | lines
+    | each {|line| $line | str trim }
+    | where {|line| not ($line | is-empty) and not ($line | str starts-with "#") }
+}
+
+export def try-read-nuon-record [file: path label: string = "NUON state"] {
+    if not ($file | path exists) {
+        return {ok: false status: "missing" detail: "not initialized" value: null}
+    }
+    if ($file | path type) != "file" {
+        return {ok: false status: "not-file" detail: "not a regular file" value: null}
+    }
+
+    let parsed = (try {
+        {ok: true status: "ok" detail: "" value: (open --raw $file | from nuon)}
+    } catch {|err|
+        {ok: false status: "parse-error" detail: ("invalid NUON: " + ($err.msg? | default ($err | into string))) value: null}
+    })
+    if not $parsed.ok {
+        return $parsed
+    }
+    if not (($parsed.value | describe) | str starts-with "record") {
+        return {ok: false status: "not-record" detail: "NUON root is not a record" value: null}
+    }
+
+    $parsed
+}
+
+export def read-nuon-record [file: path label: string = "NUON state"] {
+    let parsed = (try-read-nuon-record $file $label)
+    if $parsed.ok {
+        return $parsed.value
+    }
+
+    if $parsed.status == "missing" or $parsed.status == "not-file" {
+        error make {msg: ($label + " must be a regular file: " + ($file | into string))}
+    }
+    if $parsed.status == "parse-error" {
+        error make {msg: ("Unable to parse " + $label + " as NUON: " + ($file | into string) + (char nl) + $parsed.detail)}
+    }
+    error make {msg: ($label + " must contain a NUON record: " + ($file | into string))}
 }
 
 export def detect-machine-name [] {

@@ -5,10 +5,12 @@ const CORE = path self ./modules/core.nu
 const SAFETY = path self ./modules/safety.nu
 const PROVIDER = path self ./modules/sync-provider.nu
 const SUBPROCESS = path self ./modules/subprocess.nu
+const LOCAL_GUARD = path self ./modules/sync-local-guard.nu
 use $CORE [error-message failure-envelope captured-failure]
 use $SAFETY [state-root operation-lease release-lease manifest-hash]
 use $PROVIDER [load-provider assert-expected-head assert-same-head stable-provider-head record-provider-state remote-lock release-remote-lock install-workspace workspace-manifest new-transfer-dir copy-workspace]
 use $SUBPROCESS [run-command command-failure-message]
+use $LOCAL_GUARD [guard-pull-local assert-local-unchanged]
 
 def snapshot-root [] { (state-root) | path join "snapshots" }
 
@@ -77,7 +79,7 @@ def prepare-restore-source [provider: record selected: path version: int] {
     {source: $stage cleanup: $stage}
 }
 
-def rollback-impl [provider: record --snapshot: string = "" --source-only] {
+def rollback-impl [provider: record --snapshot: string = "" --source-only --discard-local] {
     let selected = (resolve-snapshot $snapshot)
     let validated = (validate-snapshot $selected)
 
@@ -86,6 +88,26 @@ def rollback-impl [provider: record --snapshot: string = "" --source-only] {
 
     let prepared = (prepare-restore-source $provider $selected $validated.version)
     let apply_source = $prepared.source
+
+    # A live rollback replaces machine configuration exactly like a pull, so it
+    # must pass the same local-change guard and take the same verified local
+    # backup before the private source or live files are touched.
+    mut local_guard: any = null
+    if not $source_only {
+        let guard_result = (try {
+            let guard = (guard-pull-local $apply_source --discard-local=$discard_local --interactive)
+            run-script "backup-local-config.nu" "--label" "before-rollback" "--quiet"
+            assert-local-unchanged $guard.local_hash
+            $guard
+        } catch {|err| failure-envelope $err })
+        let guard_failure = (captured-failure $guard_result)
+        if $guard_failure != null {
+            if $prepared.cleanup != null { try { rm --recursive --force $prepared.cleanup } catch {} }
+            error make {msg: (error-message $guard_failure "Rollback blocked before any change.")}
+        }
+        $local_guard = $guard_result
+    }
+
     let install_result = (try { install-workspace $provider $apply_source; null } catch {|err| failure-envelope $err })
     let install_failure = (captured-failure $install_result)
     if $install_failure != null {
@@ -100,14 +122,17 @@ def rollback-impl [provider: record --snapshot: string = "" --source-only] {
     }
 
     run-script "write-sync-meta.nu" "--action" "rollback"
-    run-script "sync-down-local.nu" "--source-root" ($apply_source | into string)
+    assert-local-unchanged $local_guard.local_hash
+    mut down_args = ["--source-root" ($apply_source | into string)]
+    if $discard_local or $local_guard.changed { $down_args = ($down_args | append "--discard-local") }
+    run-script "sync-down-local.nu" ...$down_args
     if $prepared.cleanup != null { try { rm --recursive --force $prepared.cleanup } catch {
         print --stderr ("[warn] Compatibility staging remains at: " + ($prepared.cleanup | into string))
     } }
     print ("[ok] Restored snapshot: " + ($selected | path basename))
 }
 
-def main [--list --snapshot: string = "" --source-only] {
+def main [--list --snapshot: string = "" --source-only --discard-local] {
     if $list {
         let snapshots = (snapshot-list)
         if ($snapshots | is-empty) { print "No snapshots."; return }
@@ -122,7 +147,7 @@ def main [--list --snapshot: string = "" --source-only] {
         let provider = (load-provider)
         $shared = (remote-lock $provider)
         let head = (assert-expected-head $provider)
-        rollback-impl $provider --snapshot $snapshot --source-only=$source_only
+        rollback-impl $provider --snapshot $snapshot --source-only=$source_only --discard-local=$discard_local
         if $provider.kind == "directory" {
             let current = (stable-provider-head $provider)
             record-provider-state $provider $current

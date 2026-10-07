@@ -12,10 +12,12 @@ const CORE = path self ./core.nu
 use $SAFETY [state-root checked atomic-record tree-files validate-relative private-directory]
 use $CORE [error-message]
 
-export def release-files [root: path] {
+def release-files [root: path] {
     mut result = []
     for row in (ls --all $root | sort-by name) {
-        if ($row.name | path basename) == ".git" { continue }
+        # .git and the git-ignored private settings directory (CHECKOUT_PRIVATE_DIR)
+        # are never release content.
+        if ($row.name | path basename) in [".git" "private"] { continue }
         if $row.type == "file" { $result = ($result | append $row.name) } else if $row.type == "dir" {
             $result = ($result | append (tree-files $row.name))
         } else { error make { msg: "Release trees must not contain symlinks or special files." } }
@@ -23,7 +25,7 @@ export def release-files [root: path] {
     $result
 }
 
-export def release-entries [root: path] {
+def release-entries [root: path] {
     release-files $root | where {|file| ($file | path relative-to $root | into string) != "RELEASE-MANIFEST.json" } | each {|file|
         {path: ($file | path relative-to $root | into string | str replace --all '\' '/') sha256: (open --raw $file | hash sha256)}
     } | sort-by path

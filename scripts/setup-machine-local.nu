@@ -47,6 +47,11 @@ def main [] {
         "# Put computer-specific Nushell setup below this line."
         "#"
         "# Examples:"
+        "# Shared rpool/rclone executable directory (replace with your actual directory):"
+        '# let sync_tools = ("C:\Tools\rpool" | path expand)'
+        '# $env.PATH = ($env.PATH | prepend $sync_tools | uniq)'
+        '# hide-env -i RPOOL_BIN'
+        "# Windows uses rpool.exe/rclone.exe; macOS/Linux use rpool/rclone."
         '# $env.MY_MACHINE_ONLY = "value"'
         "# alias local-tool = some-command"
         ""

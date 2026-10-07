@@ -13,33 +13,7 @@
 const SAFETY = path self ./modules/safety.nu
 const CORE = path self ./modules/core.nu
 use $SAFETY [operation-lease release-lease private-directory atomic-record tree-manifest manifest-hash verify-tree]
-use $CORE [error-message failure-envelope captured-failure]
-
-def nu-home [] {
-    let test_mode = ($env.INITIAL_SETUP_TEST_MODE? | default "" | str trim)
-    let override = ($env.INITIAL_SETUP_HOME_OVERRIDE? | default "" | str trim)
-
-    if $test_mode == "1" and not ($override | is-empty) {
-        return ($override | path expand)
-    }
-
-    let home_path = ($nu | get --optional home-path)
-
-    if $home_path != null {
-        return $home_path
-    }
-
-    let home_dir = ($nu | get --optional home-dir)
-
-    if $home_dir != null {
-        return $home_dir
-    }
-
-    error make {
-        msg: "Unable to determine the Nushell home directory."
-    }
-}
-
+use $CORE [error-message failure-envelope captured-failure nu-home vscode-user-dir fixed-private-context]
 def backup-root [] {
     (nu-home) | path join ".config" "dotfiles" "local-backups"
 }
@@ -52,7 +26,7 @@ def backup-keep [] {
         return 20
     }
 
-    let context = (open $config_file)
+    let context = (fixed-private-context (open $config_file))
     $context.maintenance.snapshot_keep? | default 20
 }
 
@@ -99,18 +73,6 @@ def prune-backups [] {
 def sanitize-label [label: string] {
     let safe = ($label | str replace --all --regex '[^A-Za-z0-9._-]' '-')
     if ($safe | is-empty) { "backup" } else { $safe | str substring 0..63 }
-}
-
-def vscode-user-dir [] {
-    match $nu.os-info.name {
-        "windows" => {
-            let appdata = ($env.APPDATA? | default "")
-            if ($appdata | is-empty) { null } else { $appdata | path join "Code" "User" }
-        }
-        "macos" => { (nu-home) | path join "Library" "Application Support" "Code" "User" }
-        "linux" => { (nu-home) | path join ".config" "Code" "User" }
-        _ => { null }
-    }
 }
 
 def backup-targets [] {
