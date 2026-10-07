@@ -1,0 +1,16 @@
+# Keep line endings stable across OSes. These files are executed/parsed as LF;
+# a Windows checkout with core.autocrlf=true would otherwise rewrite them to
+# CRLF, which breaks macOS /bin/sh (".sh") and corrupts manifest hashes.
+* text=auto eol=lf
+*.sh text eol=lf
+*.nu text eol=lf
+*.nuon text eol=lf
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+# Binary assets must never be line-ending converted.
+*.ttf binary
+*.otf binary
+*.png binary
+*.zip binary
+*.gz binary
+*.age binary

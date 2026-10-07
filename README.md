@@ -1,4 +1,4 @@
-# Initial-setup v0.25.0
+# Initial-setup v0.26.0
 
 Initial-setup is a cross-platform development-environment bootstrap and configuration synchronization project for Windows, Linux, macOS, and WSL.
 

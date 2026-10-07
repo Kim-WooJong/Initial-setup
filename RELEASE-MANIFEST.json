@@ -1,14 +1,18 @@
 {
   "format": 1,
-  "version": "0.25.0",
+  "version": "0.26.0",
   "files": [
+    {
+      "path": ".gitattributes",
+      "sha256": "4e70a3c346d994a9f98e6de8c6326788e80e028fbb15cb4f7fd4057676b92a55"
+    },
     {
       "path": ".gitignore",
       "sha256": "3b334bdc11bb3dd82a8939a23bb5d1faf26b257db9e82c1badb501363d3db55b"
     },
     {
       "path": "CHANGELOG.md",
-      "sha256": "9775cb0f523582eeeb8fa1a7eac7480cf5e9413fca3cdfd9d6b6fd69f2c1316a"
+      "sha256": "a19aa877d659932edf66a4b56c013883eb0a6d4cf9c43f28b75b151ab3ab51bf"
     },
     {
       "path": "CLOUD_WINS.md",
@@ -20,7 +24,7 @@
     },
     {
       "path": "README.md",
-      "sha256": "2d7b8a67ab7901726103ebda6868fc99e84364dc6f8f641fc0b1db2ab1218731"
+      "sha256": "259d2a0a45a0c67d9bfafcf0149bf98b452258e92b0212db55a55a465f426da6"
     },
     {
       "path": "ROADMAP.md",
@@ -40,7 +44,7 @@
     },
     {
       "path": "VERSION",
-      "sha256": "4b67cac8ce2a6e82a4e11ba210c84b4adfc72db7f4629785f7d3d09d6147795d"
+      "sha256": "8cbb8cbe0eca7be97a239a2dd808c0b06f9f7b9bf40b38291bdd78eced81164b"
     },
     {
       "path": "WIREGUARD-CONFIG-SYNC.md",
@@ -268,7 +272,7 @@
     },
     {
       "path": "scripts/cleanup-release-junk.nu",
-      "sha256": "8e0c6d34cb8fccb69a6ed33cecc5ac40891f27e849205800f7b0032704c43916"
+      "sha256": "aa942ce7019cec93acb167341fd75b2c7b282c393c5cd5af76be8658d3a545a7"
     },
     {
       "path": "scripts/cloud-wins-build.nu",
@@ -1056,7 +1060,7 @@
     },
     {
       "path": "tools/cloudwins/Cargo.toml",
-      "sha256": "166b633cdeb834a56899c28bdbb7266e781d6d9e6af0ec5842785f8f705f3ada"
+      "sha256": "06f49fe6bd8eef928717a39d166122a4af6dd9d4bf1dffc77852dd1f522b661a"
     },
     {
       "path": "tools/cloudwins/src/main.rs",

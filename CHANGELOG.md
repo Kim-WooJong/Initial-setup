@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.26.0
+
+- Add `.gitattributes` enforcing LF line endings for text/shell/nu files (CRLF only for `*.ps1`/`*.bat`). A Windows `git` checkout with `core.autocrlf=true` had rewritten `*.sh`/`*.nu` to CRLF, which synced to macOS and broke `/bin/sh` (acquire-operation-lock.sh "syntax error near unexpected token ')'", LOCK_CREATE_FAILED) and desynced manifest hashes. Now every checkout keeps LF regardless of platform.
+
 
 - New `rpool-install` command: installs or updates the RPool binary from its public GitHub releases (https://github.com/Kim-WooJong/RPool) into `~/.cargo/bin`, where `resolve-rpool-executable` finds it without a PATH change and which is machine-local (never the cloud-synced checkout). Auto-detects OS/arch and the matching asset, verifies the download against `SHA256SUMS.txt` before replacing anything, backs up the previous binary (`.prev`), installs `rpool-gui` too when present, removes the macOS quarantine attribute, and confirms `rpool --version`. `--version vX.Y.Z` (default latest), `--check` compares installed vs target only. Idempotent (no-op when already current); refuses to replace a running/mounted rpool; reports network/rate-limit failures; ARM Linux/Windows report "unsupported". No background or scheduled updates — it runs only when invoked. New `scripts/modules/rpool-install.nu`, `scripts/rpool-install.nu`, `scripts/rpool-install-test.nu`.
 - Fix cross-OS Nushell startup: `platform.nu` (sourced by the synchronized `config.nu`) is now created on every OS, so a `config.nu` synced from macOS/Linux no longer makes Windows Nushell fail to start with "File not found: ~/.config/dotfiles/platform.nu".

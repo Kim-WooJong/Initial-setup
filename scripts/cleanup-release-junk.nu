@@ -3,7 +3,7 @@
 # Remove only unambiguous repository/build/editor artifacts before a release.
 # Default mode deletes matched junk. Use --check for a read-only inventory.
 const ROOT = path self ..
-const RELEASE_VERSION = "0.25.0"
+const RELEASE_VERSION = "0.26.0"
 const CONSOLE = path self ./modules/console.nu
 const TEXT_CASE = path self ./modules/text-case.nu
 use $CONSOLE [print-heading print-key-value print-status]
